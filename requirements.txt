@@ -1,4 +1,5 @@
 yt-dlp
 openai-whisper
 deep-translator
-requests
+requesti
+rich
