@@ -1,0 +1,135 @@
+# subtitles.py
+
+import time
+import re
+import subprocess
+from pathlib import Path
+from typing import Optional
+
+# 【核心修改】统一变量名为 AI_LIBRARIES_AVAILABLE
+try:
+    from deep_translator import GoogleTranslator
+    AI_LIBRARIES_AVAILABLE = True
+except ImportError:
+    AI_LIBRARIES_AVAILABLE = False
+
+class SubtitleProcessor:
+    """
+    负责所有与AI字幕生成相关的任务。
+    【变量名修复版】
+    """
+    def __init__(self, download_folder: Path, proxy: Optional[str] = None):
+        if not AI_LIBRARIES_AVAILABLE:
+            raise ImportError("必要的AI库（deep-translator）未安装。")
+        
+        self.download_folder = download_folder
+        
+        proxy_dict: Optional[dict[str, str]] = None
+        if proxy:
+            proxy_dict = {"http": proxy, "https": proxy}
+        
+        self.translator = GoogleTranslator(source='en', target='zh-CN', proxies=proxy_dict)
+
+    def transcribe(self, audio_path: Path) -> Optional[Path]:
+        print(f"    🚀 [whisper-cli] 正在从 '{audio_path.name}' 高速转录英文语音...")
+        final_srt_path = self.download_folder / f"{audio_path.stem}.en.srt"
+        
+        model_path = Path.home() / ".cache/whisper/whisper.cpp/ggml-base.en.bin"
+        if not model_path.exists():
+            print(f"    ❌ 找不到 whisper-cli 模型文件！请手动下载。")
+            return None
+
+        cmd = [
+            'whisper-cli',
+            '--model', str(model_path.resolve()),
+            '--language', 'en',
+            str(audio_path.resolve())
+        ]
+        
+        try:
+            process = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8')
+            
+            stdout_content = process.stdout.strip()
+            if not stdout_content:
+                raise ValueError(f"Whisper转录输出为空。\n[STDERR]:\n{process.stderr}")
+
+            srt_regex = re.compile(r"\[(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\]\s+(.*)")
+            
+            srt_segments = []
+            for line in stdout_content.split('\n'):
+                match = srt_regex.match(line.strip())
+                if match:
+                    start_time = match.group(1).replace('.', ',')
+                    end_time = match.group(2).replace('.', ',')
+                    text = match.group(3).strip()
+                    srt_segments.append((start_time, end_time, text))
+            
+            if not srt_segments:
+                raise ValueError(f"从 whisper-cli 的输出中未能解析出任何字幕片段。\n[STDOUT]:\n{stdout_content}")
+
+            with open(final_srt_path, 'w', encoding='utf-8') as f:
+                for i, (start, end, text) in enumerate(srt_segments, 1):
+                    f.write(f"{i}\n{start} --> {end}\n{text}\n\n")
+
+            print(f"    ✅ [whisper-cli] 英文SRT字幕已生成: {final_srt_path.name}")
+            return final_srt_path
+
+        except subprocess.CalledProcessError as e:
+            print(f"    ❌ [whisper-cli] 语音转录失败，返回错误码: {e.returncode}")
+            print(f"    whisper-cli 错误信息: {e.stderr}")
+            return None
+        except Exception as e:
+            print(f"    ❌ [whisper-cli] 发生未知错误: {e}")
+            return None
+
+    def process_item(self, file_prefix: str, audio_source_path: Path) -> None:
+        print("\n" + "-" * 25); print("  🧠 AI字幕生成流程启动...")
+        if self._check_for_existing_subs(file_prefix): return
+        en_srt_path = self.transcribe(audio_source_path)
+        if en_srt_path:
+            zh_srt_path = self._translate(en_srt_path)
+            if zh_srt_path:
+                self._merge(en_srt_path, zh_srt_path)
+    
+    def _check_for_existing_subs(self, file_prefix: str) -> bool:
+        existing_subs = list(self.download_folder.glob(f"{file_prefix}*.srt"))
+        if existing_subs:
+            print(f"    ℹ️ 检测到已下载的官方字幕 ({[sub.name for sub in existing_subs]})，跳过AI生成。")
+            return True
+        return False
+        
+    def _translate(self, srt_path_in: Path) -> Optional[Path]:
+        print(f"    ✍️ [Translator] 正在使用 deep-translator (Google) 翻译 '{srt_path_in.name}'...")
+        srt_path_out = srt_path_in.with_suffix('.zh-CN.srt')
+        try:
+            with open(srt_path_in, 'r', encoding='utf-8') as f_in: content = f_in.read()
+            text_blocks = [m.group(1) for m in re.finditer(r'\d+\n[\d:,->\s]+\n(.*?)\n\n', content, re.DOTALL)]
+            delimiter = "\n<br>\n"; full_text = delimiter.join(text.replace('\n', ' ') for text in text_blocks)
+            translated_full_text = self.translator.translate(full_text)
+            if not translated_full_text: raise ValueError("翻译服务返回了空结果。")
+            translated_blocks = translated_full_text.split(delimiter.strip())
+            if len(text_blocks) != len(translated_blocks): raise ValueError(f"翻译返回片段数({len(translated_blocks)})与原文({len(text_blocks)})不匹配。")
+            it_translated = iter(translated_blocks)
+            def replace_func(match): return next(it_translated).strip()
+            new_content = re.sub(r'(\d+\n[\d:,->\s]+\n)(.+?)(\n\n)', lambda m: m.group(1) + replace_func(m.group(2)) + m.group(3), content, flags=re.DOTALL)
+            with open(srt_path_out, 'w', encoding='utf-8') as f_out: f_out.write(new_content)
+            print(f"    ✅ [Translator] 中文SRT字幕已生成: {srt_path_out.name}")
+            return srt_path_out
+        except Exception as e: print(f"    ❌ [Translator] 翻译失败: {e}"); return None
+
+    def _merge(self, en_srt_path: Path, zh_srt_path: Path) -> Optional[Path]:
+        print(f"    🤝 [Merger] 正在合并字幕...")
+        bilingual_srt_path = en_srt_path.with_suffix('.bilingual.srt')
+        try:
+            with open(en_srt_path, 'r', encoding='utf-8') as f: en_content = f.read()
+            with open(zh_srt_path, 'r', encoding='utf-8') as f: zh_content = f.read()
+            en_subs = {m.group(1): m.group(3).strip() for m in re.finditer(r'(\d+)\n([\d:,->\s]+\n(.*?))\n\n', en_content, re.DOTALL)}
+            zh_subs = {m.group(1): m.group(3).strip() for m in re.finditer(r'(\d+)\n([\d:,->\s]+\n(.*?))\n\n', zh_content, re.DOTALL)}
+            timestamps = {m.group(1): m.group(2).strip() for m in re.finditer(r'(\d+)\n([\d:,->\s]+\n)', en_content)}
+            with open(bilingual_srt_path, 'w', encoding='utf-8') as f_out:
+                for index in sorted(timestamps.keys(), key=int):
+                    f_out.write(f"{index}\n"); f_out.write(f"{timestamps[index]}\n")
+                    f_out.write(f"{zh_subs.get(index, '')}\n"); f_out.write(f"{en_subs.get(index, '')}\n\n")
+            print(f"    ✅ [Merger] 双语SRT字幕已生成: {bilingual_srt_path.name}")
+            return bilingual_srt_path
+        except Exception as e: print(f"    ❌ [Merger] 字幕合并失败: {e}"); return None
