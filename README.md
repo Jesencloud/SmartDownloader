@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🚀 项目名称 
 
 [![GitHub Stars](https://img.shields.io/github/stars/Jesencloud/SmartDownloader.svg)](https://github.com/Jesencloud/SmartDownloader/stargazers)
@@ -289,3 +290,7 @@ AI字幕生成: 已启用
 - **核心功能2**：自动从音频里提取字幕
 - **需要增加功能**： 增加 UI功能
 
+=======
+# SmartDownloader
+一个基于 yt-dlp 和 whisper.cpp 的智能媒体下载与AI字幕生成工具，可自动完成视频下载、语音转录、翻译及双语字幕制作。
+>>>>>>> c2e8f9210afef25d3b109f7b6e30680c48138f1d
