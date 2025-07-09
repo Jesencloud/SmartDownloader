@@ -1,5 +1,4 @@
-<<<<<<< HEAD
-# 🚀 项目名称 
+#  🚀 SmartDownloader
 
 [![GitHub Stars](https://img.shields.io/github/stars/Jesencloud/SmartDownloader.svg)](https://github.com/Jesencloud/SmartDownloader/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/Jesencloud/SmartDownloader.svg)](https://github.com/Jesencloud/SmartDownloader/issues)
