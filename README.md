@@ -224,56 +224,34 @@ python main.py urls.txt -b -m both --ai-subs -p socks5://127.0.0.1:1086
 
 ```bash
 (base) test@testdeMac-mini SmartDownloader % python main.py urls.txt -b --mode both --ai-subs
-模式: 从文件批量读取URL
-  - 已从 'urls.txt' 加载 3 个URL。
-📂 所有内容将保存到: /Users/jiantai/Documents/script/SmartDownloader/20250709-160552
-下载模式: both
-AI字幕生成: 已启用
-✅ 已加载Cookies文件
-############################################################
-正在处理URL: https://www.bilibili.com/video/BV14637zuExD/?share_source=copy_web&vd_source=fc9d1c5b91d3356da15898a6962fece5
-############################################################
-
-==================================================
-▶️ (项目) 开始处理: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ...
-🔗 URL: https://www.bilibili.com/video/BV14637zuExD/?share_source=copy_web&vd_source=fc9d1c5b91d3356da15898a6962fece5
-  [Info] 正在下载元数据...
-    📄 已生成信息文件: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....txt
-  [Downloader] 正在下载独立的视频和音频流...
-[BiliBili] Extracting URL: https://www.bilibili.com/video/BV14637zuExD/?share_source=copy_web&vd_source=fc9d1c5b91d3356da15898a6962fece5
-[BiliBili] 14637zuExD: Downloading webpage
-[BiliBili] BV14637zuExD: Extracting videos in anthology
-.....
-.....
-[info] BV14637zuExD: Downloading 1 format(s): 100026+30280
-[download] Destination: 20250709-161308/001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....f100026.mp4
-[download] 100% of   11.37MiB in 00:00:02 at 4.47MiB/s
-[download] Destination: 20250709-161308/001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....f30280.m4a
-[download] 100% of    2.65MiB in 00:00:00 at 19.20MiB/s
-[Merger] Merging formats into "20250709-161308/001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....mp4"
-    ✅ 视频部分下载成功: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....f100026.mp4
-    ✅ 音频部分下载成功: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....f30280.m4a
-  [FFmpeg] 正在合并文件...
-    ✅ 视频合并成功: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....mp4
--------------------------
-  [mp3] 正在从本地文件 '001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....mp4' 提取音频...
-    ✅ 音频提取成功: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....mp3
-
--------------------------
-  🧠 AI字幕生成流程启动...
-    🚀 [whisper-cli] 正在从 '001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....mp3' 高速转录英文语音...
-    ✅ [whisper-cli] 英文SRT字幕已生成: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....en.srt
-    ✍️ [Translator] 正在并发翻译 '001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....en.srt'...
-      -> 将 35 句字幕分为 4 个区块并行处理...
-    ✅ [Translator] 中文SRT字幕已生成: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....en.zh-CN.srt
-    🤝 [Merger] 正在合并字幕...
-    ✅ [Merger] 双语SRT字幕已生成: 001_专门给果粉做的显示器！未来视野 RV200 Plus 4K果粉屏 4K QD量子点显示器开箱 体验 ....en.bilingual.srt
-  [Cleaner] 正在清理临时文件...
-
-⏳ 礼貌等待3秒...
-
---- URL处理完成: https://www.bil.....=fc9d1c5b91d33566962fece5 | 共处理了 1 个项目 ---
-
+INFO     2025-07-10 10:35:26,137 - [INFO] - __main__ - 🚀 智能媒体下载与AI字幕工具 v3.0 (Logging) 启动 🚀                            
+🔄 重试机制已启用: 最多 3 次重试，基础延迟 10s
+🌐 网络中断处理: 将持续重试直到网络恢复（最多50次）
+📄 信息文件已生成: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....txt
+📥 正在下载视频部分...
+🔄 代理连接失败，第 2 次尝试，等待 40 秒...
+🔍 正在检查代理连接状态...
+✅ 代理连接已恢复
+♾️ 第 2 次尝试，等待 9 秒...
+✅ 网络恢复，下载成功完成！
+🔊 正在下载音频部分...
+✅ 视频/音频下载完成
+⬇️ 下载视频 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.0% | 464.9/464.9 MB | 35.7 MB/s | 0:00:00
+⬇️ 下载音频 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.0% | 16.4/16.4 MB   | 30.0 MB/s | 0:00:00
+🔧 正在合并视频和音频...
+✅ 视频合并成功: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....mp4
+🎥 正在提取音频: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....mp4
+✅ 音频提取成功: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....mp3
+🧠 AI字幕生成流程启动...
+🧠 正在转录音频: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....mp3
+✅ 英文字幕已生成: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....en.srt
+✍️ 正在翻译字幕: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....en.srt
+✅ 中文字幕已生成: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....en.zh-CN.srt
+🤝 正在合并字幕...
+✅ 双语字幕已生成: 001_Late 20s Diaries _ A week in Hong Kong, shopping, ....en.bilingual.srt
+INFO     2025-07-10 10:38:20,889 - [INFO] - __main__ - 🎉 全部任务完成! 本次运行共处理 1 个项目。                                    
+INFO     2025-07-10 10:38:20,892 - [INFO] - __main__ - 📁 日志与所有文件保存在: 
+/your_path/SmartDownloader/20250710-103526
    ```
 <img src="./example.png" width="80%">
 

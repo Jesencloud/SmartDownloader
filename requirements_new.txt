@@ -1,0 +1,23 @@
+# SmartDownloader 依赖列表
+
+# 核心功能依赖
+rich>=13.0.0
+pyyaml>=6.0
+
+# AI字幕功能依赖 (可选)
+deep-translator>=1.9.0
+openai-whisper>=20230314
+
+# 下载工具 (需要单独安装)
+# yt-dlp - 视频下载工具
+# ffmpeg - 音视频处理工具
+# whisper-cli - Whisper命令行工具 (可选)
+
+# 安装说明:
+# 1. 安装Python依赖: pip install -r requirements.txt
+# 2. 安装yt-dlp: pip install yt-dlp
+# 3. 安装ffmpeg: 
+#    - macOS: brew install ffmpeg
+#    - Ubuntu/Debian: sudo apt install ffmpeg
+#    - Windows: 下载并配置PATH
+# 4. 安装whisper-cli (AI字幕功能): pip install whisper-cli

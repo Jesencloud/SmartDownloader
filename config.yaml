@@ -1,0 +1,105 @@
+# SmartDownloader 配置文件
+# 修改这些参数可以自定义程序行为，无需修改代码
+
+# 文件夹和路径设置
+folders:
+  # 下载文件夹设置
+  base_download_folder: "downloads"     # 基础下载文件夹名称
+  use_timestamp_folder: true            # 是否在下载文件夹下创建时间戳子文件夹
+  timestamp_format: "%Y%m%d-%H%M%S"     # 时间戳格式
+  
+  # 自定义下载路径 (如果设置了此项，会忽略上面的base_download_folder设置)
+  custom_download_path: /Users/jiantai/Downloads            # 例如: "/Users/username/MyDownloads"
+  
+  # 相对路径设置
+  relative_to_script: true              # 路径是否相对于脚本位置 (false=相对于当前工作目录)
+
+# 下载器设置
+downloader:
+  # 重试机制
+  max_retries: 3                # 最大重试次数
+  base_delay: 10                # 基础延迟秒数
+  max_delay: 300                # 最大延迟秒数
+  backoff_factor: 2             # 退避系数
+  
+  # 网络超时设置
+  network_timeout: 60           # 网络超时时间（秒）
+  stall_detection_time: 30      # 停滞检测时间（秒）
+  stall_check_interval: 5       # 停滞检查间隔（秒）
+  stall_threshold_count: 6      # 停滞阈值次数
+  
+  # 代理设置
+  proxy_retry_base_delay: 30    # 代理重试基础延迟（秒）
+  proxy_retry_increment: 10     # 代理重试递增延迟（秒）
+  proxy_retry_max_delay: 120    # 代理重试最大延迟（秒）
+
+# 文件处理设置
+file_processing:
+  # 文件名处理
+  filename_max_length: 10       # 文件名最大长度
+  filename_truncate_suffix: "..." # 文件名截断后缀
+  
+  # 等待时间
+  polite_wait_time: 3           # 下载间隔等待时间（秒）
+  
+  # 临时文件清理
+  cleanup_patterns:             # 清理的文件模式
+    - "*.part"
+    - "*.part-*"
+    - "*.ytdl"
+    - "*.tmp.*"
+    - "*.f*"
+
+# AI字幕设置
+ai_subtitles:
+  # Whisper模型设置
+  whisper_model: "base.en"      # Whisper模型 (tiny.en, base.en, small.en, medium.en, large)
+  whisper_device: "auto"        # 设备选择 (auto, cpu, cuda)
+  
+  # 翻译设置
+  translate_to_chinese: true    # 是否翻译为中文
+  translator_service: "google"  # 翻译服务 (google, bing, yandex)
+  
+  # 字幕文件设置
+  subtitle_formats:             # 支持的字幕格式
+    - "srt"
+    - "vtt"
+
+# 日志设置
+logging:
+  # 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  
+  # 控制台显示的关键词
+  console_keywords:
+    - "🚀 智能媒体下载"
+    - "🎉 全部任务完成"
+    - "📁 日志与所有文件保存在"
+  
+  # 日志文件设置
+  log_filename: "downloader.log"
+
+# 用户界面设置
+ui:
+  # 进度条设置
+  progress_bar_width: 50      # 进度条宽度 (null为自动)
+  show_transfer_speed: true     # 显示传输速度
+  show_time_remaining: true     # 显示剩余时间
+  
+  # 消息显示
+  show_detailed_errors: true    # 显示详细错误信息
+  show_network_status: true     # 显示网络状态信息
+
+# 高级设置
+advanced:
+  # yt-dlp命令选项
+  ytdlp_extra_args: []          # 额外的yt-dlp参数
+  
+  # 网络检测
+  connectivity_test_host: "8.8.8.8"  # 网络连接测试主机
+  connectivity_test_port: 53          # 网络连接测试端口
+  connectivity_timeout: 5             # 网络连接测试超时
+  
+  # 代理检测
+  proxy_test_url: "http://httpbin.org/ip"  # 代理测试URL
+  proxy_test_timeout: 10                   # 代理测试超时
