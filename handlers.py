@@ -69,14 +69,21 @@ async def save_info(folder: Path, prefix: str) -> None:
         if json_path.exists():
             await aos.remove(json_path)
 
-async def process_item(dlr: Downloader, sub_proc: Optional[SubtitleProcessor], url: str, prefix: str, args: argparse.Namespace) -> None:
-    log.info(f"▶️ (项目) 开始处理: {prefix}")
+async def process_metadata_phase(dlr: Downloader, url: str, prefix: str) -> None:
+    """处理元数据阶段：下载metadata和生成信息文件"""
     try:
         await dlr.download_metadata(url, prefix)
         await save_info(dlr.download_folder, prefix)
+    except Exception as e:
+        log.error(f"处理元数据阶段失败 '{prefix}': {e}")
+        raise
 
+async def process_download_phase(dlr: Downloader, sub_proc: Optional[SubtitleProcessor], url: str, prefix: str, args: argparse.Namespace) -> None:
+    """处理下载阶段：下载视频和音频"""
+    try:
         vid_path = None
         if args.mode in ['video', 'both']:
+            console.print(f"🎬 正在准备下载: {prefix}", style="bold blue")
             vid_path = await dlr.download_and_merge(url, prefix)
 
         if args.mode == 'both' and vid_path:
@@ -92,3 +99,13 @@ async def process_item(dlr: Downloader, sub_proc: Optional[SubtitleProcessor], u
         log.error(f"❌ 处理项目 '{prefix}' 时发生未知下载错误: {e}")
     finally:
         await dlr.cleanup_temp_files(prefix)
+
+async def process_item(dlr: Downloader, sub_proc: Optional[SubtitleProcessor], url: str, prefix: str, args: argparse.Namespace) -> None:
+    """完整的项目处理流程"""
+    log.info(f"▶️ (项目) 开始处理: {prefix}")
+    
+    # 元数据阶段
+    await process_metadata_phase(dlr, url, prefix)
+    
+    # 下载阶段
+    await process_download_phase(dlr, sub_proc, url, prefix, args)

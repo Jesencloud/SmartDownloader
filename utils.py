@@ -54,7 +54,20 @@ def get_inputs(args: argparse.Namespace) -> List[str]:
         log.info("模式: 从文件批量读取URL")
         try:
             with open(args.inputs[0], 'r', encoding='utf-8') as f:
-                inputs = [l.strip() for l in f if l.strip() and not l.strip().startswith('#')]
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    
+                    # 提取以 https://www. 开头的URL
+                    url_match = re.search(r'https://www\.[^\s]+', line)
+                    if url_match:
+                        inputs.append(url_match.group(0))
+                    elif line.startswith('http'):
+                        # 如果整行就是URL
+                        inputs.append(line)
+                    else:
+                        log.warning(f"跳过无法识别的行: {line}")
         except FileNotFoundError:
             log.error(f"错误: 找不到文件 '{args.inputs[0]}'，已跳过。")
     else:
