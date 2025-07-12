@@ -56,6 +56,14 @@ coverage.xml
 # Sensitive files & logs
 cookies.txt
 cookies_cache.txt
+cookies.txt.backup
+cookies_cache.txt.backup
+USAGE.md
+REFACTOR_REPORT.md
+daily_record.md
+CHANGELOG.md
+downloader_backup.py
+README.TXT
 *.log
 logs/
 
@@ -64,6 +72,9 @@ logs/
 *.tmp
 temp/
 downloads/
+urls.txt
+test_translation_fix.txt
+LICENSE.txt
 
 # Archives
 *.zip
