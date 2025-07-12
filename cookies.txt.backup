@@ -1,0 +1,3 @@
+# Invalid cookies for testing
+# This will trigger authentication error
+youtube.com	FALSE	/	FALSE	0	test	invalid
