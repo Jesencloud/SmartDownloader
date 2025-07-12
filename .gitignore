@@ -1,0 +1,71 @@
+# IDE and OS generated files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Python cache and compiled files
+__pycache__/
+.mypy_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Python virtual environment
+venv/
+.venv/
+
+# Distribution / packaging
+build/
+dist/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables - Ignore all .env files but keep the example
+.env
+.env.*
+!.env.example
+
+# Sensitive files & logs
+cookies.txt
+cookies_cache.txt
+*.log
+logs/
+
+# Temporary files & Downloads
+*.bak
+*.tmp
+temp/
+downloads/
+
+# Archives
+*.zip
+*.tar.gz
+
