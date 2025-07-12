@@ -9,7 +9,7 @@ folders:
   timestamp_format: "%Y%m%d-%H%M%S"     # 时间戳格式
   
   # 自定义下载路径 (如果设置了此项，会忽略上面的base_download_folder设置)
-  custom_download_path: /Users/jiantai/Downloads            # 例如: "/Users/username/MyDownloads"
+  #custom_download_path: "/Users/jiantai/Downloads"          # 例如: "/Users/username/MyDownloads"
   
   # 相对路径设置
   relative_to_script: true              # 路径是否相对于脚本位置 (false=相对于当前工作目录)
@@ -18,9 +18,9 @@ folders:
 downloader:
   # 重试机制
   max_retries: 3                # 最大重试次数
-  base_delay: 10                # 基础延迟秒数
-  max_delay: 300                # 最大延迟秒数
-  backoff_factor: 2             # 退避系数
+  base_delay: 10.0              # 基础延迟秒数
+  max_delay: 300.0              # 最大延迟秒数
+  backoff_factor: 2.0           # 退避系数
   
   # 网络超时设置
   network_timeout: 60           # 网络超时时间（秒）
@@ -32,15 +32,76 @@ downloader:
   proxy_retry_base_delay: 30    # 代理重试基础延迟（秒）
   proxy_retry_increment: 10     # 代理重试递增延迟（秒）
   proxy_retry_max_delay: 120    # 代理重试最大延迟（秒）
+  
+  # 熔断器设置
+  circuit_breaker_failure_threshold: 5   # 熔断器失败阈值
+  circuit_breaker_timeout: 300          # 熔断器超时时间（秒）
+  
+  # 视频质量设置
+  video_quality: "auto_best"            # 视频质量选择模式
+  # 可选值:
+  #   - auto_best: 自动选择最佳格式（解析后选择视频列表最后一个+音频列表FILESIZE最大的）
+  #   - best:      最高质量（传统模式）
+  #   - 4k:        4K分辨率 (2160p)
+  #   - 1080p:     1080p分辨率
+  #   - 720p:      720p分辨率
+  #   - 480p:      480p分辨率
+  #   - 360p:      360p分辨率
+  #   - worst:     最低质量
+  
+  video_format_preference: "any"         # 视频格式偏好（auto_best模式下会被忽略）
+  # 可选值: mp4, webm, mkv, any
+  
+  audio_quality: "auto_best"             # 音频质量选择模式  
+  # 可选值:
+  #   - auto_best: 自动选择最佳格式（解析后选择音频列表FILESIZE最大的）
+  #   - best:      最高质量（传统模式）
+  #   - 320k:      320kbps比特率
+  #   - 256k:      256kbps比特率
+  #   - 192k:      192kbps比特率
+  #   - 128k:      128kbps比特率
+  #   - 96k:       96kbps比特率
+  #   - worst:     最低质量
+  
+  audio_format_preference: "any"         # 音频格式偏好（auto_best模式下会被忽略）
+  # 可选值: m4a, mp3, opus, aac, any
+  
+  # 音频提取设置
+  audio_extraction_mode: "direct_download"  # 音频获取方式
+  # 可选值:
+  #   - direct_download: 统一采用在线下载音频（推荐，auto_best模式）
+  #   - extract_from_video: 从下载的视频文件中提取音频（传统模式）
+  
+  # 错误模式匹配
+  retry_patterns:               # 可重试的错误模式
+    - "HTTP Error 403: Forbidden"
+    - "HTTP Error 429"
+    - "HTTP Error 502"
+    - "HTTP Error 503"
+    - "HTTP Error 504"
+    - "Connection reset"
+    - "Connection timed out"
+    - "Network is unreachable"
+    - "Temporary failure"
+    - "fragment.*not found"
+    - "Unable to download.*fragment"
+    - "HTTP Error 5"
+  
+  proxy_patterns:               # 代理错误模式
+    - "Unable to connect to proxy"
+    - "Connection refused"
+    - "Proxy error"
+    - "NewConnectionError"
+    - "Failed to establish a new connection"
 
 # 文件处理设置
 file_processing:
   # 文件名处理
-  filename_max_length: 10       # 文件名最大长度
+  filename_max_length: 50       # 文件名最大长度
   filename_truncate_suffix: "..." # 文件名截断后缀
   
   # 等待时间
-  polite_wait_time: 3           # 下载间隔等待时间（秒）
+  polite_wait_time: 3.0         # 下载间隔等待时间（秒）
   
   # 临时文件清理
   cleanup_patterns:             # 清理的文件模式
@@ -49,16 +110,36 @@ file_processing:
     - "*.ytdl"
     - "*.tmp.*"
     - "*.f*"
+  
+  # 支持的媒体文件格式
+  media_extensions:
+    - ".mp4"
+    - ".webm"    # YouTube视频格式
+    - ".avi"
+    - ".mkv"
+    - ".mov"
+    - ".mp3"
+    - ".m4a"
+    - ".opus"    # YouTube音频格式
+    - ".aac"     # 通用音频格式
+    - ".wav"
+    - ".flac"
 
 # AI字幕设置
 ai_subtitles:
   # Whisper模型设置
-  whisper_model: "base.en"      # Whisper模型 (tiny.en, base.en, small.en, medium.en, large)
-  whisper_device: "auto"        # 设备选择 (auto, cpu, cuda)
+  whisper_model: "base.en"      # Whisper模型 (tiny.en, base.en, small.en, medium.en, base, small, medium, large)
+  whisper_device: "auto"        # 设备选择 (auto, cpu, cuda, metal)
+  whisper_model_path: null      # 自定义模型路径
+  source_language: "auto"       # 源语言，用于Whisper转录和翻译 (例如: en, zh, auto, ko, ja, ru, es, fr, de, it, pt, ar, hi)
   
   # 翻译设置
   translate_to_chinese: true    # 是否翻译为中文
-  translator_service: "google"  # 翻译服务 (google, bing, yandex)
+  translator_service: "google"  # 翻译服务 (google, baidu, deepl)
+  translation_batch_size: 50    # 每次翻译请求的文本块数量
+  translation_delay: 0.5        # 每次翻译请求之间的延迟（秒）
+  translation_max_retries: 3    # 翻译失败时的最大重试次数
+  translation_timeout: 30       # 单次翻译超时时间（秒）
   
   # 字幕文件设置
   subtitle_formats:             # 支持的字幕格式
@@ -68,12 +149,12 @@ ai_subtitles:
 # 日志设置
 logging:
   # 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  level: "INFO"
+  level: "DEBUG"
   
   # 控制台显示的关键词
   console_keywords:
     - "🚀 智能媒体下载"
-    - "🎉 全部任务完成"
+    - "🎉*10 全部任务完成"
     - "📁 日志与所有文件保存在"
   
   # 日志文件设置
@@ -82,13 +163,40 @@ logging:
 # 用户界面设置
 ui:
   # 进度条设置
-  progress_bar_width: 50      # 进度条宽度 (null为自动)
+  progress_bar_width: null      # 进度条宽度 (null为自动)
   show_transfer_speed: true     # 显示传输速度
   show_time_remaining: true     # 显示剩余时间
   
   # 消息显示
   show_detailed_errors: true    # 显示详细错误信息
   show_network_status: true     # 显示网络状态信息
+
+# Cookies设置
+cookies:
+  # Cookies获取方式
+  mode: "auto"                    # 获取模式
+  # 可选值:
+  #   - auto: 自动模式（优先使用手动cookies.txt，如果不存在则自动获取）
+  #   - manual: 仅使用手动cookies.txt文件
+  #   - browser: 强制从浏览器自动获取
+  #   - skip: 跳过所有cookies
+  
+  # 浏览器设置
+  browser_type: "auto"            # 浏览器类型
+  # 可选值: auto, chrome, firefox, edge, safari
+  
+  # 文件设置
+  manual_cookies_file: "cookies.txt"  # 手动cookies文件路径
+  
+  # 自动获取设置
+  auto_extract_enabled: true      # 是否启用自动提取
+  force_refresh: false           # 是否强制刷新cookies（即使手动文件存在）
+  
+  # 缓存设置
+  cache_enabled: true            # 是否启用cookies缓存
+  cache_file: "cookies.cache.txt"  # 缓存文件路径
+  cache_duration_hours: 24       # 缓存有效期（小时）
+  cache_check_interval: 1        # 缓存检查间隔（小时）
 
 # 高级设置
 advanced:
@@ -102,4 +210,4 @@ advanced:
   
   # 代理检测
   proxy_test_url: "http://httpbin.org/ip"  # 代理测试URL
-  proxy_test_timeout: 10                   # 代理测试超时
+  proxy_test_timeout: 10               # 代理测试超时

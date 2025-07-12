@@ -1,16 +1,16 @@
-# config_manager.py
-
+#!/usr/bin/env python3
 """
+配置管理器模块
 简化的配置管理器 - 保留验证功能但去掉环境复杂性
 适合个人用户使用
 """
 
-import yaml
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Any, Dict
-from datetime import datetime
 
+import yaml
 from pydantic import BaseModel, Field, validator, ValidationError
 from rich.console import Console
 
@@ -18,7 +18,10 @@ from rich.console import Console
 # ==================== 配置模型定义 ====================
 
 class BaseConfig(BaseModel):
-    """基础配置类"""
+    """基础配置类。
+    
+    为所有配置类提供公共的Pydantic配置选项。
+    """
     
     class Config:
         validate_assignment = True
@@ -26,7 +29,10 @@ class BaseConfig(BaseModel):
 
 
 class FoldersConfig(BaseConfig):
-    """文件夹配置"""
+    """文件夹配置类。
+    
+    管理下载文件夹路径、时间戳格式等文件夹相关设置。
+    """
     base_download_folder: str = Field(default='downloads', description="基础下载目录")
     use_timestamp_folder: bool = Field(default=True, description="是否使用时间戳文件夹")
     timestamp_format: str = Field(default='%Y%m%d-%H%M%S', description="时间戳格式")
@@ -61,6 +67,15 @@ class DownloaderConfig(BaseConfig):
     circuit_breaker_failure_threshold: int = Field(default=5, ge=1, le=20, description="熔断器失败阈值")
     circuit_breaker_timeout: int = Field(default=300, ge=60, le=3600, description="熔断器超时时间(秒)")
     
+    # 视频质量设置
+    video_quality: str = Field(default="auto_best", description="视频质量选择")
+    video_format_preference: str = Field(default="any", description="视频格式偏好")
+    audio_quality: str = Field(default="auto_best", description="音频质量选择")
+    audio_format_preference: str = Field(default="any", description="音频格式偏好")
+    
+    # 音频提取设置
+    audio_extraction_mode: str = Field(default="direct_download", description="音频获取方式")
+    
     retry_patterns: List[str] = Field(
         default=[
             "HTTP Error 403: Forbidden", "HTTP Error 429", "HTTP Error 502",
@@ -85,6 +100,41 @@ class DownloaderConfig(BaseConfig):
             raise ValueError("最大延迟时间不能小于基础延迟时间")
         return v
 
+    @validator('video_quality')
+    def validate_video_quality(cls, v):
+        valid_qualities = ['auto_best', 'best', '4k', '1080p', '720p', '480p', '360p', 'worst']
+        if v not in valid_qualities:
+            raise ValueError(f"视频质量必须是以下之一: {valid_qualities}")
+        return v
+
+    @validator('video_format_preference')
+    def validate_video_format(cls, v):
+        valid_formats = ['mp4', 'webm', 'mkv', 'any']
+        if v not in valid_formats:
+            raise ValueError(f"视频格式必须是以下之一: {valid_formats}")
+        return v
+
+    @validator('audio_quality')
+    def validate_audio_quality(cls, v):
+        valid_qualities = ['auto_best', 'best', '320k', '256k', '192k', '128k', '96k', 'worst']
+        if v not in valid_qualities:
+            raise ValueError(f"音频质量必须是以下之一: {valid_qualities}")
+        return v
+
+    @validator('audio_format_preference')
+    def validate_audio_format(cls, v):
+        valid_formats = ['m4a', 'mp3', 'opus', 'aac', 'any']
+        if v not in valid_formats:
+            raise ValueError(f"音频格式必须是以下之一: {valid_formats}")
+        return v
+
+    @validator('audio_extraction_mode')
+    def validate_audio_extraction_mode(cls, v):
+        valid_modes = ['direct_download', 'extract_from_video']
+        if v not in valid_modes:
+            raise ValueError(f"音频提取模式必须是以下之一: {valid_modes}")
+        return v
+
 
 class FileProcessingConfig(BaseConfig):
     """文件处理配置"""
@@ -104,7 +154,10 @@ class FileProcessingConfig(BaseConfig):
 
 
 class AISubtitlesConfig(BaseConfig):
-    """AI字幕配置"""
+    """人工智能字幕配置类。
+    
+    管理Whisper模型、翻译服务、字幕格式等AI相关设置。
+    """
     whisper_model: str = Field(default='base.en', description="Whisper模型名称")
     whisper_device: str = Field(default='auto', description="Whisper设备")
     whisper_model_path: Optional[str] = Field(default=None, description="Whisper模型路径")
@@ -115,6 +168,8 @@ class AISubtitlesConfig(BaseConfig):
     
     translation_batch_size: int = Field(default=50, ge=1, le=200, description="翻译批次大小")
     translation_delay: float = Field(default=0.5, ge=0, description="翻译延迟(秒)")
+    translation_max_retries: int = Field(default=3, ge=1, le=10, description="翻译最大重试次数")
+    translation_timeout: int = Field(default=30, ge=5, le=120, description="翻译超时时间(秒)")
     
     subtitle_formats: List[str] = Field(default=['srt', 'vtt'], description="字幕格式")
 
@@ -150,6 +205,35 @@ class UIConfig(BaseConfig):
     show_network_status: bool = Field(default=True, description="显示网络状态")
 
 
+class CookiesConfig(BaseConfig):
+    """Cookies配置"""
+    mode: str = Field(default='auto', description="Cookies获取方式")
+    browser_type: str = Field(default='auto', description="浏览器类型")
+    manual_cookies_file: str = Field(default='cookies.txt', description="手动cookies文件路径")
+    auto_extract_enabled: bool = Field(default=True, description="是否启用自动提取")
+    force_refresh: bool = Field(default=False, description="是否强制刷新cookies")
+    
+    # 缓存设置
+    cache_enabled: bool = Field(default=True, description="是否启用cookies缓存")
+    cache_file: str = Field(default='cookies.cache.txt', description="缓存文件路径")
+    cache_duration_hours: int = Field(default=24, ge=1, le=168, description="缓存有效期（小时）")
+    cache_check_interval: int = Field(default=1, ge=1, le=24, description="缓存检查间隔（小时）")
+
+    @validator('mode')
+    def validate_mode(cls, v):
+        valid_modes = ['auto', 'manual', 'browser', 'skip']
+        if v not in valid_modes:
+            raise ValueError(f"Cookies获取方式必须是以下之一: {valid_modes}")
+        return v
+
+    @validator('browser_type')
+    def validate_browser_type(cls, v):
+        valid_browsers = ['auto', 'chrome', 'firefox', 'edge', 'safari']
+        if v not in valid_browsers:
+            raise ValueError(f"浏览器类型必须是以下之一: {valid_browsers}")
+        return v
+
+
 class AdvancedConfig(BaseConfig):
     """高级配置"""
     ytdlp_extra_args: List[str] = Field(default=[], description="yt-dlp额外参数")
@@ -170,6 +254,7 @@ class AppConfig(BaseConfig):
     ai_subtitles: AISubtitlesConfig = Field(default_factory=AISubtitlesConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    cookies: CookiesConfig = Field(default_factory=CookiesConfig)
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
 
 
@@ -180,14 +265,33 @@ log = logging.getLogger(__name__)
 
 
 class ConfigManager:
-    """简化的配置管理器"""
+    """简化的配置管理器。
+    
+    负责加载、保存和管理应用程序配置，包括配置验证、
+    错误处理和默认值回退。
+    
+    Attributes:
+        config_file (Path): 配置文件路径。
+        config (AppConfig): 当前加载的配置实例。
+    """
     
     def __init__(self, config_file: str = "config.yaml"):
+        """初始化配置管理器。
+        
+        Args:
+            config_file (str): 配置文件路径，默认为"config.yaml"。
+        """
         self.config_file = Path(config_file)
         self.config: AppConfig = self._load_config()
 
     def _load_config(self) -> AppConfig:
-        """加载、验证并返回配置"""
+        """加载、验证并返回配置。
+        
+        Returns:
+            AppConfig: 加载并验证后的配置实例。
+            
+        如果配置文件不存在或加载失败，将创建或返回默认配置。
+        """
         if not self.config_file.exists():
             console.print(f"⚠️ 配置文件 {self.config_file} 不存在，将创建默认配置", style="bold yellow")
             default_config = AppConfig()
@@ -209,14 +313,20 @@ class ConfigManager:
             for error in e.errors():
                 loc = '.'.join(map(str, error['loc']))
                 log.error(f"  - {loc}: {error['msg']}")
+        except (OSError, IOError, PermissionError) as e:
+            log.error(f"❌ 无法访问配置文件 {self.config_file}: {e}")
         except Exception as e:
-            log.error(f"❌ 加载配置文件时发生未知错误: {e}")
+            log.error(f"❌ 加载配置文件时发生未知错误: {e}", exc_info=True)
         
         console.print("使用默认配置作为回退", style="bold yellow")
         return AppConfig()
 
     def save_config(self, config_data: AppConfig) -> None:
-        """保存配置到文件"""
+        """保存配置到文件。
+        
+        Args:
+            config_data (AppConfig): 要保存的配置数据。
+        """
         try:
             config_dict = config_data.model_dump(exclude_none=True)
             
@@ -228,11 +338,22 @@ class ConfigManager:
                          sort_keys=False)  # 保持原有顺序
             
             console.print(f"✅ 配置已保存到: {self.config_file}", style="bold green")
+        except (OSError, IOError, PermissionError) as e:
+            log.error(f"❌ 无法写入配置文件 {self.config_file}: {e}")
+        except yaml.YAMLError as e:
+            log.error(f"❌ YAML序列化失败: {e}")
         except Exception as e:
-            log.error(f"❌ 保存配置文件失败: {e}")
+            log.error(f"❌ 保存配置文件时发生未知错误: {e}", exc_info=True)
 
     def get_download_folder(self, script_path: Optional[Path] = None) -> Path:
-        """根据配置创建并返回下载文件夹路径"""
+        """根据配置创建并返回下载文件夹路径。
+        
+        Args:
+            script_path (Optional[Path]): 脚本文件路径，用作相对路径的基准。
+            
+        Returns:
+            Path: 创建好的下载文件夹路径。
+        """
         folders_config = self.config.folders
         
         if script_path is None:
@@ -259,24 +380,43 @@ class ConfigManager:
         # 创建文件夹
         try:
             final_folder.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            log.error(f"❌ 创建下载文件夹失败: {e}")
+        except (OSError, PermissionError) as e:
+            log.error(f"❌ 创建下载文件夹失败，权限不足: {e}")
             # 回退到当前目录
             fallback_folder = Path.cwd() / datetime.now().strftime('%Y%m%d-%H%M%S')
-            fallback_folder.mkdir(parents=True, exist_ok=True)
-            console.print(f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow")
-            return fallback_folder
+            try:
+                fallback_folder.mkdir(parents=True, exist_ok=True)
+                console.print(f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow")
+                return fallback_folder
+            except Exception as fallback_error:
+                log.critical(f"致命错误：无法创建任何文件夹: {fallback_error}")
+                raise
+        except Exception as e:
+            log.error(f"❌ 创建下载文件夹时发生未知错误: {e}", exc_info=True)
+            # 回退到当前目录
+            fallback_folder = Path.cwd() / datetime.now().strftime('%Y%m%d-%H%M%S')
+            try:
+                fallback_folder.mkdir(parents=True, exist_ok=True)
+                console.print(f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow")
+                return fallback_folder
+            except Exception as fallback_error:
+                log.critical(f"致命错误：无法创建任何文件夹: {fallback_error}")
+                raise
         
         return final_folder
 
     def reload_config(self) -> bool:
-        """重新加载配置"""
+        """重新加载配置。
+        
+        Returns:
+            bool: 如果重新加载成功返回True，否则返回False。
+        """
         try:
             self.config = self._load_config()
             console.print("✅ 配置重新加载成功", style="bold green")
             return True
         except Exception as e:
-            log.error(f"❌ 重新加载配置失败: {e}")
+            log.error(f"❌ 重新加载配置时发生未知错误: {e}", exc_info=True)
             return False
 
 

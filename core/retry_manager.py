@@ -1,10 +1,15 @@
-# core/retry_manager.py
+#!/usr/bin/env python3
+"""
+重试管理器模块
+提供重试逻辑、熔断器管理和装饰器支持
+"""
 
 import asyncio
+import functools
 import logging
 import random
 import time
-from typing import Any
+from typing import Any, Callable, TypeVar, Union
 
 from rich.console import Console
 
@@ -17,16 +22,73 @@ from .exceptions import (
 log = logging.getLogger(__name__)
 console = Console()
 
+F = TypeVar('F', bound=Callable[..., Any])
+
+
+def with_retries(
+    max_retries: int = None,
+    base_delay: float = None,
+    max_delay: float = None,
+    backoff_factor: float = None
+) -> Callable[[F], F]:
+    """
+    重试装饰器，为异步函数添加重试功能。
+    
+    Args:
+        max_retries: 最大重试次数，默认使用配置文件值
+        base_delay: 基础延迟时间，默认使用配置文件值
+        max_delay: 最大延迟时间，默认使用配置文件值
+        backoff_factor: 退避因子，默认使用配置文件值
+        
+    Returns:
+        装饰后的函数
+        
+    Usage:
+        @with_retries(max_retries=3, base_delay=5)
+        async def download_operation():
+            # 你的下载逻辑
+            pass
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            retry_manager = RetryManager(
+                max_retries=max_retries,
+                base_delay=base_delay,
+                max_delay=max_delay,
+                backoff_factor=backoff_factor
+            )
+            return await retry_manager.execute_with_retries(func, *args, **kwargs)
+        return wrapper
+    return decorator
+
 
 class RetryManager:
     """负责重试逻辑和熔断器管理"""
     
-    def __init__(self):
-        # 从配置获取重试相关参数
-        self.max_retries = config.downloader.max_retries
-        self.base_delay = config.downloader.base_delay
-        self.max_delay = config.downloader.max_delay
-        self.backoff_factor = config.downloader.backoff_factor
+    def __init__(
+        self, 
+        max_retries: int = None,
+        base_delay: float = None,
+        max_delay: float = None,
+        backoff_factor: float = None
+    ):
+        """
+        初始化重试管理器。
+        
+        Args:
+            max_retries: 最大重试次数，None则使用配置文件值
+            base_delay: 基础延迟时间，None则使用配置文件值
+            max_delay: 最大延迟时间，None则使用配置文件值
+            backoff_factor: 退避因子，None则使用配置文件值
+        """
+        # 从配置获取重试相关参数，支持参数覆盖
+        self.max_retries = max_retries if max_retries is not None else config.downloader.max_retries
+        self.base_delay = base_delay if base_delay is not None else config.downloader.base_delay
+        self.max_delay = max_delay if max_delay is not None else config.downloader.max_delay
+        self.backoff_factor = backoff_factor if backoff_factor is not None else config.downloader.backoff_factor
+        
+        # 熔断器相关参数（这些不支持覆盖，始终使用配置文件值）
         self.circuit_breaker_failure_threshold = config.downloader.circuit_breaker_failure_threshold
         self.circuit_breaker_timeout = config.downloader.circuit_breaker_timeout
         

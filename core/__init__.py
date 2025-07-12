@@ -11,10 +11,12 @@ from .exceptions import (
     FFmpegException
 )
 
-from .retry_manager import RetryManager
+from .retry_manager import RetryManager, with_retries
 from .command_builder import CommandBuilder
 from .subprocess_progress_handler import SubprocessProgressHandler
 from .error_handler import ErrorHandler
+from .subprocess_manager import SubprocessManager
+from .file_processor import FileProcessor
 
 __all__ = [
     'CircuitBreakerState',
@@ -26,7 +28,10 @@ __all__ = [
     'NonRecoverableErrorException',
     'FFmpegException',
     'RetryManager',
+    'with_retries',
     'CommandBuilder',
     'SubprocessProgressHandler',
-    'ErrorHandler'
+    'ErrorHandler',
+    'SubprocessManager',
+    'FileProcessor'
 ]

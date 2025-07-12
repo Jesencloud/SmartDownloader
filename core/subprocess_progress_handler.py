@@ -20,6 +20,15 @@ class SubprocessProgressHandler:
     
     def __init__(self):
         self.network_timeout = config.downloader.network_timeout
+        # 用于跟踪组合下载的进度
+        self.combined_download_state = {
+            'video_total': 0,
+            'video_completed': 0,
+            'audio_total': 0,
+            'audio_completed': 0,
+            'current_file_type': None,
+            'is_combined_download': False
+        }
 
     def _parse_size_to_bytes(self, size_str: str) -> int:
         """将 yt-dlp 输出中的大小字符串（例如 '10.5MiB'）转换为字节数。"""
@@ -51,22 +60,140 @@ class SubprocessProgressHandler:
             percentage = progress_data.get('_percent')
             total_bytes = progress_data.get('total_bytes')
             downloaded_bytes = progress_data.get('downloaded_bytes')
+            filename = progress_data.get('filename', '')
 
             if percentage is not None and total_bytes is not None and downloaded_bytes is not None:
+                # 检测是否是组合下载（文件名包含不同格式）
+                self._detect_combined_download(filename, total_bytes, downloaded_bytes)
+                
+                # 计算显示的进度
+                display_total, display_completed = self._calculate_combined_progress(
+                    total_bytes, downloaded_bytes
+                )
+                
                 # 确保任务可见后再更新进度
                 if not progress.tasks[task_id].visible:
                     progress.update(task_id, visible=True)
-                progress.update(task_id, completed=downloaded_bytes, total=total_bytes)
+                progress.update(task_id, completed=display_completed, total=display_total)
                 return True
                 
         elif progress_data.get('status') == 'finished':
+            filename = progress_data.get('filename', '')
+            self._mark_file_finished(filename)
+            
             # 确保任务可见后再更新进度
             if not progress.tasks[task_id].visible:
                 progress.update(task_id, visible=True)
-            progress.update(task_id, completed=progress.tasks[task_id].total or 1, 
-                          total=progress.tasks[task_id].total or 1)
+            
+            # 如果是组合下载，显示总进度
+            if self.combined_download_state['is_combined_download']:
+                total_combined = (self.combined_download_state['video_total'] + 
+                                self.combined_download_state['audio_total'])
+                completed_combined = (self.combined_download_state['video_completed'] + 
+                                    self.combined_download_state['audio_completed'])
+                progress.update(task_id, completed=completed_combined, total=total_combined)
+            else:
+                progress.update(task_id, completed=progress.tasks[task_id].total or 1, 
+                              total=progress.tasks[task_id].total or 1)
             return True
         return False
+
+    def _detect_combined_download(self, filename: str, total_bytes: int, downloaded_bytes: int):
+        """检测组合下载并更新状态"""
+        if not filename:
+            return
+            
+        # 更智能的检测逻辑
+        filename_lower = filename.lower()
+        
+        # 检测视频格式标识符（hls-, webm-, mp4-等）
+        is_video_format = any(indicator in filename_lower for indicator in [
+            'hls-', 'dash-', 'webm-', 'mp4-', '.mp4', '.webm', '.mkv'
+        ]) and not any(audio_indicator in filename_lower for audio_indicator in [
+            'audio', 'Audio', 'AUDIO'
+        ])
+        
+        # 检测音频格式标识符
+        is_audio_format = any(indicator in filename_lower for indicator in [
+            'audio', 'Audio', 'AUDIO', '.m4a', '.opus', '.mp3', '.aac'
+        ]) or ('hls-audio' in filename_lower)
+        
+        # 基于文件名和大小的综合判断
+        if is_audio_format:
+            # 明确的音频标识
+            self.combined_download_state['audio_total'] = total_bytes
+            self.combined_download_state['audio_completed'] = downloaded_bytes
+            self.combined_download_state['current_file_type'] = 'audio'
+            self.combined_download_state['is_combined_download'] = True
+        elif is_video_format or total_bytes > 5 * 1024 * 1024:  # >5MB 可能是视频
+            # 明确的视频标识或较大文件
+            self.combined_download_state['video_total'] = total_bytes
+            self.combined_download_state['video_completed'] = downloaded_bytes
+            self.combined_download_state['current_file_type'] = 'video'
+            self.combined_download_state['is_combined_download'] = True
+        else:
+            # 基于文件大小的备用判断
+            if total_bytes < 5 * 1024 * 1024:  # <5MB，可能是音频
+                self.combined_download_state['audio_total'] = total_bytes
+                self.combined_download_state['audio_completed'] = downloaded_bytes
+                self.combined_download_state['current_file_type'] = 'audio'
+                self.combined_download_state['is_combined_download'] = True
+
+    def _calculate_combined_progress(self, total_bytes: int, downloaded_bytes: int):
+        """计算组合下载的显示进度"""
+        if not self.combined_download_state['is_combined_download']:
+            return total_bytes, downloaded_bytes
+            
+        # 更新当前文件的进度
+        current_type = self.combined_download_state['current_file_type']
+        if current_type == 'video':
+            self.combined_download_state['video_completed'] = downloaded_bytes
+        elif current_type == 'audio':
+            self.combined_download_state['audio_completed'] = downloaded_bytes
+            
+        # 计算总进度 - 智能显示逻辑
+        video_total = self.combined_download_state['video_total']
+        video_completed = self.combined_download_state['video_completed']
+        audio_total = self.combined_download_state['audio_total']
+        audio_completed = self.combined_download_state['audio_completed']
+        
+        # 如果两个文件大小都已知，总是显示总大小
+        if video_total > 0 and audio_total > 0:
+            return video_total + audio_total, video_completed + audio_completed
+        elif video_total > 0:
+            # 只有视频大小已知，显示视频进度
+            return video_total, video_completed
+        elif audio_total > 0:
+            # 只有音频大小已知，显示音频进度
+            return audio_total, audio_completed
+        else:
+            # 都未知，显示当前文件进度
+            return total_bytes, downloaded_bytes
+
+    def _mark_file_finished(self, filename: str):
+        """标记文件下载完成"""
+        if not filename:
+            return
+            
+        # 使用与检测相同的逻辑判断文件类型
+        filename_lower = filename.lower()
+        
+        # 检测音频格式标识符
+        is_audio_format = any(indicator in filename_lower for indicator in [
+            'audio', 'Audio', 'AUDIO', '.m4a', '.opus', '.mp3', '.aac'
+        ]) or ('hls-audio' in filename_lower)
+        
+        # 检测视频格式标识符
+        is_video_format = any(indicator in filename_lower for indicator in [
+            'hls-', 'dash-', 'webm-', 'mp4-', '.mp4', '.webm', '.mkv'
+        ]) and not any(audio_indicator in filename_lower for audio_indicator in [
+            'audio', 'Audio', 'AUDIO'
+        ])
+                  
+        if is_audio_format:
+            self.combined_download_state['audio_completed'] = self.combined_download_state['audio_total']
+        elif is_video_format:
+            self.combined_download_state['video_completed'] = self.combined_download_state['video_total']
 
     def _handle_text_progress_data(self, line: str, progress: Progress, task_id: TaskID) -> bool:
         """
@@ -175,6 +302,16 @@ class SubprocessProgressHandler:
         Raises:
             DownloadStalledException: 当下载超时时
         """
+        # 重置组合下载状态
+        self.combined_download_state = {
+            'video_total': 0,
+            'video_completed': 0,
+            'audio_total': 0,
+            'audio_completed': 0,
+            'current_file_type': None,
+            'is_combined_download': False
+        }
+        
         error_output = await self._read_process_output(process, progress, task_id)
         
         # 等待进程完成

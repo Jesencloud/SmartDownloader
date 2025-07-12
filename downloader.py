@@ -1,26 +1,25 @@
-# downloader.py
+#!/usr/bin/env python3
+"""
+下载器模块
+提供异步视频下载功能，重构后的版本使用核心模块组件
+"""
 
 import asyncio
 import json
 import logging
-import re
-import random
-import socket
-import time
 from pathlib import Path
-from typing import Optional, List, Generator, Dict, Any, AsyncGenerator
+from typing import Optional, List, Dict, Any, AsyncGenerator
 
-import aiofiles
 from rich.console import Console
-from rich.progress import (Progress, BarColumn, TextColumn, TimeRemainingColumn,
-                           DownloadColumn, TransferSpeedColumn, TaskID)
+from rich.progress import (
+    Progress, BarColumn, TextColumn, TimeRemainingColumn,
+    DownloadColumn, TransferSpeedColumn, TaskID
+)
 
 from config_manager import config
 from core import (
-    CircuitBreakerState, DownloaderException, MaxRetriesExceededException,
-    NetworkException, ProxyException, DownloadStalledException,
-    NonRecoverableErrorException, FFmpegException,
-    SubprocessProgressHandler, ErrorHandler, CommandBuilder
+    DownloaderException, FFmpegException, with_retries,
+    CommandBuilder, SubprocessManager, FileProcessor
 )
 
 log = logging.getLogger(__name__)
@@ -30,332 +29,334 @@ console = Console()
 _progress_semaphore = asyncio.Semaphore(1)
 
 
-class NetworkManager:
-    def __init__(self):
-        self.connectivity_test_host = config.advanced.connectivity_test_host
-        self.connectivity_test_port = config.advanced.connectivity_test_port
-        self.connectivity_timeout = config.advanced.connectivity_timeout
-        self.circuit_breaker_failure_threshold = config.downloader.circuit_breaker_failure_threshold
-        self.circuit_breaker_timeout = config.downloader.circuit_breaker_timeout
-        
-        self._circuit_breaker_state = CircuitBreakerState.CLOSED
-        self._failure_count = 0
-        self._last_failure_timestamp = 0
-
-    async def check_connectivity(self) -> bool:
-        """异步的网络连接检查"""
-        try:
-            await asyncio.wait_for(
-                asyncio.open_connection(self.connectivity_test_host, self.connectivity_test_port),
-                timeout=self.connectivity_timeout
-            )
-            return True
-        except (OSError, asyncio.TimeoutError):
-            return False
-
-    def check_circuit_breaker(self):
-        """检查熔断器状态，并根据需要转换状态。"""
-        if self._circuit_breaker_state == CircuitBreakerState.OPEN:
-            elapsed_time = time.time() - self._last_failure_timestamp
-            if elapsed_time > self.circuit_breaker_timeout:
-                self._circuit_breaker_state = CircuitBreakerState.HALF_OPEN
-                log.info("熔断器从 OPEN 转换为 HALF-OPEN 状态。")
-            else:
-                raise DownloaderException("熔断器处于 OPEN 状态，快速失败。")
-        elif self._circuit_breaker_state == CircuitBreakerState.HALF_OPEN:
-            log.info("熔断器处于 HALF-OPEN 状态，允许一次尝试。")
-
-    def record_failure(self):
-        """记录一次失败，并根据阈值转换熔断器状态。"""
-        self._failure_count += 1
-        if self._circuit_breaker_state == CircuitBreakerState.HALF_OPEN:
-            self._circuit_breaker_state = CircuitBreakerState.OPEN
-            self._last_failure_timestamp = time.time()
-            self._failure_count = 0
-            log.warning("熔断器从 HALF-OPEN 转换为 OPEN 状态。")
-        elif self._circuit_breaker_state == CircuitBreakerState.CLOSED and self._failure_count >= self.circuit_breaker_failure_threshold:
-            self._circuit_breaker_state = CircuitBreakerState.OPEN
-            self._last_failure_timestamp = time.time()
-            log.warning(f"连续失败 {self._failure_count} 次，熔断器从 CLOSED 转换为 OPEN 状态。")
-
-    def reset_circuit_breaker(self):
-        """重置熔断器到 CLOSED 状态。"""
-        if self._circuit_breaker_state != CircuitBreakerState.CLOSED:
-            log.info("熔断器重置为 CLOSED 状态。")
-        self._circuit_breaker_state = CircuitBreakerState.CLOSED
-        self._failure_count = 0
-        self._last_failure_timestamp = 0
-
-
-class RetryManager:
-    def __init__(self):
-        self.base_delay = config.downloader.base_delay
-        self.max_delay = config.downloader.max_delay
-        self.backoff_factor = config.downloader.backoff_factor
-
-    def calculate_delay(self, attempt: int) -> int:
-        """计算指数退避延迟时间"""
-        delay = self.base_delay * (self.backoff_factor ** attempt)
-        jitter = random.uniform(0.5, 1.5)
-        delay = min(delay * jitter, self.max_delay)
-        return int(delay)
-
-
-class FileProcessor:
-    def __init__(self, download_folder: Path):
-        self.download_folder = download_folder
-
-    async def merge_to_mp4(self, video_part: Path, audio_part: Path, file_prefix: str) -> Path:
-        console.print("🔧 正在合并视频和音频...", style="bold yellow")
-        final_path = self.download_folder / f"{file_prefix}.mp4"
-        cmd = ['ffmpeg', '-y', '-i', str(video_part.resolve()), '-i', str(audio_part.resolve()),
-               '-c', 'copy', str(final_path.resolve())]
-
-        try:
-            await self._run_subprocess(cmd)
-            console.print(f"✅ 视频合并成功: {final_path.name}", style="bold green")
-            return final_path
-        except Exception as e:
-            raise FFmpegException(f"视频合并失败: {e}")
-
-    async def extract_audio_from_local_file(self, video_path: Path, file_prefix: str) -> Path:
-        console.print(f"🎥 正在提取音频: {video_path.name}", style="bold blue")
-        mp3_path = self.download_folder / f"{file_prefix}.mp3"
-        cmd = ['ffmpeg','-y', '-i', str(video_path.resolve()),'-vn','-q:a', '0', str(mp3_path.resolve())]
-
-        try:
-            await self._run_subprocess(cmd)
-            console.print(f"✅ 音频提取成功: {mp3_path.name}", style="bold green")
-            return mp3_path
-        except Exception as e:
-            raise FFmpegException(f"音频提取失败: {e}")
-
-    async def cleanup_temp_files(self, file_prefix: str) -> None:
-        loop = asyncio.get_running_loop()
-        def _cleanup():
-            for p in self.download_folder.glob(f"{file_prefix}.f*"): 
-                p.unlink(missing_ok=True)
-            for p in self.download_folder.glob(f"{file_prefix}_*.tmp.*"): 
-                p.unlink(missing_ok=True)
-        await loop.run_in_executor(None, _cleanup)
-
-    async def cleanup_all_incomplete_files(self) -> None:
-        patterns = config.file_processing.cleanup_patterns
-        cleaned_files = []
-        
-        def _cleanup():
-            for pattern in patterns:
-                for file_path in self.download_folder.glob(pattern):
-                    try:
-                        file_path.unlink()
-                        cleaned_files.append(file_path.name)
-                    except Exception as e:
-                        log.error(f"清理文件 {file_path.name} 失败: {e}")
-        
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _cleanup)
-
-        if cleaned_files:
-            console.print(f"🧹 已清理 {len(cleaned_files)} 个未完成文件", style="bold yellow")
-
-    async def _run_subprocess(self, cmd: List[str]) -> None:
-        """Helper method for running subprocess commands"""
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        _, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            error_output = stderr.decode('utf-8', errors='ignore') if stderr else ""
-            raise FFmpegException(f"Command failed: {' '.join(cmd)}\nError: {error_output}")
-
-
 class Downloader:
+    """
+    简化的下载器，主要负责下载流程编排。
+    
+    重构后专注于业务流程，具体的执行逻辑委托给核心模块。
+    """
+    
     def __init__(self, download_folder: Path, cookies_file: Optional[str] = None, proxy: Optional[str] = None):
-        self.download_folder = download_folder
+        """
+        初始化下载器。
+        
+        Args:
+            download_folder: 下载文件夹路径
+            cookies_file: cookies文件路径（可选）
+            proxy: 代理服务器地址（可选）
+        """
+        self.download_folder = Path(download_folder)
         self.cookies_file = cookies_file
         self.proxy = proxy
-
-        # 初始化专门的处理器
-        self.progress_handler = SubprocessProgressHandler()
-        self.error_handler = ErrorHandler()
-        self.network_manager = NetworkManager()
-        self.retry_manager = RetryManager()
+        
+        # 组合各种专门的处理器
         self.command_builder = CommandBuilder(proxy, cookies_file)
-        self.file_processor = FileProcessor(download_folder)
-
-        # 从 Pydantic 模型直接获取配置
-        self.max_retries = config.downloader.max_retries
-        self.network_timeout = config.downloader.network_timeout
-        self.stall_detection_time = config.downloader.stall_detection_time
-        self.stall_check_interval = config.downloader.stall_check_interval
-        self.stall_threshold_count = config.downloader.stall_threshold_count
-        self.proxy_retry_base_delay = config.downloader.proxy_retry_base_delay
-        self.proxy_retry_increment = config.downloader.proxy_retry_increment
-        self.proxy_retry_max_delay = config.downloader.proxy_retry_max_delay
-
-        self.proxy_test_url = config.advanced.proxy_test_url
-        self.proxy_test_timeout = config.advanced.proxy_test_timeout
-
-
-    async def _execute_subprocess_with_retries(self, cmd: List[str], stdout_pipe: Any, stderr_pipe: Any) -> asyncio.subprocess.Process:
-        attempt = 0
-        while attempt <= self.max_retries:
-            self.network_manager.check_circuit_breaker()
-            process = None
-            try:
-                if attempt > 0:
-                    delay = self.retry_manager.calculate_delay(attempt - 1)
-                    console.print(f"♾️ 第 {attempt + 1} 次尝试，等待 {delay} 秒...", style="bold yellow")
-                    await asyncio.sleep(delay)
-
-                process = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=stdout_pipe,
-                    stderr=stderr_pipe
-                )
-                
-                # For mypy type narrowing
-                if stdout_pipe == asyncio.subprocess.PIPE:
-                    assert process.stdout is not None
-                if stderr_pipe == asyncio.subprocess.PIPE:
-                    assert process.stderr is not None
-
-                log.info(f"子进程成功创建: {cmd[0]}")
-                return process
-
-            except (DownloadStalledException, ProxyException, NetworkException) as e:
-                log.warning(f"操作中遇到问题: {e}", exc_info=True)
-                self.network_manager.record_failure()
-                if process and process.returncode is None: process.kill()
-                
-                attempt += 1
-                if attempt > self.max_retries:
-                    raise MaxRetriesExceededException(f"操作在 {self.max_retries + 1} 次尝试后失败。")
-                continue
-
-            except KeyboardInterrupt:
-                if process and process.returncode is None: process.kill()
-                raise
-            except Exception as e:
-                log.error(f"未知子进程错误: {e}", exc_info=True)
-                if process and process.returncode is None: process.kill()
-                raise DownloaderException(f"未知子进程错误: {e}")
-
-        raise MaxRetriesExceededException(f"操作在 {self.max_retries + 1} 次尝试后失败。")
-
+        self.subprocess_manager = SubprocessManager()
+        self.file_processor = FileProcessor(self.subprocess_manager, self.command_builder)
+        
+        log.info(f'初始化下载器，目标文件夹: {self.download_folder}')
+        if cookies_file:
+            log.info(f'使用cookies文件: {cookies_file}')
+        if proxy:
+            log.info(f'使用代理: {proxy}')
+    
     async def stream_playlist_info(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
-        cmd = self.command_builder.build_playlist_info_cmd(url)
-        limit = 2 * 1024 * 1024 # 2MB limit
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            limit=limit
-        )
-
-        if process.stdout is None:
-            log.error(f"无法获取 {url} 的 stdout 流。")
-            return
-
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                break
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-        retcode = await process.wait()
-        if retcode != 0:
-            error = b""
-            if process.stderr is not None:
-                error = await process.stderr.read()
-            log.error(f"解析URL '{url}' 时出错: {error.decode()}")
-
-    async def download_and_merge(self, video_url: str, file_prefix: str) -> Path:
-        video_part_base, audio_part_base = f"{file_prefix}_video.tmp", f"{file_prefix}_audio.tmp"
-
-        # 使用信号量确保同时只有一个进度条活动
-        async with _progress_semaphore:
-            # 先准备命令
-            vid_cmd = self.command_builder.build_video_download_cmd(
-                f"{self.download_folder / video_part_base}.%(ext)s", video_url
-            )
-            aud_cmd = self.command_builder.build_audio_download_cmd(
-                f"{self.download_folder / audio_part_base}.%(ext)s", video_url
+        """
+        流式获取播放列表信息。
+        
+        Args:
+            url: 视频或播放列表URL
+            
+        Yields:
+            包含视频信息的字典
+            
+        Raises:
+            DownloaderException: 获取信息失败
+        """
+        try:
+            # 构建获取信息的命令
+            info_cmd = self.command_builder.build_playlist_info_cmd(url)
+            
+            # 执行命令获取信息
+            return_code, stdout, stderr = await self.subprocess_manager.execute_simple(
+                info_cmd, timeout=60, check_returncode=True
             )
             
-            # 创建进度条对象
-            with Progress(
-                TextColumn("[bold blue]⬇️ {task.description}"), BarColumn(bar_width=None),
-                "[progress.percentage]{task.percentage:>3.1f}%", "|", DownloadColumn(), "|",
-                TransferSpeedColumn(), "|", TimeRemainingColumn(), console=console, expand=True
-            ) as progress:
+            # 解析JSON输出
+            for line in stdout.strip().split('\n'):
+                if line.strip():
+                    try:
+                        video_info = json.loads(line)
+                        yield video_info
+                    except json.JSONDecodeError as e:
+                        log.warning(f'解析视频信息JSON失败: {e}')
+                        continue
+                        
+        except Exception as e:
+            raise DownloaderException(f'获取播放列表信息失败: {e}') from e
+    
+    @with_retries(max_retries=3)
+    async def download_and_merge(self, video_url: str, file_prefix: str) -> Optional[Path]:
+        """
+        下载视频和音频并合并为MP4格式。
+        
+        Args:
+            video_url: 视频URL
+            file_prefix: 文件前缀
+            
+        Returns:
+            合并后的文件路径，失败返回None
+            
+        Raises:
+            DownloaderException: 下载或合并失败
+        """
+        try:
+            log.info(f'开始下载并合并: {file_prefix}')
+            
+            # 构建下载命令
+            download_cmd, file_prefix_used = await self.command_builder.build_combined_download_cmd(
+                str(self.download_folder), video_url
+            )
+            
+            # 创建进度条
+            async with _progress_semaphore:
+                with Progress(
+                    TextColumn('[progress.description]{task.description}'),
+                    BarColumn(),
+                    DownloadColumn(),
+                    TransferSpeedColumn(),
+                    TimeRemainingColumn(),
+                    console=console
+                ) as progress:
+                    
+                    # 创建进度任务
+                    task_id = progress.add_task(
+                        f'⬇️ 下载合并视频', total=None
+                    )
+                    
+                    # 执行下载命令
+                    return_code, stdout, stderr = await self.subprocess_manager.execute_with_progress(
+                        download_cmd, progress, task_id, timeout=1800  # 30分钟超时
+                    )
+            
+            # 查找生成的文件 - 支持多种视频格式
+            output_file = await self._find_output_file(file_prefix, ('.mp4', '.webm', '.mkv', '.avi'))
+            if output_file and await self.file_processor.verify_file_integrity(output_file):
+                log.info(f'下载合并成功: {output_file.name}')
+                return output_file
+            else:
+                raise DownloaderException(f'下载合并失败，未找到有效的输出文件')
                 
-                # 创建隐藏的任务，只有在真正有进度数据时才显示
-                video_task = progress.add_task("下载视频", total=None, visible=False)
-                await self._run_subprocess_with_progress(vid_cmd, progress, video_task)
-
-                audio_task = progress.add_task("下载音频", total=None, visible=False)
-                await self._run_subprocess_with_progress(aud_cmd, progress, audio_task)
-
-            # 检查下载的文件
-            vid_part = next(self.download_folder.glob(f"{video_part_base}.*"), None)
-            aud_part = next(self.download_folder.glob(f"{audio_part_base}.*"), None)
-
-            if not (vid_part and aud_part):
-                merged_file = next((p for p in self.download_folder.glob(f"{file_prefix}.*") if p.suffix in ['.mp4', '.mkv', '.webm']), None)
-                if merged_file:
-                    console.print("✅ 检测到媒体源已合并", style="bold green")
-                    return merged_file
-                raise NonRecoverableErrorException("未找到下载的视频或音频文件")
-
-        return await self.file_processor.merge_to_mp4(vid_part, aud_part, file_prefix)
-
-    async def download_metadata(self, url: str, file_prefix: str) -> None:
-        cmd = self.command_builder.build_metadata_download_cmd(str(self.download_folder / file_prefix), url)
-        await self._run_subprocess(cmd)
-
-    async def extract_audio_from_local_file(self, video_path: Path, file_prefix: str) -> Path:
-        return await self.file_processor.extract_audio_from_local_file(video_path, file_prefix)
-
-    async def cleanup_temp_files(self, file_prefix: str) -> None:
-        await self.file_processor.cleanup_temp_files(file_prefix)
-
-    async def cleanup_all_incomplete_files(self) -> None:
-        await self.file_processor.cleanup_all_incomplete_files()
-
-    async def _run_subprocess_with_progress(self, cmd: List[str], progress: Progress, task_id: TaskID) -> None:
-        """简化的进度处理函数，使用专门的处理器"""
-        process = await self._execute_subprocess_with_retries(cmd, asyncio.subprocess.PIPE, asyncio.subprocess.STDOUT)
+        except Exception as e:
+            log.error(f'下载合并过程失败: {e}', exc_info=True)
+            # 清理可能的临时文件
+            await self.file_processor.cleanup_temp_files(
+                str(self.download_folder / file_prefix)
+            )
+            raise
+    
+    @with_retries(max_retries=3)
+    async def download_audio_directly(self, video_url: str, file_prefix: str) -> Optional[Path]:
+        """
+        直接下载音频文件。
         
-        # 使用专门的进度处理器
-        error_output = await self.progress_handler.handle_subprocess_with_progress(process, progress, task_id)
+        Args:
+            video_url: 视频URL
+            file_prefix: 文件前缀
+            
+        Returns:
+            下载的音频文件路径，失败返回None
+            
+        Raises:
+            DownloaderException: 下载失败
+        """
+        try:
+            log.info(f'开始直接下载音频: {file_prefix}')
+            
+            # 构建音频下载命令
+            audio_cmd = await self.command_builder.build_audio_download_cmd(
+                str(self.download_folder), video_url, file_prefix
+            )
+            
+            # 创建进度条
+            async with _progress_semaphore:
+                with Progress(
+                    TextColumn('[progress.description]{task.description}'),
+                    BarColumn(),
+                    DownloadColumn(),
+                    TransferSpeedColumn(),
+                    TimeRemainingColumn(),
+                    console=console
+                ) as progress:
+                    
+                    # 创建进度任务
+                    task_id = progress.add_task(
+                        f'⬇️ 下载音频', total=None
+                    )
+                    
+                    # 执行下载命令
+                    return_code, stdout, stderr = await self.subprocess_manager.execute_with_progress(
+                        audio_cmd, progress, task_id, timeout=1800  # 30分钟超时
+                    )
+            
+            # 查找生成的文件 - 支持多种音频格式
+            output_file = await self._find_output_file(file_prefix, ('.mp3', '.m4a', '.opus', '.aac', '.webm'))
+            if output_file and await self.file_processor.verify_file_integrity(output_file):
+                log.info(f'音频下载成功: {output_file.name}')
+                return output_file
+            else:
+                raise DownloaderException(f'音频下载失败，未找到有效的输出文件')
+                
+        except Exception as e:
+            log.error(f'音频下载过程失败: {e}', exc_info=True)
+            # 清理可能的临时文件
+            await self.file_processor.cleanup_temp_files(
+                str(self.download_folder / file_prefix)
+            )
+            raise
+    
+    async def download_metadata(self, video_url: str, file_prefix: str) -> bool:
+        """
+        下载视频元数据信息。
         
-        # 处理成功的情况
-        if process.returncode == 0:
-            self.network_manager.reset_circuit_breaker()
-            return
+        Args:
+            video_url: 视频URL
+            file_prefix: 文件前缀
+            
+        Returns:
+            bool: 下载是否成功
+            
+        Raises:
+            DownloaderException: 下载失败
+        """
+        try:
+            log.info(f'开始下载元数据: {file_prefix}')
+            
+            # 构建元数据下载命令
+            metadata_cmd = self.command_builder.build_metadata_download_cmd(
+                str(self.download_folder), video_url
+            )
+            
+            # 执行命令获取元数据
+            return_code, stdout, stderr = await self.subprocess_manager.execute_simple(
+                metadata_cmd, timeout=60, check_returncode=True
+            )
+            
+            log.info(f'元数据下载成功: {file_prefix}')
+            return True
+                
+        except Exception as e:
+            log.error(f'元数据下载失败: {e}', exc_info=True)
+            raise DownloaderException(f'元数据下载失败: {e}') from e
+    
+    async def extract_audio_from_video(self, video_file: Path, audio_file: Path) -> bool:
+        """
+        从已下载的视频文件提取音频。
         
-        # 处理错误情况
-        exception = self.error_handler.handle_subprocess_error(process.returncode, error_output, cmd[0])
-        if exception:
-            raise exception
-
-    async def _run_subprocess(self, cmd: List[str]) -> None:
-        """简化的子进程执行函数，使用专门的错误处理器"""
-        process = await self._execute_subprocess_with_retries(cmd, asyncio.subprocess.PIPE, asyncio.subprocess.PIPE)
-        _, stderr = await process.communicate()
-
-        if process.returncode == 0:
-            self.network_manager.reset_circuit_breaker()
-            return
-
-        error_output = stderr.decode('utf-8', errors='ignore') if stderr else ""
-        exception = self.error_handler.handle_subprocess_error(process.returncode, error_output, cmd[0])
-        if exception:
-            raise exception
+        Args:
+            video_file: 源视频文件路径
+            audio_file: 目标音频文件路径
+            
+        Returns:
+            bool: 提取是否成功
+            
+        Raises:
+            FFmpegException: 音频提取失败
+        """
+        try:
+            return await self.file_processor.extract_audio_from_local_file(
+                video_file, audio_file
+            )
+        except Exception as e:
+            log.error(f'音频提取失败: {e}', exc_info=True)
+            raise
+    
+    async def cleanup_all_incomplete_files(self):
+        """
+        清理所有未完成的下载文件。
+        
+        通常在程序异常退出时调用。
+        """
+        try:
+            log.info('开始清理未完成的下载文件...')
+            
+            # 清理所有正在运行的进程
+            await self.subprocess_manager.cleanup_all_processes()
+            
+            # 清理临时文件
+            cleanup_patterns = config.file_processing.cleanup_patterns
+            for pattern in cleanup_patterns:
+                matching_files = list(self.download_folder.glob(pattern))
+                for file_path in matching_files:
+                    try:
+                        if file_path.exists():
+                            file_path.unlink()
+                            log.debug(f'清理临时文件: {file_path.name}')
+                    except OSError as e:
+                        log.warning(f'清理文件失败 {file_path}: {e}')
+            
+            log.info('临时文件清理完成')
+            
+        except Exception as e:
+            log.error(f'清理过程中出错: {e}', exc_info=True)
+    
+    async def _find_output_file(self, file_prefix: str, extensions) -> Optional[Path]:
+        """
+        查找指定前缀和扩展名的输出文件。
+        
+        Args:
+            file_prefix: 文件前缀
+            extensions: 文件扩展名（字符串或元组）
+            
+        Returns:
+            找到的文件路径，未找到返回None
+        """
+        if isinstance(extensions, str):
+            extensions = (extensions,)
+        
+        # 首先尝试精确匹配
+        for ext in extensions:
+            exact_file = self.download_folder / f'{file_prefix}{ext}'
+            if exact_file.exists():
+                return exact_file
+        
+        # 如果精确匹配失败，尝试在下载文件夹中查找最新的匹配文件
+        all_files = []
+        for ext in extensions:
+            pattern = f'*{ext}'
+            matching_files = list(self.download_folder.glob(pattern))
+            all_files.extend(matching_files)
+        
+        if all_files:
+            # 返回最新修改的文件
+            latest_file = max(all_files, key=lambda f: f.stat().st_mtime)
+            log.info(f'找到下载文件: {latest_file.name}')
+            return latest_file
+        
+        return None
+    
+    async def cleanup_temp_files(self, file_prefix: str):
+        """
+        清理指定前缀的临时文件。
+        
+        Args:
+            file_prefix: 文件前缀
+        """
+        try:
+            await self.file_processor.cleanup_temp_files(file_prefix)
+        except Exception as e:
+            log.warning(f'清理临时文件时出错: {e}', exc_info=True)
+    
+    def get_status(self) -> Dict[str, Any]:
+        """
+        获取下载器当前状态。
+        
+        Returns:
+            包含状态信息的字典
+        """
+        return {
+            'download_folder': str(self.download_folder),
+            'cookies_file': self.cookies_file,
+            'proxy': self.proxy,
+            'running_processes': self.subprocess_manager.get_running_process_count()
+        }
