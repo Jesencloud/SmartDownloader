@@ -106,27 +106,32 @@ class SubprocessProgressHandler:
         # 更智能的检测逻辑
         filename_lower = filename.lower()
         
-        # 检测视频格式标识符（hls-, webm-, mp4-等）
-        is_video_format = any(indicator in filename_lower for indicator in [
-            'hls-', 'dash-', 'webm-', 'mp4-', '.mp4', '.webm', '.mkv'
-        ]) and not any(audio_indicator in filename_lower for audio_indicator in [
-            'audio', 'Audio', 'AUDIO'
-        ])
+        # 添加调试日志
+        log.debug(f"检测文件类型: filename={filename}, size={total_bytes}bytes")
         
-        # 检测音频格式标识符
+        # 检测音频格式标识符 - 优先检测，因为有些音频文件也是webm格式
         is_audio_format = any(indicator in filename_lower for indicator in [
             'audio', 'Audio', 'AUDIO', '.m4a', '.opus', '.mp3', '.aac'
-        ]) or ('hls-audio' in filename_lower)
+        ]) or ('hls-audio' in filename_lower) or ('f251' in filename_lower) or ('f140' in filename_lower)
+        
+        # 检测视频格式标识符（hls-, webm-, mp4-等）- 但排除音频标识符
+        is_video_format = (any(indicator in filename_lower for indicator in [
+            'hls-', 'dash-', 'webm-', 'mp4-', '.mp4', '.webm', '.mkv', 'f398', 'f137'
+        ]) and not any(audio_indicator in filename_lower for audio_indicator in [
+            'audio', 'Audio', 'AUDIO', 'f251', 'f140'
+        ]))
         
         # 基于文件名和大小的综合判断
         if is_audio_format:
             # 明确的音频标识
+            log.debug(f"检测为音频文件: {filename} ({total_bytes}bytes)")
             self.combined_download_state['audio_total'] = total_bytes
             self.combined_download_state['audio_completed'] = downloaded_bytes
             self.combined_download_state['current_file_type'] = 'audio'
             self.combined_download_state['is_combined_download'] = True
         elif is_video_format or total_bytes > 5 * 1024 * 1024:  # >5MB 可能是视频
             # 明确的视频标识或较大文件
+            log.debug(f"检测为视频文件: {filename} ({total_bytes}bytes)")
             self.combined_download_state['video_total'] = total_bytes
             self.combined_download_state['video_completed'] = downloaded_bytes
             self.combined_download_state['current_file_type'] = 'video'
@@ -134,6 +139,7 @@ class SubprocessProgressHandler:
         else:
             # 基于文件大小的备用判断
             if total_bytes < 5 * 1024 * 1024:  # <5MB，可能是音频
+                log.debug(f"基于大小检测为音频文件: {filename} ({total_bytes}bytes)")
                 self.combined_download_state['audio_total'] = total_bytes
                 self.combined_download_state['audio_completed'] = downloaded_bytes
                 self.combined_download_state['current_file_type'] = 'audio'
@@ -157,9 +163,15 @@ class SubprocessProgressHandler:
         audio_total = self.combined_download_state['audio_total']
         audio_completed = self.combined_download_state['audio_completed']
         
-        # 如果两个文件大小都已知，总是显示总大小
+        # 如果两个文件大小都已知，根据当前下载的文件类型显示对应大小
         if video_total > 0 and audio_total > 0:
-            return video_total + audio_total, video_completed + audio_completed
+            if current_type == 'video':
+                return video_total, video_completed
+            elif current_type == 'audio':
+                return audio_total, audio_completed
+            else:
+                # 如果当前类型未知，显示总大小
+                return video_total + audio_total, video_completed + audio_completed
         elif video_total > 0:
             # 只有视频大小已知，显示视频进度
             return video_total, video_completed

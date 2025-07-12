@@ -19,8 +19,9 @@ from rich.progress import (
 from config_manager import config
 from core import (
     DownloaderException, FFmpegException, with_retries,
-    CommandBuilder, SubprocessManager, FileProcessor
+    CommandBuilder, SubprocessManager, FileProcessor, AuthenticationException
 )
+from core.cookies_manager import CookiesManager
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -54,12 +55,63 @@ class Downloader:
         self.subprocess_manager = SubprocessManager()
         self.file_processor = FileProcessor(self.subprocess_manager, self.command_builder)
         
+        # 初始化cookies管理器
+        if cookies_file:
+            self.cookies_manager = CookiesManager(cookies_file)
+        else:
+            self.cookies_manager = None
+        
         log.info(f'初始化下载器，目标文件夹: {self.download_folder}')
         if cookies_file:
             log.info(f'使用cookies文件: {cookies_file}')
         if proxy:
             log.info(f'使用代理: {proxy}')
     
+    async def _execute_info_cmd_with_auth_retry(self, url: str, info_cmd: list, timeout: int = 60):
+        """
+        执行信息获取命令，支持认证错误自动重试
+        
+        Args:
+            url: 视频URL
+            info_cmd: 信息获取命令
+            timeout: 超时时间
+            
+        Returns:
+            tuple: (return_code, stdout, stderr)
+        """
+        max_auth_retries = 1
+        auth_retry_count = 0
+        
+        while auth_retry_count <= max_auth_retries:
+            try:
+                return await self.subprocess_manager.execute_simple(
+                    info_cmd, timeout=timeout, check_returncode=True
+                )
+            except AuthenticationException as e:
+                if auth_retry_count < max_auth_retries and self.cookies_manager:
+                    log.warning(f"🍪 获取视频信息认证错误，尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
+                    
+                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(url)
+                    
+                    if new_cookies_file:
+                        self.command_builder.update_cookies_file(new_cookies_file)
+                        # 重新构建信息获取命令
+                        info_cmd = self.command_builder.build_playlist_info_cmd(url)
+                        auth_retry_count += 1
+                        log.info(f"✅ Cookies已更新，重试获取视频信息...")
+                        continue
+                    else:
+                        log.error(f"❌ 无法自动更新cookies，获取视频信息失败")
+                        raise e
+                else:
+                    if not self.cookies_manager:
+                        log.error(f"❌ 未配置cookies管理器，无法自动处理认证错误")
+                    else:
+                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries})")
+                    raise e
+            except Exception as e:
+                raise e
+
     async def stream_playlist_info(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         流式获取播放列表信息。
@@ -77,9 +129,9 @@ class Downloader:
             # 构建获取信息的命令
             info_cmd = self.command_builder.build_playlist_info_cmd(url)
             
-            # 执行命令获取信息
-            return_code, stdout, stderr = await self.subprocess_manager.execute_simple(
-                info_cmd, timeout=60, check_returncode=True
+            # 执行命令获取信息（带认证重试支持）
+            return_code, stdout, stderr = await self._execute_info_cmd_with_auth_retry(
+                url, info_cmd, timeout=60
             )
             
             # 解析JSON输出
@@ -96,6 +148,111 @@ class Downloader:
             raise DownloaderException(f'获取播放列表信息失败: {e}') from e
     
     @with_retries(max_retries=3)
+    async def _execute_download_with_auth_retry(self, video_url: str, download_cmd: list, progress, task_id: TaskID, timeout: int = 1800):
+        """
+        执行下载命令，支持认证错误自动重试
+        
+        Args:
+            video_url: 视频URL
+            download_cmd: 下载命令
+            progress: 进度条对象
+            task_id: 任务ID
+            timeout: 超时时间
+            
+        Returns:
+            tuple: (return_code, stdout, stderr)
+            
+        Raises:
+            各种下载相关异常
+        """
+        max_auth_retries = 1  # 最多重试1次认证错误
+        auth_retry_count = 0
+        
+        while auth_retry_count <= max_auth_retries:
+            try:
+                return await self.subprocess_manager.execute_with_progress(
+                    download_cmd, progress, task_id, timeout=timeout
+                )
+            except AuthenticationException as e:
+                if auth_retry_count < max_auth_retries and self.cookies_manager:
+                    log.warning(f"🍪 检测到认证错误，尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
+                    
+                    # 尝试自动刷新cookies
+                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(video_url)
+                    
+                    if new_cookies_file:
+                        # 更新命令构建器的cookies文件
+                        self.command_builder.update_cookies_file(new_cookies_file)
+                        # 重新构建下载命令
+                        download_cmd, _ = await self.command_builder.build_combined_download_cmd(
+                            str(self.download_folder), video_url
+                        )
+                        auth_retry_count += 1
+                        log.info(f"✅ Cookies已更新，重试下载...")
+                        continue
+                    else:
+                        log.error(f"❌ 无法自动更新cookies，下载失败")
+                        raise e
+                else:
+                    # 达到最大重试次数或没有cookies管理器
+                    if not self.cookies_manager:
+                        log.error(f"❌ 未配置cookies管理器，无法自动处理认证错误")
+                    else:
+                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries})")
+                    raise e
+            except Exception as e:
+                # 其他类型的错误，直接抛出
+                raise e
+
+    async def _execute_audio_download_with_auth_retry(self, video_url: str, audio_cmd: list, progress, task_id: TaskID, timeout: int = 1800):
+        """
+        执行音频下载命令，支持认证错误自动重试
+        
+        Args:
+            video_url: 视频URL
+            audio_cmd: 音频下载命令
+            progress: 进度条对象
+            task_id: 任务ID
+            timeout: 超时时间
+            
+        Returns:
+            tuple: (return_code, stdout, stderr)
+        """
+        max_auth_retries = 1
+        auth_retry_count = 0
+        
+        while auth_retry_count <= max_auth_retries:
+            try:
+                return await self.subprocess_manager.execute_with_progress(
+                    audio_cmd, progress, task_id, timeout=timeout
+                )
+            except AuthenticationException as e:
+                if auth_retry_count < max_auth_retries and self.cookies_manager:
+                    log.warning(f"🍪 音频下载认证错误，尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
+                    
+                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(video_url)
+                    
+                    if new_cookies_file:
+                        self.command_builder.update_cookies_file(new_cookies_file)
+                        # 重新构建音频下载命令
+                        audio_cmd = await self.command_builder.build_audio_download_cmd(
+                            str(self.download_folder), video_url, file_prefix
+                        )
+                        auth_retry_count += 1
+                        log.info(f"✅ Cookies已更新，重试音频下载...")
+                        continue
+                    else:
+                        log.error(f"❌ 无法自动更新cookies，音频下载失败")
+                        raise e
+                else:
+                    if not self.cookies_manager:
+                        log.error(f"❌ 未配置cookies管理器，无法自动处理认证错误")
+                    else:
+                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries})")
+                    raise e
+            except Exception as e:
+                raise e
+
     async def download_and_merge(self, video_url: str, file_prefix: str) -> Optional[Path]:
         """
         下载视频和音频并合并为MP4格式。
@@ -134,9 +291,9 @@ class Downloader:
                         f'⬇️ 下载合并视频', total=None
                     )
                     
-                    # 执行下载命令
-                    return_code, stdout, stderr = await self.subprocess_manager.execute_with_progress(
-                        download_cmd, progress, task_id, timeout=1800  # 30分钟超时
+                    # 执行下载命令（带认证重试支持）
+                    return_code, stdout, stderr = await self._execute_download_with_auth_retry(
+                        video_url, download_cmd, progress, task_id, timeout=1800
                     )
             
             # 查找生成的文件 - 支持多种视频格式
@@ -194,9 +351,9 @@ class Downloader:
                         f'⬇️ 下载音频', total=None
                     )
                     
-                    # 执行下载命令
-                    return_code, stdout, stderr = await self.subprocess_manager.execute_with_progress(
-                        audio_cmd, progress, task_id, timeout=1800  # 30分钟超时
+                    # 执行音频下载命令（带认证重试支持）
+                    return_code, stdout, stderr = await self._execute_audio_download_with_auth_retry(
+                        video_url, audio_cmd, progress, task_id, timeout=1800
                     )
             
             # 查找生成的文件 - 支持多种音频格式

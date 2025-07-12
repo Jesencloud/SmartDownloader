@@ -236,7 +236,7 @@ class SubprocessManager:
                         raise DownloadStalledException(f'执行失败: {stderr_str}')
                 else:
                     # 创建适当的异常类型
-                    exception = self.error_handler.create_exception(process.returncode, stderr_str)
+                    exception = self.error_handler.create_appropriate_exception(stderr_str, ' '.join(cmd))
                     raise exception
             
             return process.returncode, stdout_str, stderr_str

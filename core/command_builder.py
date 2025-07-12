@@ -18,6 +18,16 @@ class CommandBuilder:
         self.proxy = proxy
         self.cookies_file = cookies_file
 
+    def update_cookies_file(self, new_cookies_file: str) -> None:
+        """
+        更新cookies文件路径
+        
+        Args:
+            new_cookies_file: 新的cookies文件路径
+        """
+        self.cookies_file = new_cookies_file
+        log.debug(f"已更新cookies文件路径: {new_cookies_file}")
+
     def build_yt_dlp_base_cmd(self) -> List[str]:
         """构建基础的yt-dlp命令"""
         cmd = ['yt-dlp', '--ignore-config', '--no-warnings', '--no-color']
@@ -33,7 +43,7 @@ class CommandBuilder:
         
         return cmd
 
-    async def _parse_available_formats(self, url: str) -> Tuple[Optional[str], Optional[str]]:
+    async def _parse_available_formats(self, url: str, log_video_format: bool = True) -> Tuple[Optional[str], Optional[str]]:
         """
         解析URL的可用格式，返回(最佳视频格式ID, 最佳音频格式ID)
         """
@@ -54,13 +64,13 @@ class CommandBuilder:
                 return None, None
             
             format_output = stdout.decode()
-            return self._extract_best_formats(format_output)
+            return self._extract_best_formats(format_output, log_video_format)
             
         except Exception as e:
             log.error(f"解析格式时出错: {e}")
             return None, None
 
-    def _extract_best_formats(self, format_output: str) -> Tuple[Optional[str], Optional[str]]:
+    def _extract_best_formats(self, format_output: str, log_video_format: bool = True) -> Tuple[Optional[str], Optional[str]]:
         """
         从yt-dlp格式输出中提取最佳视频和音频格式ID
         """
@@ -139,7 +149,8 @@ class CommandBuilder:
             # 按分辨率排序，选择最高分辨率（列表最后一个）
             video_formats.sort(key=lambda x: x[1])  # 按高度排序
             best_video_id = video_formats[-1][0]
-            log.info(f"选择最佳视频格式: {video_formats[-1][0]} ({video_formats[-1][1]}p, {video_formats[-1][2]})")
+            if log_video_format:
+                log.info(f"选择最佳视频格式: {video_formats[-1][0]} ({video_formats[-1][1]}p, {video_formats[-1][2]})")
         
         if audio_formats:
             # 按文件大小排序，选择FILESIZE最大的（列表最后一个）
@@ -262,7 +273,7 @@ class CommandBuilder:
         
         # 检查是否使用auto_best模式
         if config.downloader.audio_quality == "auto_best":
-            _, audio_id = await self._parse_available_formats(url)
+            _, audio_id = await self._parse_available_formats(url, log_video_format=False)
             if audio_id:
                 audio_format = audio_id
                 log.info(f"使用auto_best模式，选择音频格式: {audio_format}")

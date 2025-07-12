@@ -8,7 +8,8 @@ from .exceptions import (
     ProxyException,
     DownloadStalledException,
     NonRecoverableErrorException,
-    FFmpegException
+    FFmpegException,
+    AuthenticationException
 )
 
 from .retry_manager import RetryManager, with_retries
@@ -27,6 +28,7 @@ __all__ = [
     'DownloadStalledException',
     'NonRecoverableErrorException',
     'FFmpegException',
+    'AuthenticationException',
     'RetryManager',
     'with_retries',
     'CommandBuilder',

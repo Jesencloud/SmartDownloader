@@ -5,7 +5,7 @@ import re
 from typing import Optional
 
 from config_manager import config
-from .exceptions import ProxyException, NetworkException, DownloaderException
+from .exceptions import ProxyException, NetworkException, DownloaderException, AuthenticationException
 
 log = logging.getLogger(__name__)
 
@@ -38,14 +38,36 @@ class ErrorHandler:
         分类错误类型
         
         Returns:
-            str: 错误类型 ('proxy', 'network', 'other')
+            str: 错误类型 ('proxy', 'network', 'auth', 'other')
         """
-        if self.is_proxy_error(error_output):
+        if self.is_auth_error(error_output):
+            return 'auth'
+        elif self.is_proxy_error(error_output):
             return 'proxy'
         elif self.should_retry(error_output):
             return 'network'
         else:
             return 'other'
+
+    def is_auth_error(self, error_output: str) -> bool:
+        """判断是否是认证/验证错误"""
+        if not error_output:
+            return False
+            
+        error_lower = error_output.lower()
+        auth_patterns = [
+            'sign in to confirm you\'re not a bot',
+            'use --cookies-from-browser or --cookies for the authentication',
+            'authentication required',
+            'login required',
+            'cookies are required',
+            'please sign in',
+            'verification required',
+            'does not look like a netscape format cookies file',
+            'invalid cookies',
+            'cookies file is invalid'
+        ]
+        return any(pattern in error_lower for pattern in auth_patterns)
 
     def create_appropriate_exception(self, error_output: str, command: str) -> Exception:
         """
@@ -61,7 +83,9 @@ class ErrorHandler:
         error_type = self.classify_error(error_output)
         truncated_error = error_output[:200] if error_output else "未知错误"
         
-        if error_type == 'proxy':
+        if error_type == 'auth':
+            return AuthenticationException(f"认证失败，需要更新cookies: {truncated_error}")
+        elif error_type == 'proxy':
             return ProxyException(f"代理连接失败: {truncated_error}")
         elif error_type == 'network':
             return NetworkException(f"可重试的网络错误: {truncated_error}")
@@ -109,7 +133,9 @@ class ErrorHandler:
         Returns:
             str: 用户友好的错误信息
         """
-        if isinstance(error, ProxyException):
+        if isinstance(error, AuthenticationException):
+            return "需要重新登录或更新cookies，正在尝试自动获取..."
+        elif isinstance(error, ProxyException):
             return "代理连接失败，请检查代理设置"
         elif isinstance(error, NetworkException):
             return "网络连接出现问题，正在重试..."

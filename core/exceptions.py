@@ -30,6 +30,11 @@ class ProxyException(NetworkException):
     pass
 
 
+class AuthenticationException(DownloaderException):
+    """针对认证/验证错误，通常需要更新cookies。"""
+    pass
+
+
 class DownloadStalledException(NetworkException):
     """当下载似乎停滞时抛出。"""
     pass

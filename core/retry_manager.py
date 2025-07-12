@@ -16,7 +16,7 @@ from rich.console import Console
 from config_manager import config
 from .exceptions import (
     CircuitBreakerState, DownloaderException, MaxRetriesExceededException,
-    DownloadStalledException, ProxyException, NetworkException
+    DownloadStalledException, ProxyException, NetworkException, AuthenticationException
 )
 
 log = logging.getLogger(__name__)
@@ -175,6 +175,9 @@ class RetryManager:
                 continue
 
             except KeyboardInterrupt:
+                raise
+            except AuthenticationException:
+                # 认证异常直接传播，不包装在DownloaderException中
                 raise
             except Exception as e:
                 log.error(f"未知错误: {e}", exc_info=True)
