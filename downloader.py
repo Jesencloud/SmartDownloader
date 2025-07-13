@@ -145,6 +145,9 @@ class Downloader:
                         log.warning(f'解析视频信息JSON失败: {e}')
                         continue
                         
+        except AuthenticationException:
+            # 认证异常直接向上传递，让上层处理重试
+            raise
         except Exception as e:
             raise DownloaderException(f'获取播放列表信息失败: {e}') from e
     

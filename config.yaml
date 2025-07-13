@@ -37,10 +37,10 @@ downloader:
   circuit_breaker_failure_threshold: 5   # 熔断器失败阈值
   circuit_breaker_timeout: 300          # 熔断器超时时间（秒）
   
-  # 视频质量设置
-  video_quality: "auto_best"            # 视频质量选择模式
+  # ===== 旧系统配置（已废弃，保留供参考，当前不生效） =====
+  video_quality: "auto_best"            # [废弃] 视频质量选择模式（新系统使用ytdlp_*_format配置）
   # 可选值:
-  #   - auto_best: 自动选择最佳格式（解析后选择视频列表最后一个+音频列表FILESIZE最大的）
+  #   - auto_best: 自动选择最佳格式
   #   - best:      最高质量（传统模式）
   #   - 4k:        4K分辨率 (2160p)
   #   - 1080p:     1080p分辨率
@@ -49,12 +49,12 @@ downloader:
   #   - 360p:      360p分辨率
   #   - worst:     最低质量
   
-  video_format_preference: "any"         # 视频格式偏好（auto_best模式下会被忽略）
+  video_format_preference: "any"         # [废弃] 视频格式偏好（新系统使用ytdlp_*_format配置）
   # 可选值: mp4, webm, mkv, any
   
-  audio_quality: "auto_best"             # 音频质量选择模式  
+  audio_quality: "auto_best"             # [废弃] 音频质量选择模式（新系统使用ytdlp_*_format配置）
   # 可选值:
-  #   - auto_best: 自动选择最佳格式（解析后选择音频列表FILESIZE最大的）
+  #   - auto_best: 自动选择最佳格式（解析后）
   #   - best:      最高质量（传统模式）
   #   - 320k:      320kbps比特率
   #   - 256k:      256kbps比特率
@@ -63,8 +63,36 @@ downloader:
   #   - 96k:       96kbps比特率
   #   - worst:     最低质量
   
-  audio_format_preference: "any"         # 音频格式偏好（auto_best模式下会被忽略）
+  audio_format_preference: "any"         # [废弃] 音频格式偏好（新系统使用ytdlp_*_format配置）
   # 可选值: m4a, mp3, opus, aac, any
+  # ===== 旧系统配置结束 =====
+
+  # ===== 新系统 yt-dlp 下载命令配置 =====
+  ytdlp_video_format: "bestvideo"           # 视频格式选择
+  # 支持的视频格式：
+  #   - bestvideo: 最佳视频质量
+  #   - worst: 最低视频质量  
+  #   - bestvideo[height<=1080]: 最佳但限制1080p
+  #   - bestvideo[height<=720]: 最佳但限制720p
+  #   - bestvideo[ext=mp4]: 最佳mp4视频
+  #   - bestvideo[filesize<100M]: 最佳但小于100MB
+  
+  ytdlp_audio_format: "bestaudio"           # 音频格式选择
+  # 支持的音频格式：
+  #   - bestaudio: 最佳音频质量
+  #   - worstaudio: 最低音频质量
+  #   - bestaudio[ext=m4a]: 最佳m4a音频
+  #   - bestaudio[abr<=128]: 码率不超过128k
+  
+  ytdlp_combined_format: "bestvideo+bestaudio/best"  # 合并格式选择
+  # 支持的合并格式：
+  #   - "bestvideo+bestaudio/best": 最佳视频+音频，失败时用单文件
+  #   - "best": 最佳单个文件
+  #   - "bestvideo[height<=1080]+bestaudio/best[height<=1080]": 限制分辨率
+  #   - "best[ext=mp4]/best": 优先mp4格式
+  
+  ytdlp_merge_output_format: "mp4"          # 合并输出格式
+  # 支持的输出格式：mp4, mkv, webm, avi, mov
   
   # 音频提取设置
   audio_extraction_mode: "direct_download"  # 音频获取方式

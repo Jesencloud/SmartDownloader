@@ -76,6 +76,12 @@ class DownloaderConfig(BaseConfig):
     # 音频提取设置
     audio_extraction_mode: str = Field(default="direct_download", description="音频获取方式")
     
+    # yt-dlp 下载命令配置
+    ytdlp_video_format: str = Field(default="bestvideo", description="yt-dlp视频格式选择")
+    ytdlp_audio_format: str = Field(default="bestaudio", description="yt-dlp音频格式选择")
+    ytdlp_combined_format: str = Field(default="bestvideo+bestaudio/best", description="yt-dlp合并格式选择")
+    ytdlp_merge_output_format: str = Field(default="mp4", description="yt-dlp合并输出格式")
+    
     retry_patterns: List[str] = Field(
         default=[
             "HTTP Error 403: Forbidden", "HTTP Error 429", "HTTP Error 502",

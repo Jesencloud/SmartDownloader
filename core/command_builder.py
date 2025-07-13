@@ -45,7 +45,7 @@ class CommandBuilder:
         """构建视频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
         
-        video_format = "bestvideo"
+        video_format = config.downloader.ytdlp_video_format
         
         cmd.extend([
             '-f', video_format,
@@ -60,7 +60,7 @@ class CommandBuilder:
         """构建音频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
         
-        audio_format = "bestaudio"
+        audio_format = config.downloader.ytdlp_audio_format
         
         output_template = f"{output_path}/{filename_prefix or '%(title)s'}.%(ext)s"
         
@@ -77,13 +77,13 @@ class CommandBuilder:
         """构建合并视频+音频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
         
-        combined_format = "bestvideo+bestaudio/best"
+        combined_format = config.downloader.ytdlp_combined_format
 
         output_template = f"{output_path}/%(title)s.%(ext)s"
         
         cmd.extend([
             '-f', combined_format,
-            '--merge-output-format', 'mp4',
+            '--merge-output-format', config.downloader.ytdlp_merge_output_format,
             '--newline',
             '-o', output_template,
             url
