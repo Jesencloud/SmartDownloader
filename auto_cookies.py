@@ -651,8 +651,8 @@ def auto_extract_cookies_for_url(url: str, browser: str = 'auto',
         logger.error(f'❌ 提取cookies时发生未知错误: {e}')
         return None
 
-if __name__ == '__main__':
-    # 测试用例
+def main():
+    """主函数，用于命令行调用。"""
     if len(sys.argv) > 1:
         url = sys.argv[1]
         browser = sys.argv[2] if len(sys.argv) > 2 else 'auto'
@@ -660,3 +660,6 @@ if __name__ == '__main__':
     else:
         print('用法: python auto_cookies.py <URL> [browser]')
         print('例子: python auto_cookies.py https://www.youtube.com/watch?v=xxx chrome')
+
+if __name__ == '__main__':
+    main()
