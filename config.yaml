@@ -131,7 +131,7 @@ ai_subtitles:
   whisper_model: "base.en"      # Whisper模型 (tiny.en, base.en, small.en, medium.en, base, small, medium, large)
   whisper_device: "auto"        # 设备选择 (auto, cpu, cuda, metal)
   whisper_model_path: null      # 自定义模型路径
-  source_language: "auto"       # 源语言，用于Whisper转录和翻译 (例如: en, zh, auto, ko, ja, ru, es, fr, de, it, pt, ar, hi)
+  source_language: "en"       # 源语言，用于Whisper转录和翻译 (例如: en, zh, auto, ko, ja, ru, es, fr, de, it, pt, ar, hi)
   
   # 翻译设置
   translate_to_chinese: true    # 是否翻译为中文

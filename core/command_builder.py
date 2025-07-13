@@ -117,6 +117,9 @@ class CommandBuilder:
                 filesize_bytes = 0
                 bitrate = 0
                 
+                # 检查是否为 original (default) 音轨
+                is_original_default = 'original (default)' in line.lower()
+                
                 # 解析文件大小 (例如: "13.06MiB", "4.96MiB")
                 filesize_match = re.search(r'(\d+\.?\d*)(MiB|GiB|KiB|MB|GB|KB)', line)
                 if filesize_match:
@@ -139,7 +142,7 @@ class CommandBuilder:
                         # 将比特率转换为估算文件大小（假设5分钟视频）
                         filesize_bytes = bitrate * 1000 * 300 // 8  # kbps * 300s / 8 bits per byte
                 
-                audio_formats.append((format_id, filesize_bytes, bitrate, ext, line))
+                audio_formats.append((format_id, filesize_bytes, bitrate, ext, line, is_original_default))
         
         # 排序并选择最佳格式
         best_video_id = None
@@ -153,12 +156,24 @@ class CommandBuilder:
                 log.info(f"选择最佳视频格式: {video_formats[-1][0]} ({video_formats[-1][1]}p, {video_formats[-1][2]})")
         
         if audio_formats:
-            # 按文件大小排序，选择FILESIZE最大的（列表最后一个）
-            audio_formats.sort(key=lambda x: x[1])  # 按文件大小排序
-            best_audio_id = audio_formats[-1][0]
-            best_audio_filesize = audio_formats[-1][1]
-            best_audio_bitrate = audio_formats[-1][2]
-            best_audio_ext = audio_formats[-1][3]
+            # 首先筛选出 original (default) 音轨
+            original_default_formats = [fmt for fmt in audio_formats if fmt[5]]  # fmt[5] 是 is_original_default
+            
+            if original_default_formats:
+                # 如果存在 original (default) 音轨，优先从中选择最大文件大小的
+                original_default_formats.sort(key=lambda x: x[1])  # 按文件大小排序
+                selected_format = original_default_formats[-1]
+                log.info(f"优先选择 original (default) 音轨: {selected_format[0]}")
+            else:
+                # 如果没有 original (default) 音轨，按文件大小排序选择最大的
+                audio_formats.sort(key=lambda x: x[1])  # 按文件大小排序
+                selected_format = audio_formats[-1]
+                log.info(f"未找到 original (default) 音轨，选择最大文件大小的音轨: {selected_format[0]}")
+            
+            best_audio_id = selected_format[0]
+            best_audio_filesize = selected_format[1]
+            best_audio_bitrate = selected_format[2]
+            best_audio_ext = selected_format[3]
             
             # 格式化文件大小显示
             if best_audio_filesize > 1024 * 1024:

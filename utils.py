@@ -28,7 +28,15 @@ class CustomConsoleHandler(RichHandler):
 def setup_logging(log_folder: Path) -> None:
     log_filename = config.logging.log_filename
     log_level = getattr(logging, config.logging.level.upper(), logging.INFO)
+    
+    # 确保日志文件夹存在
+    log_folder.mkdir(parents=True, exist_ok=True)
     log_file_path = log_folder / log_filename
+
+    # 清除现有的日志处理器，避免重复设置
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
 
     logging.basicConfig(
         level=log_level,
@@ -36,7 +44,8 @@ def setup_logging(log_folder: Path) -> None:
         handlers=[
             logging.FileHandler(log_file_path, encoding='utf-8'),
             CustomConsoleHandler(rich_tracebacks=True, show_path=False, show_time=False)
-        ]
+        ],
+        force=True  # 强制重新配置，即使之前已经配置过
     )
 
 def get_inputs(args: argparse.Namespace) -> List[str]:
