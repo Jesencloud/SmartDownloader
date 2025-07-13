@@ -62,12 +62,14 @@ cookies_cache.txt.backup
 USAGE.md
 REFACTOR_REPORT.md
 daily_record.md
-CHANGELOG.md
 downloader_backup.py
 README.TXT
 *.log
 logs/
-
+tag-release.sh
+tag_daily.sh
+.gitignore
+.github/
 # Temporary files & Downloads
 *.bak
 *.tmp
