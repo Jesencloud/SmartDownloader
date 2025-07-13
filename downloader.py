@@ -12,9 +12,10 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 
 from rich.console import Console
 from rich.progress import (
-    Progress, BarColumn, TextColumn, TimeRemainingColumn,
-    DownloadColumn, TransferSpeedColumn, TaskID
+    Progress, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn,
+    DownloadColumn, TransferSpeedColumn, TaskID, Task
 )
+from rich.text import Text
 
 from config_manager import config
 from core import (
@@ -28,6 +29,28 @@ console = Console()
 
 # 全局进度条信号量，确保同时只有一个进度条活动
 _progress_semaphore = asyncio.Semaphore(1)
+
+
+class CustomSpeedColumn(TransferSpeedColumn):
+    """自定义速度列，下载完成时显示✅"""
+    
+    def render(self, task: Task) -> Text:
+        if task.finished:
+            return Text("✅", style="bold green", justify="right")
+        # 确保显示速度而不是?
+        speed = task.get_time() and task.completed / task.get_time() or 0
+        if speed > 0:
+            return Text(f"{self._format_speed(speed)}", style="progress.data.speed", justify="right")
+        return Text("--", style="progress.data.speed", justify="right")
+    
+    def _format_speed(self, speed: float) -> str:
+        """格式化速度显示"""
+        units = ["B/s", "KB/s", "MB/s", "GB/s"]
+        for unit in units:
+            if speed < 1024:
+                return f"{speed:.1f} {unit}"
+            speed /= 1024
+        return f"{speed:.1f} TB/s"
 
 
 class Downloader:
@@ -281,8 +304,8 @@ class Downloader:
                     TextColumn('[progress.description]{task.description}'),
                     BarColumn(),
                     DownloadColumn(),
-                    TransferSpeedColumn(),
-                    TimeRemainingColumn(),
+                    TimeElapsedColumn(),
+                    CustomSpeedColumn(),
                     console=console
                 ) as progress:
                     
@@ -341,8 +364,8 @@ class Downloader:
                     TextColumn('[progress.description]{task.description}'),
                     BarColumn(),
                     DownloadColumn(),
-                    TransferSpeedColumn(),
-                    TimeRemainingColumn(),
+                    TimeElapsedColumn(),
+                    CustomSpeedColumn(),
                     console=console
                 ) as progress:
                     
