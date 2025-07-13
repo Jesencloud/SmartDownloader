@@ -41,60 +41,11 @@ class CommandBuilder:
         
         return cmd
 
-    def build_list_formats_cmd(self, url: str) -> List[str]:
-        """构建获取格式列表的命令"""
-        cmd = self.build_yt_dlp_base_cmd()
-        cmd.extend(['--list-formats', url])
-        return cmd
-
-    def _build_video_format_string(self) -> str:
-        """根据配置构建视频格式字符串（传统模式）"""
-        video_quality = config.downloader.video_quality
-        video_format = config.downloader.video_format_preference
-        
-        quality_map = {
-            "4k": "[height<=2160]",
-            "1080p": "[height<=1080]",
-            "720p": "[height<=720]",
-            "480p": "[height<=480]",
-            "360p": "[height<=360]",
-        }
-        
-        quality_selector = quality_map.get(video_quality, "")
-        base_selector = "bestvideo" if video_quality != "worst" else "worstvideo"
-        
-        if video_format == "any":
-            return f"{base_selector}{quality_selector}/{base_selector}"
-        else:
-            return f"{base_selector}[ext={video_format}]{quality_selector}/{base_selector}{quality_selector}"
-
-    def _build_audio_format_string(self) -> str:
-        """根据配置构建音频格式字符串（传统模式）"""
-        audio_quality = config.downloader.audio_quality
-        audio_format = config.downloader.audio_format_preference
-        
-        base_selector = "bestaudio" if audio_quality != "worst" else "worstaudio"
-        
-        quality_selector = ""
-        if audio_quality.endswith("k"):
-            bitrate = audio_quality[:-1]
-            quality_selector = f"[abr<={bitrate}]"
-
-        if audio_format == "any":
-            return f"{base_selector}{quality_selector}/{base_selector}"
-        else:
-            return f"{base_selector}[ext={audio_format}]{quality_selector}/{base_selector}{quality_selector}"
-
-    def build_video_download_cmd(self, output_path: str, url: str, video_id: Optional[str] = None) -> List[str]:
+    def build_video_download_cmd(self, output_path: str, url: str) -> List[str]:
         """构建视频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
         
-        if video_id:
-            video_format = video_id
-            log.info(f"使用auto_best模式，选择视频格式: {video_format}")
-        else:
-            video_format = self._build_video_format_string()
-            log.debug(f"使用传统模式，视频格式: {video_format}")
+        video_format = "bestvideo"
         
         cmd.extend([
             '-f', video_format,
@@ -105,16 +56,11 @@ class CommandBuilder:
         
         return cmd
 
-    def build_audio_download_cmd(self, output_path: str, url: str, filename_prefix: str = None, audio_id: Optional[str] = None) -> List[str]:
+    def build_audio_download_cmd(self, output_path: str, url: str, filename_prefix: str = None) -> List[str]:
         """构建音频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
         
-        if audio_id:
-            audio_format = audio_id
-            log.info(f"使用auto_best模式，选择音频格式: {audio_format}")
-        else:
-            audio_format = self._build_audio_format_string()
-            log.debug(f"使用传统模式，音频格式: {audio_format}")
+        audio_format = "bestaudio"
         
         output_template = f"{output_path}/{filename_prefix or '%(title)s'}.%(ext)s"
         
@@ -127,24 +73,17 @@ class CommandBuilder:
         
         return cmd
 
-    def build_combined_download_cmd(self, output_path: str, url: str, video_id: Optional[str] = None, audio_id: Optional[str] = None) -> Tuple[List[str], str]:
+    def build_combined_download_cmd(self, output_path: str, url: str) -> Tuple[List[str], str]:
         """构建合并视频+音频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
         
-        if video_id and audio_id:
-            combined_format = f"{video_id}+{audio_id}"
-            log.info(f"使用auto_best组合格式: {combined_format}")
-        else:
-            video_format = self._build_video_format_string()
-            audio_format = self._build_audio_format_string()
-            if "auto_best" in [config.downloader.video_quality, config.downloader.audio_quality]:
-                 log.warning("auto_best模式解析失败或未完全启用，回退到传统格式")
-            combined_format = f"{video_format}+{audio_format}/bestvideo+bestaudio/best"
+        combined_format = "bestvideo+bestaudio/best"
 
         output_template = f"{output_path}/%(title)s.%(ext)s"
         
         cmd.extend([
             '-f', combined_format,
+            '--merge-output-format', 'mp4',
             '--newline',
             '-o', output_template,
             url

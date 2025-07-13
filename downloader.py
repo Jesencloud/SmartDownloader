@@ -7,9 +7,8 @@
 import asyncio
 import json
 import logging
-import re
 from pathlib import Path
-from typing import Optional, List, Dict, Any, AsyncGenerator, Tuple
+from typing import Optional, List, Dict, Any, AsyncGenerator
 
 from rich.console import Console
 from rich.progress import (
@@ -18,7 +17,6 @@ from rich.progress import (
 )
 from rich.text import Text
 
-from auto_cookies import main as refresh_cookies
 from config_manager import config
 from core import (
     DownloaderException, FFmpegException, with_retries,
@@ -31,28 +29,6 @@ console = Console()
 
 # 全局进度条信号量，确保同时只有一个进度条活动
 _progress_semaphore = asyncio.Semaphore(1)
-
-
-class CustomSpeedColumn(TransferSpeedColumn):
-    """自定义速度列，下载完成时显示✅"""
-    
-    def render(self, task: Task) -> Text:
-        if task.finished:
-            return Text("✅", style="bold green", justify="right")
-        # ��保显示速度而不是?
-        speed = task.get_time() and task.completed / task.get_time() or 0
-        if speed > 0:
-            return Text(f"{self._format_speed(speed)}", style="progress.data.speed", justify="right")
-        return Text("--", style="progress.data.speed", justify="right")
-    
-    def _format_speed(self, speed: float) -> str:
-        """格式化速度显示"""
-        units = ["B/s", "KB/s", "MB/s", "GB/s"]
-        for unit in units:
-            if speed < 1024:
-                return f"{speed:.1f} {unit}"
-            speed /= 1024
-        return f"{speed:.1f} TB/s"
 
 
 class Downloader:
@@ -75,7 +51,7 @@ class Downloader:
         self.cookies_file = cookies_file
         self.proxy = proxy
         
-        # 组合��种专门的处理器
+        # 组合各种专门的处理器
         self.command_builder = CommandBuilder(proxy, cookies_file)
         self.subprocess_manager = SubprocessManager()
         self.file_processor = FileProcessor(self.subprocess_manager, self.command_builder)
@@ -92,136 +68,9 @@ class Downloader:
         if proxy:
             log.info(f'使用代理: {self.proxy}')
 
-    async def _get_available_formats(self, url: str) -> str:
-        """
-        获取可用格式列表，并在需要时自动刷新cookies。
-        """
-        max_retries = 1
-        for attempt in range(max_retries + 1):
-            cmd = self.command_builder.build_list_formats_cmd(url)
-            _, stdout, stderr = await self.subprocess_manager.execute_simple(cmd, check_returncode=False)
-            
-            output = stdout + stderr
-            if "become a premium member" in output.lower():
-                log.warning("检测到'become a premium member'提示���尝试刷新cookies...")
-                try:
-                    # 调用auto_cookies.py中的main函数刷新cookies
-                    refresh_cookies()
-                    log.info("Cookies已刷新，重试获取格式列表...")
-                    # 更新CommandBuilder中的cookies文件路径
-                    if self.cookies_manager:
-                        refreshed_path = self.cookies_manager.get_cookies_file_path()
-                        self.command_builder.update_cookies_file(refreshed_path)
-                    continue
-                except Exception as e:
-                    log.error(f"刷新cookies失败: {e}")
-                    raise DownloaderException("自动刷新cookies失败，无法获取高级会员内容。")
-            
-            if "error" in output.lower() and "premium" in output.lower():
-                 raise DownloaderException("获取格式列表时出错，可能需要有效的cookies。")
-
-            return stdout
-
-        raise DownloaderException("刷新cookies后仍无法获取格式列表。")
-
-    def _extract_best_formats(self, format_output: str, log_video_format: bool = True) -> Tuple[Optional[str], Optional[str]]:
-        """
-        从yt-dlp格式输出中提取最佳视频和音频格式ID
-        """
-        lines = format_output.split('\n')
-        video_formats = []
-        audio_formats = []
-        
-        in_table = False
-        for line in lines:
-            line = line.strip()
-            
-            if 'ID' in line and 'EXT' in line and 'RESOLUTION' in line:
-                in_table = True
-                continue
-            if not in_table or not line or line.startswith('-'):
-                continue
-            
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-                
-            format_id = parts[0]
-            ext = parts[1]
-            resolution = parts[2]
-            
-            if 'mhtml' in ext or 'storyboard' in line:
-                continue
-            
-            if 'audio only' not in line and 'x' in resolution:
-                height_match = re.search(r'(\d+)x(\d+)', resolution)
-                if height_match:
-                    height = int(height_match.group(2))
-                    video_formats.append((format_id, height, ext, line))
-            
-            elif 'audio only' in line:
-                filesize_bytes = 0
-                bitrate = 0
-                is_original_default = 'original (default)' in line.lower()
-                
-                filesize_match = re.search(r'(\d+\.?\d*)(MiB|GiB|KiB|MB|GB|KB)', line)
-                if filesize_match:
-                    size_value = float(filesize_match.group(1))
-                    size_unit = filesize_match.group(2)
-                    
-                    if size_unit in ['MiB', 'MB']:
-                        filesize_bytes = int(size_value * 1024 * 1024)
-                    elif size_unit in ['GiB', 'GB']:
-                        filesize_bytes = int(size_value * 1024 * 1024 * 1024)
-                    elif size_unit in ['KiB', 'KB']:
-                        filesize_bytes = int(size_value * 1024)
-                
-                if filesize_bytes == 0:
-                    bitrate_matches = re.findall(r'(\d+)k', line)
-                    if bitrate_matches:
-                        bitrate = int(bitrate_matches[-1])
-                        filesize_bytes = bitrate * 1000 * 300 // 8
-                
-                audio_formats.append((format_id, filesize_bytes, bitrate, ext, line, is_original_default))
-        
-        best_video_id = None
-        best_audio_id = None
-        
-        if video_formats:
-            video_formats.sort(key=lambda x: x[1])
-            best_video_id = video_formats[-1][0]
-            if log_video_format:
-                log.info(f"选择最佳视频格式: {video_formats[-1][0]} ({video_formats[-1][1]}p, {video_formats[-1][2]})")
-        
-        if audio_formats:
-            original_default_formats = [fmt for fmt in audio_formats if fmt[5]]
-            
-            if original_default_formats:
-                original_default_formats.sort(key=lambda x: x[1])
-                selected_format = original_default_formats[-1]
-                log.info(f"优先选择 original (default) 音轨: {selected_format[0]}")
-            else:
-                audio_formats.sort(key=lambda x: x[1])
-                selected_format = audio_formats[-1]
-                log.info(f"未找到 original (default) 音轨，选择最大文件大小的音轨: {selected_format[0]}")
-            
-            best_audio_id = selected_format[0]
-            best_audio_filesize = selected_format[1]
-            best_audio_bitrate = selected_format[2]
-            best_audio_ext = selected_format[3]
-            
-            if best_audio_filesize > 1024 * 1024:
-                size_display = f"{best_audio_filesize / (1024 * 1024):.2f}MB"
-            else:
-                size_display = f"{best_audio_filesize / 1024:.2f}KB"
-                
-            log.info(f"选择最佳音频格式: {best_audio_id} ({size_display}, {best_audio_bitrate}k, {best_audio_ext})")
-        
-        return best_video_id, best_audio_id
-
     async def _execute_info_cmd_with_auth_retry(self, url: str, info_cmd: list, timeout: int = 60):
         """
-        执行信���获取命令，支持认证错误自动重试
+        执行信息获取命令，支持认证错误自动重试
         
         Args:
             url: 视频URL
@@ -250,7 +99,7 @@ class Downloader:
                         # 重新构建信息获取命令
                         info_cmd = self.command_builder.build_playlist_info_cmd(url)
                         auth_retry_count += 1
-                        log.info(f"✅ Cookies已更新，重试获取���频信息...")
+                        log.info(f"✅ Cookies已更新，重试获取视频信息...")
                         continue
                     else:
                         log.error(f"❌ 无法自动更新cookies，获取视频信息失败")
@@ -346,7 +195,6 @@ class Downloader:
                         log.error(f"❌ 无法自动更新cookies，下载失败")
                         raise e
                 else:
-                    # ���到最大重试次数或没有cookies管理器
                     if not self.cookies_manager:
                         log.error(f"❌ 未配置cookies管理器，无法自动处理认证错误")
                     else:
@@ -423,14 +271,8 @@ class Downloader:
         try:
             log.info(f'开始下载并合并: {file_prefix}')
             
-            video_id, audio_id = None, None
-            if (config.downloader.video_quality == "auto_best" and 
-                config.downloader.audio_quality == "auto_best"):
-                format_output = await self._get_available_formats(video_url)
-                video_id, audio_id = self._extract_best_formats(format_output)
-
             download_cmd, _ = self.command_builder.build_combined_download_cmd(
-                str(self.download_folder), video_url, video_id, audio_id
+                str(self.download_folder), video_url
             )
             
             async with _progress_semaphore:
@@ -438,8 +280,9 @@ class Downloader:
                     TextColumn('[progress.description]{task.description}'),
                     BarColumn(),
                     DownloadColumn(),
+                    TransferSpeedColumn(),
                     TimeElapsedColumn(),
-                    CustomSpeedColumn(),
+                    TimeRemainingColumn(),
                     console=console
                 ) as progress:
                     
@@ -483,13 +326,8 @@ class Downloader:
         try:
             log.info(f'开始直接下载音频: {file_prefix}')
             
-            audio_id = None
-            if config.downloader.audio_quality == "auto_best":
-                format_output = await self._get_available_formats(video_url)
-                _, audio_id = self._extract_best_formats(format_output, log_video_format=False)
-
             audio_cmd = self.command_builder.build_audio_download_cmd(
-                str(self.download_folder), video_url, file_prefix, audio_id
+                str(self.download_folder), video_url, file_prefix
             )
             
             async with _progress_semaphore:
@@ -497,8 +335,9 @@ class Downloader:
                     TextColumn('[progress.description]{task.description}'),
                     BarColumn(),
                     DownloadColumn(),
+                    TransferSpeedColumn(),
                     TimeElapsedColumn(),
-                    CustomSpeedColumn(),
+                    TimeRemainingColumn(),
                     console=console
                 ) as progress:
                     
@@ -530,7 +369,7 @@ class Downloader:
         
         Args:
             video_url: 视频URL
-            file_prefix: 文件���缀
+            file_prefix: 文件前缀
             
         Returns:
             bool: 下载是否成功

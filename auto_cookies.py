@@ -652,14 +652,22 @@ def auto_extract_cookies_for_url(url: str, browser: str = 'auto',
         return None
 
 def main():
-    """主函数，用于命令行调用。"""
-    if len(sys.argv) > 1:
+    """主函数，用于命令行调用或无参数刷新。"""
+    if len(sys.argv) > 1 and not sys.argv[1].startswith('-'):
+        # 如果有非标志的命令行参数，则按原方式处理
         url = sys.argv[1]
         browser = sys.argv[2] if len(sys.argv) > 2 else 'auto'
         auto_extract_cookies_for_url(url, browser)
     else:
-        print('用法: python auto_cookies.py <URL> [browser]')
-        print('例子: python auto_cookies.py https://www.youtube.com/watch?v=xxx chrome')
+        # 如果没有命令行参数或只有标志，则刷新默认域名的cookies
+        logger.info("没有提供URL，将尝试刷新默认域名的cookies...")
+        default_domains = ['youtube.com', 'bilibili.com']
+        for domain in default_domains:
+            try:
+                auto_extract_cookies_for_url(f"https://www.{domain}", 'auto')
+            except Exception as e:
+                logger.warning(f"刷新 {domain} 的cookies时出错: {e}")
+
 
 if __name__ == '__main__':
     main()
