@@ -13,7 +13,7 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 from rich.console import Console
 from rich.progress import (
     Progress, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn,
-    DownloadColumn, TransferSpeedColumn, TaskID, Task
+    DownloadColumn, TransferSpeedColumn, TaskID, Task, ProgressColumn
 )
 from rich.text import Text
 
@@ -29,6 +29,21 @@ console = Console()
 
 # 全局进度条信号量，确保同时只有一个进度条活动
 _progress_semaphore = asyncio.Semaphore(1)
+
+
+class SpeedOrFinishMarkColumn(ProgressColumn):
+    """下载时显示速度，完成后显示标记"""
+
+    def __init__(self, mark: str = "?", **kwargs):
+        self.mark = mark
+        self.speed_column = TransferSpeedColumn()
+        super().__init__(**kwargs)
+
+    def render(self, task: "Task") -> Text:
+        """渲染速度或完成标记"""
+        if task.finished:
+            return Text(f" {self.mark} ", justify="left")
+        return self.speed_column.render(task)
 
 
 class Downloader:
@@ -283,7 +298,7 @@ class Downloader:
                     TextColumn('[progress.description]{task.description}'),
                     BarColumn(),
                     DownloadColumn(),
-                    TransferSpeedColumn(),
+                    SpeedOrFinishMarkColumn(mark="✅"),
                     TimeElapsedColumn(),
                     TimeRemainingColumn(),
                     console=console
@@ -338,7 +353,7 @@ class Downloader:
                     TextColumn('[progress.description]{task.description}'),
                     BarColumn(),
                     DownloadColumn(),
-                    TransferSpeedColumn(),
+                    SpeedOrFinishMarkColumn(mark="✅"),
                     TimeElapsedColumn(),
                     TimeRemainingColumn(),
                     console=console
