@@ -1,13 +1,13 @@
 # tests/test_command_builder.py
 
 from core.command_builder import CommandBuilder
+from config_manager import config
 
 def test_build_combined_download_cmd_basic():
     """
     测试 build_combined_download_cmd 在没有代理和cookies时的基本功能
     """
     # 1. 安排 (Arrange)
-    # 创建 CommandBuilder 实例，不带代理和cookies
     builder = CommandBuilder(proxy=None, cookies_file=None)
     download_folder = "/path/to/downloads"
     video_url = "https://www.youtube.com/watch?v=some_video_id"
@@ -15,21 +15,22 @@ def test_build_combined_download_cmd_basic():
     # 定义我们期望得到的命令
     expected_command = [
         'yt-dlp',
-        '--verbose',
+        '--ignore-config',
+        '--no-warnings',
+        '--no-color',
         '--progress',
         '--progress-template', '%(progress)j',
-        '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        '--merge-output-format', 'mp4',
-        '-o', '/path/to/downloads/%(title)s.%(ext)s',
+        '-f', config.downloader.ytdlp_combined_format,
+        '--merge-output-format', config.downloader.ytdlp_merge_output_format,
+        '--newline',
+        '-o', f'{download_folder}/%(title)s.%(ext)s',
         video_url
     ]
 
     # 2. 执行 (Act)
-    # 调用我们想要测试的方法
     actual_command, _ = builder.build_combined_download_cmd(download_folder, video_url)
 
     # 3. 断言 (Assert)
-    # 验证实际生成的命令是否与我们期望的完全一致
     assert actual_command == expected_command
 
 def test_build_combined_download_cmd_with_proxy():
@@ -46,19 +47,20 @@ def test_build_combined_download_cmd_with_proxy():
     actual_command, _ = builder.build_combined_download_cmd(download_folder, video_url)
 
     # 3. 断言 (Assert)
-    # 验证命令中是否包含了代理参数
     assert '--proxy' in actual_command
-    # 验证代理地址是否紧跟在 --proxy 后面
     proxy_index = actual_command.index('--proxy')
     assert actual_command[proxy_index + 1] == proxy_address
 
-def test_build_combined_download_cmd_with_cookies():
+def test_build_combined_download_cmd_with_cookies(tmp_path):
     """
     测试 build_combined_download_cmd 在有cookies时是否正确添加了cookies参数
     """
     # 1. 安排 (Arrange)
-    cookies_path = "/path/to/cookies.txt"
-    builder = CommandBuilder(proxy=None, cookies_file=cookies_path)
+    # 使用 tmp_path 创建一个临时的 cookies 文件
+    cookies_file = tmp_path / "cookies.txt"
+    cookies_file.touch() # 创建一个空的临时文件
+
+    builder = CommandBuilder(proxy=None, cookies_file=str(cookies_file))
     download_folder = "/path/to/downloads"
     video_url = "https://www.youtube.com/watch?v=some_video_id"
 
@@ -66,8 +68,7 @@ def test_build_combined_download_cmd_with_cookies():
     actual_command, _ = builder.build_combined_download_cmd(download_folder, video_url)
 
     # 3. 断言 (Assert)
-    # 验证命令中是否包含了cookies参数
     assert '--cookies' in actual_command
-    # 验证cookies路径是否紧跟在 --cookies 后面
     cookies_index = actual_command.index('--cookies')
-    assert actual_command[cookies_index + 1] == cookies_path
+    # CommandBuilder 会解析为绝对路径
+    assert actual_command[cookies_index + 1] == str(cookies_file.resolve())

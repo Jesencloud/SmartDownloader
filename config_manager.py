@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, List, Any, Dict
 
 import yaml
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError, ValidationInfo, ConfigDict
 from rich.console import Console
 
 
@@ -22,11 +22,10 @@ class BaseConfig(BaseModel):
     
     为所有配置类提供公共的Pydantic配置选项。
     """
-    
-    class Config:
-        validate_assignment = True
-        extra = "forbid"
-
+    model_config = ConfigDict(
+        validate_assignment=True,
+        extra="forbid"
+    )
 
 class FoldersConfig(BaseConfig):
     """文件夹配置类。
@@ -39,8 +38,8 @@ class FoldersConfig(BaseConfig):
     custom_download_path: Optional[str] = Field(default=None, description="自定义下载路径")
     relative_to_script: bool = Field(default=True, description="是否相对于脚本路径")
 
-    @validator('timestamp_format')
-    def validate_timestamp_format(cls, v):
+    @field_validator('timestamp_format')
+    def validate_timestamp_format(cls, v: str) -> str:
         try:
             datetime.now().strftime(v)
         except (ValueError, TypeError) as e:
@@ -100,42 +99,42 @@ class DownloaderConfig(BaseConfig):
         description="代理错误模式列表"
     )
 
-    @validator('max_delay')
-    def validate_max_delay(cls, v, values):
-        if 'base_delay' in values and v < values['base_delay']:
+    @field_validator('max_delay')
+    def validate_max_delay(cls, v: float, info: ValidationInfo) -> float:
+        if 'base_delay' in info.data and v < info.data['base_delay']:
             raise ValueError("最大延迟时间不能小于基础延迟时间")
         return v
 
-    @validator('video_quality')
-    def validate_video_quality(cls, v):
+    @field_validator('video_quality')
+    def validate_video_quality(cls, v: str) -> str:
         valid_qualities = ['auto_best', 'best', '4k', '1080p', '720p', '480p', '360p', 'worst']
         if v not in valid_qualities:
             raise ValueError(f"视频质量必须是以下之一: {valid_qualities}")
         return v
 
-    @validator('video_format_preference')
-    def validate_video_format(cls, v):
+    @field_validator('video_format_preference')
+    def validate_video_format(cls, v: str) -> str:
         valid_formats = ['mp4', 'webm', 'mkv', 'any']
         if v not in valid_formats:
             raise ValueError(f"视频格式必须是以下之一: {valid_formats}")
         return v
 
-    @validator('audio_quality')
-    def validate_audio_quality(cls, v):
+    @field_validator('audio_quality')
+    def validate_audio_quality(cls, v: str) -> str:
         valid_qualities = ['auto_best', 'best', '320k', '256k', '192k', '128k', '96k', 'worst']
         if v not in valid_qualities:
             raise ValueError(f"音频质量必须是以下之一: {valid_qualities}")
         return v
 
-    @validator('audio_format_preference')
-    def validate_audio_format(cls, v):
+    @field_validator('audio_format_preference')
+    def validate_audio_format(cls, v: str) -> str:
         valid_formats = ['m4a', 'mp3', 'opus', 'aac', 'any']
         if v not in valid_formats:
             raise ValueError(f"音频格式必须是以下之一: {valid_formats}")
         return v
 
-    @validator('audio_extraction_mode')
-    def validate_audio_extraction_mode(cls, v):
+    @field_validator('audio_extraction_mode')
+    def validate_audio_extraction_mode(cls, v: str) -> str:
         valid_modes = ['direct_download', 'extract_from_video']
         if v not in valid_modes:
             raise ValueError(f"音频提取模式必须是以下之一: {valid_modes}")
@@ -194,8 +193,8 @@ class LoggingConfig(BaseConfig):
         description="控制台关键词"
     )
 
-    @validator('level')
-    def validate_log_level(cls, v):
+    @field_validator('level')
+    def validate_log_level(cls, v: str) -> str:
         valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
         if v.upper() not in valid_levels:
             raise ValueError(f"日志级别必须是以下之一: {valid_levels}")
@@ -225,15 +224,15 @@ class CookiesConfig(BaseConfig):
     cache_duration_hours: int = Field(default=24, ge=1, le=168, description="缓存有效期（小时）")
     cache_check_interval: int = Field(default=1, ge=1, le=24, description="缓存检查间隔（小时）")
 
-    @validator('mode')
-    def validate_mode(cls, v):
+    @field_validator('mode')
+    def validate_mode(cls, v: str) -> str:
         valid_modes = ['auto', 'manual', 'browser', 'skip']
         if v not in valid_modes:
             raise ValueError(f"Cookies获取方式必须是以下之一: {valid_modes}")
         return v
 
-    @validator('browser_type')
-    def validate_browser_type(cls, v):
+    @field_validator('browser_type')
+    def validate_browser_type(cls, v: str) -> str:
         valid_browsers = ['auto', 'chrome', 'firefox', 'edge', 'safari']
         if v not in valid_browsers:
             raise ValueError(f"浏览器类型必须是以下之一: {valid_browsers}")
