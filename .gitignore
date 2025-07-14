@@ -68,8 +68,7 @@ README.TXT
 logs/
 tag-release.sh
 tag_daily.sh
-.gitignore
-.github/
+
 # Temporary files & Downloads
 *.bak
 *.tmp

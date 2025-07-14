@@ -1,0 +1,44 @@
+# .github/workflows/release.yaml
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # 仅在推送 vX.X.X 格式的标签时触发
+
+jobs:
+  build-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    # 赋予创建Release的权限
+    permissions:
+      contents: write
+
+    steps:
+      # 第一步：检出你的代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # 获取所有历史记录，以便能找到所有标签
+          fetch-depth: 0
+
+      # 第二步：从CHANGELOG.md中提取当前版本的更新日志
+      - name: Extract release notes from CHANGELOG.md
+        id: changelog
+        run: |
+          TAG=${{ github.ref_name }}
+          VERSION=${TAG#v}
+          NOTES=$(awk "/## \\[$VERSION\\]/{flag=1; next} /## \\[/{flag=0} flag" CHANGELOG.md | sed '/^$/N;/^\n$/D')
+          NOTES="${NOTES//'%'/'%25'}"
+          NOTES="${NOTES//$'\n'/'%0A'}"
+          NOTES="${NOTES//$'\r'/'%0D'}"
+          echo "notes=${NOTES}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      # 第三步：创建 GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.notes }}
+          name: Release ${{ github.ref_name }}
+          prerelease: contains(github.ref_name, '-')
