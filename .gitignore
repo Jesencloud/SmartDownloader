@@ -82,3 +82,20 @@ LICENSE.txt
 *.zip
 *.tar.gz
 
+
+#test files
+.mypy_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Python virtual environment
+venv/
+.tox/
+.nox/
+.coverage
+.pytest_cache
+.coverage.*
+.cache
+nosetests.xml
+

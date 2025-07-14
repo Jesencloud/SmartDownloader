@@ -9,3 +9,4 @@ mypy
 # AI字幕功能 (可选)
 deep-translator>=1.9.0
 openai-whisper>=20231117
+pytest>=7.0.0

@@ -1,0 +1,35 @@
+# .github/workflows/tests.yml
+
+name: Run Python Tests
+
+# 触发器：在推送到主分支或创建拉取请求时运行
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # 在最新的 Ubuntu 服务器上运行
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"] # 在多个 Python 版本上测试
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3 # 将您的代码下载到服务器
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4 # 安装 Python
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt # 安装项目依赖
+
+    - name: Run tests with pytest
+      run: |
+        pytest # 运行测试！
