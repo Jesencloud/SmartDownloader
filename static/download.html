@@ -423,6 +423,33 @@
         let selectedFormatId = null;
         let videoData = null;
 
+        // 安全的文件名清理函数
+        function sanitizeFilename(filename) {
+            if (!filename) return 'untitled';
+            
+            // 移除或替换危险字符
+            const cleaned = filename
+                .replace(/[<>:"/\\|?*\x00-\x1F\x7F-\x9F]/g, '_')  // 替换非法字符
+                .replace(/^\./g, '_')                              // 不能以点开头
+                .replace(/\s+/g, '_')                             // 替换空格为下划线
+                .replace(/_{2,}/g, '_')                           // 合并多个下划线
+                .replace(/^_+|_+$/g, '')                          // 移除开头和结尾的下划线
+                .substring(0, 200);                               // 限制长度
+            
+            // 确保文件名不为空
+            return cleaned || 'untitled';
+        }
+
+        // 生成安全的文件名
+        function generateSafeFilename(title, resolution, type) {
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            const extension = type === 'video' ? 'mp4' : 'mp3';
+            const cleanTitle = sanitizeFilename(title);
+            const cleanResolution = sanitizeFilename(resolution);
+            
+            return `${cleanTitle}_${cleanResolution}_${timestamp}.${extension}`;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize dark mode
             initializeDarkMode();
@@ -584,9 +611,7 @@
 
         async function triggerModernFileSave(url, type, formatId, resolution) {
             try {
-                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-                const extension = type === 'video' ? 'mp4' : 'mp3';
-                const filename = `${videoData.title}_${resolution}_${timestamp}.${extension}`.replace(/[<>:"/\\|?*]/g, '_');
+                const filename = generateSafeFilename(videoData.title, resolution, type);
                 
                 // 使用现代文件系统访问API显示保存对话框
                 const fileHandle = await window.showSaveFilePicker({
@@ -624,9 +649,7 @@
             // 创建一个临时的a标签来触发文件下载
             const link = document.createElement('a');
             
-            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-            const extension = type === 'video' ? 'mp4' : 'mp3';
-            const filename = `${videoData.title}_${resolution}_${timestamp}.${extension}`.replace(/[<>:"/\\|?*]/g, '_');
+            const filename = generateSafeFilename(videoData.title, resolution, type);
             
             // 这里应该调用实际的下载API
             // 模拟文件数据（实际应用中这里会是真实的文件内容）

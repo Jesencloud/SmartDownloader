@@ -43,10 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 获取DOM元素
     const urlInput = document.getElementById('videoUrl');
-    const statusArea = document.getElementById('statusArea');
     const pasteButton = document.getElementById('pasteButton');
-    const progressBar = document.getElementById('progressBar');
-    const statusMessages = document.getElementById('statusMessages');
+    const clearButton = document.getElementById('clearButton');
     const downloadVideoButton = document.getElementById('downloadVideoButton');
     const downloadAudioButton = document.getElementById('downloadAudioButton');
 
@@ -61,14 +59,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auto-paste functionality - 改进自动粘贴
     if (navigator.clipboard && navigator.clipboard.readText) {
-        navigator.clipboard.readText().then(text => {
+        safeClipboardRead().then(text => {
             if (text) {
                 const extracted = extractUrl(text);
                 if (extracted) {
                     urlInput.value = extracted;
                     // 自动切换按钮状态
-                    pasteButton.style.display = 'none';
-                    clearButton.style.display = 'flex';
+                    if (pasteButton && clearButton) {
+                        pasteButton.style.display = 'none';
+                        clearButton.style.display = 'flex';
+                    }
                     
                     // 添加轻微的视觉提示
                     urlInput.style.borderColor = '#3b82f6';
@@ -83,17 +83,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }).catch(err => {
             console.warn('Could not auto-paste clipboard content:', err);
+            // 对于自动粘贴失败，不显示错误提示，因为这是静默操作
         });
     }
 
-    // Manual paste button functionality - 改进用户体验
-    const clearButton = document.getElementById('clearButton');
-    
     if (pasteButton) {
         console.log('Paste button found.');
         pasteButton.addEventListener('click', async () => {
             try {
-                const text = await navigator.clipboard.readText();
+                const text = await safeClipboardRead();
                 if (text) {
                     const extracted = extractUrl(text);
                     if (extracted) {
@@ -121,7 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (err) {
                 console.error('Paste failed:', err);
-                showPasteError('无法访问剪贴板。请确保浏览器已授权访问剪贴板，并使用HTTPS连接。');
+                const userMessage = getClipboardErrorMessage(err);
+                showPasteError(userMessage);
             }
         });
     } else {
@@ -148,19 +147,73 @@ document.addEventListener('DOMContentLoaded', () => {
             z-index: 1000;
             margin-top: 0.5rem;
             border: 1px solid #fecaca;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         `;
         
         // 将提示添加到输入容器
         const inputContainer = document.querySelector('.input-container');
-        inputContainer.style.position = 'relative';
-        inputContainer.appendChild(errorTip);
-        
-        // 3秒后自动移除提示
-        setTimeout(() => {
-            if (errorTip.parentNode) {
-                errorTip.parentNode.removeChild(errorTip);
+        if (inputContainer) {
+            inputContainer.style.position = 'relative';
+            
+            // 移除之前的错误提示
+            const existingTip = inputContainer.querySelector('.paste-error-tip');
+            if (existingTip) {
+                existingTip.remove();
             }
-        }, 3000);
+            
+            inputContainer.appendChild(errorTip);
+            
+            // 3秒后自动移除提示
+            setTimeout(() => {
+                if (errorTip.parentNode) {
+                    errorTip.parentNode.removeChild(errorTip);
+                }
+            }, 3000);
+        }
+    }
+
+    // 改进的剪贴板访问函数
+    async function safeClipboardRead() {
+        try {
+            // 首先检查剪贴板API是否可用
+            if (!navigator.clipboard) {
+                throw new Error('CLIPBOARD_NOT_SUPPORTED');
+            }
+            
+            // 检查权限
+            const permission = await navigator.permissions.query({name: 'clipboard-read'});
+            if (permission.state === 'denied') {
+                throw new Error('CLIPBOARD_PERMISSION_DENIED');
+            }
+            
+            const text = await navigator.clipboard.readText();
+            return text;
+        } catch (error) {
+            console.error('Clipboard read error:', error);
+            
+            // 根据错误类型返回不同的错误信息
+            if (error.name === 'NotAllowedError' || error.message === 'CLIPBOARD_PERMISSION_DENIED') {
+                throw new Error('CLIPBOARD_PERMISSION_DENIED');
+            } else if (error.message === 'CLIPBOARD_NOT_SUPPORTED') {
+                throw new Error('CLIPBOARD_NOT_SUPPORTED');
+            } else {
+                throw new Error('CLIPBOARD_ACCESS_FAILED');
+            }
+        }
+    }
+
+    // 获取用户友好的错误消息
+    function getClipboardErrorMessage(error) {
+        switch (error.message) {
+            case 'CLIPBOARD_PERMISSION_DENIED':
+                return '剪贴板访问被拒绝。请在浏览器设置中允许访问剪贴板权限。';
+            case 'CLIPBOARD_NOT_SUPPORTED':
+                return '当前浏览器不支持剪贴板功能。请手动复制粘贴链接。';
+            case 'CLIPBOARD_ACCESS_FAILED':
+                return '无法访问剪贴板。请确保使用HTTPS连接并重试。';
+            default:
+                return '剪贴板访问失败。请手动输入链接。';
+        }
     }
 
     // Clear button functionality - 改进为清除并重新启用粘贴功能
@@ -249,69 +302,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = `/download?${params.toString()}`;
     }
 
-    // Core download processing function (保留原功能供其他地方使用)
-    async function startDownloadProcess(downloadType, customPath = null) {
-        const url = urlInput.value;
-
-        if (!url) {
-            alert('请输入一个URL！');
-            return;
-        }
-
-        // Disable all download related buttons to prevent duplicate submissions
-        downloadVideoButton.disabled = true;
-        downloadAudioButton.disabled = true;
-        
-        // Update button text
-        if (downloadType === 'video') {
-            downloadVideoButton.textContent = '正在请求视频...';
-        } else if (downloadType === 'audio') {
-            downloadAudioButton.textContent = '正在请求音频...';
-        }
-
-        // Hide status messages, show progress bar
-        statusMessages.style.display = 'none';
-        progressBar.style.display = 'block';
-        progressBar.classList.remove('hidden');
-        addStatusMessage('任务已提交，正在处理...', 'status-pending');
-
-        try {
-            const requestBody = {
-                url: url,
-                download_type: downloadType
-            };
-
-            // 如果提供了自定义路径，添加到请求中
-            if (customPath) {
-                requestBody.custom_path = customPath;
-            }
-
-            const response = await fetch('/downloads', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-            });
-
-            if (!response.ok) {
-                throw new Error(`服务器错误: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            const taskId = data.task_id;
-            
-            addStatusMessage(`任务已创建 (ID: ${taskId})，开始查询状态...`, 'status-pending');
-            
-            pollTaskStatus(taskId);
-
-        } catch (error) {
-            console.error('请求失败:', error);
-            addStatusMessage(`请求失败: ${error.message}`, 'status-failure');
-            resetForm();
-        }
-    }
-
     // Add event listeners for new download buttons - 直接跳转到下载页面
     if (downloadVideoButton) {
         downloadVideoButton.addEventListener('click', () => redirectToDownloadPage('video'));
@@ -320,69 +310,32 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadAudioButton.addEventListener('click', () => redirectToDownloadPage('audio'));
     }
 
-    function pollTaskStatus(taskId) {
-        const intervalId = setInterval(async () => {
-            try {
-                const response = await fetch(`/downloads/${taskId}`);
-                if (!response.ok) {
-                    clearInterval(intervalId);
-                    addStatusMessage(`查询状态失败 (ID: ${taskId})`, 'status-failure');
-                    resetForm();
-                    return;
-                }
-
-                const data = await response.json();
+    // FAQ functionality
+    function initializeFAQ() {
+        document.querySelectorAll('.faq-question').forEach(button => {
+            button.addEventListener('click', () => {
+                const answer = button.nextElementSibling;
+                const isCurrentlyOpen = answer.style.display === 'block';
                 
-                if (data.status === 'SUCCESS') {
-                    clearInterval(intervalId);
-                    const result = data.result;
-                    addStatusMessage(`✅ 下载成功！文件保存在: ${result.result}`, 'status-success');
-                    resetForm();
-                } else if (data.status === 'FAILURE') {
-                    clearInterval(intervalId);
-                    addStatusMessage(`❌ 下载失败: ${data.result}`, 'status-failure');
-                    resetForm();
-                } else {
-                    addStatusMessage(`进行中 (状态: ${data.status})...`, 'status-pending');
-                    progressBar.style.display = 'block';
-                    progressBar.classList.remove('hidden');
-                    statusMessages.style.display = 'none';
+                // Close all other answers
+                document.querySelectorAll('.faq-answer').forEach(ans => {
+                    ans.style.display = 'none';
+                });
+                document.querySelectorAll('.faq-question').forEach(q => {
+                    q.classList.remove('active');
+                });
+                
+                // Toggle current answer
+                if (!isCurrentlyOpen) {
+                    answer.style.display = 'block';
+                    button.classList.add('active');
                 }
-
-            } catch (error) {
-                clearInterval(intervalId);
-                console.error('轮询错误:', error);
-                addStatusMessage(`查询状态时出错: ${error.message}`, 'status-failure');
-                resetForm();
-            }
-        }, 3000); // Poll every 3 seconds
+            });
+        });
     }
 
-    function addStatusMessage(message, className) {
-        statusMessages.innerHTML = ''; 
-        const statusElement = document.createElement('div');
-        statusElement.textContent = message;
-        statusElement.className = `status-message ${className}`;
-        statusMessages.appendChild(statusElement);
-    }
-
-    function resetForm() {
-        urlInput.value = '';
-        
-        // Enable new download buttons and reset text
-        if (downloadVideoButton) {
-            downloadVideoButton.disabled = false;
-            downloadVideoButton.textContent = '提取视频';
-        }
-        if (downloadAudioButton) {
-            downloadAudioButton.disabled = false;
-            downloadAudioButton.textContent = '提取音频';
-        }
-
-        // Hide progress bar, show initial status message
-        progressBar.style.display = 'none';
-        progressBar.classList.add('hidden');
-        statusMessages.style.display = 'block';
-        statusMessages.innerHTML = '<p class="text-gray-500">在此处查看下载状态...</p>';
+    // Initialize FAQ if on main page
+    if (document.querySelector('.faq-container')) {
+        initializeFAQ();
     }
 });

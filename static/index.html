@@ -7,12 +7,12 @@
     <meta name="keywords" content="智能下载器, 视频下载, 音频下载, 播放列表下载" />
     <meta name="description" content="Smart Downloader 允许您快速下载高质量的视频和音频。粘贴URL即可开始下载。" />
 
-    <meta content="https://your-domain.com/" property="og:url" />
+    <meta content="#" property="og:url" />
     <meta content="Smart Downloader" property="og:title" />
     <meta property="og:site_name" content="Smart Downloader" />
     <meta content="Smart Downloader 允许您快速下载高质量的视频和音频。粘贴URL即可开始下载。" property="og:description" />
 
-    <link rel="canonical" href="https://your-domain.com/">
+    <link rel="canonical" href="#">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -78,29 +78,6 @@
         body.dark-mode .button:hover {
             background-color: #404040;
             border-color: #606060;
-        }
-
-        body.dark-mode .status-area {
-            background-color: #2d2d2d;
-            border: 1px solid #404040;
-        }
-
-        body.dark-mode .status-pending {
-            background-color: #4a4a2a;
-            color: #ffeb3b;
-            border: 1px solid #666632;
-        }
-
-        body.dark-mode .status-success {
-            background-color: #2a4a2a;
-            color: #4caf50;
-            border: 1px solid #336633;
-        }
-
-        body.dark-mode .status-failure {
-            background-color: #4a2a2a;
-            color: #f44336;
-            border: 1px solid #663333;
         }
 
         body.dark-mode .dcontainer {
@@ -493,64 +470,6 @@
             border-radius: 8px;
         }
 
-        /* Basic styling for progress bar */
-        .progress {
-            width: 100%;
-            height: 20px;
-            background-color: #f3f3f3;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-
-        .progress-bar {
-            height: 100%;
-            width: 0%; /* Will be controlled by JS if needed, or just 100% for static display */
-            background-color: #4CAF50; /* Green color */
-            text-align: center;
-            color: white;
-            line-height: 20px;
-            transition: width 0.5s ease-in-out;
-        }
-
-        /* Basic styling for status area */
-        .status-area {
-            margin: 20px auto 0;
-            padding: 1.5rem;
-            background: white;
-            border-radius: 1rem;
-            min-height: 50px;
-            overflow-y: auto;
-            border: 1px solid #e5e7eb;
-            width: 100%;
-            max-width: 600px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        .status-message {
-            margin-bottom: 10px;
-            padding: 10px;
-            border-radius: 5px;
-        }
-        .status-pending { 
-            background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
-            color: #92400e;
-            border: 1px solid #f59e0b;
-            border-radius: 0.5rem;
-        }
-        .status-success { 
-            background: linear-gradient(135deg, #d1fae5 0%, #10b981 100%);
-            color: #065f46;
-            border: 1px solid #059669;
-            border-radius: 0.5rem;
-        }
-        .status-failure { 
-            background: linear-gradient(135deg, #fee2e2 0%, #ef4444 100%);
-            color: #991b1b;
-            border: 1px solid #dc2626;
-            border-radius: 0.5rem;
-        }
-
         .faq-container {
             max-width: 900px;
             margin: 0 auto;
@@ -770,17 +689,6 @@
         </div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div id="statusArea" class="status-area">
-            <div id="progressBar" class="progress hidden">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-            <div id="statusMessages">
-                <p class="text-gray-500">在此处查看下载状态...</p>
-            </div>
-        </div>
-    </div>
-
     <div class="dcontainer">
         <h2>智能下载器介绍</h2>
         <p>
@@ -885,16 +793,6 @@
                 </div>
             </div>
         </div>
-
-        <script>
-            // Toggle answer visibility on question click
-            document.querySelectorAll('.faq-question').forEach(button => {
-                button.addEventListener('click', () => {
-                    const answer = button.nextElementSibling;
-                    answer.style.display = answer.style.display === 'block' ? 'none' : 'block';
-                });
-            });
-        </script>
     </section>
     <!-- faq End -->
 
