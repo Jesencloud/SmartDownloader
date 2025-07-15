@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Video - Smart Downloader</title>
+    <meta name="keywords" content="智能下载器, 视频下载, 音频下载, 播放列表下载" />
+    <meta name="description" content="选择您需要的视频分辨率并下载" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 继承主页面的样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: ui-sans-serif, -apple-system, system-ui, Segoe UI, Helvetica, Apple Color Emoji, Arial, sans-serif, Segoe UI Emoji, Segoe UI Symbol;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            background-color: #f3f4f6;
+            color: #000000;
+        }
+
+        /* Dark mode styles */
+        body.dark-mode {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+        }
+
+        body.dark-mode header {
+            background-color: #2d2d2d;
+            border-bottom: 1px solid #404040;
+        }
+
+        body.dark-mode .logo a {
+            color: #ffffff;
+        }
+
+        body.dark-mode .header-right a {
+            color: #ffffff;
+        }
+
+        body.dark-mode .download-container {
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+        }
+
+        body.dark-mode .resolution-option {
+            background-color: #374151;
+            border-color: #4b5563;
+            color: #ffffff;
+        }
+
+        body.dark-mode .resolution-option:hover {
+            background-color: #4b5563;
+            border-color: #6b7280;
+        }
+
+        body.dark-mode .resolution-option.selected {
+            background-color: #1e3a8a;
+            border-color: #3b82f6;
+        }
+
+        /* Dark mode toggle button */
+        .dark-mode-toggle {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            margin-left: 15px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .dark-mode-toggle:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode .dark-mode-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        header {
+            background-color: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .logo a {
+            text-decoration: none;
+            color: #1e40af;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+        }
+
+        .header-right a {
+            margin-left: 15px;
+            text-decoration: none;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        .download-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+        }
+
+        .page-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 1rem;
+        }
+
+        .video-info {
+            background: #f8faff;
+            border: 1px solid #e0e7ff;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .video-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .video-url {
+            font-size: 0.875rem;
+            color: #6b7280;
+            word-break: break-all;
+        }
+
+        .resolution-section {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 1rem;
+        }
+
+        .resolution-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .col-span-full {
+            grid-column: 1 / -1;
+        }
+
+        .resolution-option {
+            border: 2px solid #e5e7eb;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: white;
+            text-align: center;
+        }
+
+        .resolution-option:hover {
+            border-color: #3b82f6;
+            background-color: #f8faff;
+        }
+
+        .resolution-option.selected {
+            border-color: #3b82f6;
+            background-color: #dbeafe;
+        }
+
+        .resolution-label {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 0.25rem;
+        }
+
+        .resolution-details {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0099ff 0%, #2392d6 100%);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 153, 255, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .loading-state {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Dark mode adjustments */
+        body.dark-mode .page-title {
+            color: #ffffff;
+        }
+
+        body.dark-mode .video-info {
+            background-color: #374151;
+            border-color: #4b5563;
+        }
+
+        body.dark-mode .video-title {
+            color: #ffffff;
+        }
+
+        body.dark-mode .video-url {
+            color: #d1d5db;
+        }
+
+        body.dark-mode .section-title {
+            color: #ffffff;
+        }
+
+        body.dark-mode .resolution-label {
+            color: #ffffff;
+        }
+
+        body.dark-mode .resolution-details {
+            color: #d1d5db;
+        }
+
+        body.dark-mode .error-message {
+            background-color: #4a2a2a;
+            border-color: #663333;
+            color: #f87171;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header Start -->
+    <header class="bg-gray-100 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-3">
+                <div class="logo">
+                    <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
+                </div>
+                <div class="header-right flex items-center">
+                    <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4">返回主页</a>
+                    <button id="darkModeToggle" class="dark-mode-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌙</button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- Header End -->
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="download-container">
+            <h1 class="page-title">Download Video</h1>
+            
+            <!-- Loading State -->
+            <div id="loadingState" class="loading-state">
+                <div class="spinner"></div>
+                <p>正在获取视频信息...</p>
+            </div>
+
+            <!-- Error State -->
+            <div id="errorState" style="display: none;">
+                <div class="error-message">
+                    <p id="errorMessage">获取视频信息失败</p>
+                </div>
+                <div class="action-buttons">
+                    <a href="/" class="btn btn-secondary">返回主页</a>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div id="mainContent" style="display: none;">
+                <!-- Video Info -->
+                <div class="video-info">
+                    <div class="video-title" id="videoTitle">视频标题</div>
+                    <div class="video-url" id="videoUrl">视频链接</div>
+                </div>
+
+                <!-- Resolution Selection -->
+                <div class="resolution-section">
+                    <h2 class="section-title">选择分辨率</h2>
+                    <div class="resolution-grid" id="resolutionGrid">
+                        <!-- 分辨率选项将通过JavaScript动态添加 -->
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="action-buttons">
+                    <a href="/" class="btn btn-secondary">返回主页</a>
+                    <button id="downloadButton" class="btn btn-primary" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        下载选中格式
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dark mode functionality
+        function initializeDarkMode() {
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const body = document.body;
+            
+            if (!darkModeToggle) {
+                console.error('Dark mode toggle button not found!');
+                return;
+            }
+            
+            // Check for saved theme preference or default to light mode
+            const currentTheme = localStorage.getItem('theme') || 'light';
+            
+            if (currentTheme === 'dark') {
+                body.classList.add('dark-mode');
+                darkModeToggle.textContent = '☀️';
+            } else {
+                darkModeToggle.textContent = '🌙';
+            }
+            
+            // Toggle dark mode
+            darkModeToggle.addEventListener('click', () => {
+                body.classList.toggle('dark-mode');
+                
+                if (body.classList.contains('dark-mode')) {
+                    darkModeToggle.textContent = '☀️';
+                    localStorage.setItem('theme', 'dark');
+                } else {
+                    darkModeToggle.textContent = '🌙';
+                    localStorage.setItem('theme', 'light');
+                }
+            });
+        }
+
+        // 全局变量
+        let selectedResolution = null;
+        let selectedFormatId = null;
+        let videoData = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize dark mode
+            initializeDarkMode();
+            
+            // 获取URL参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const videoUrl = urlParams.get('url');
+            const downloadType = urlParams.get('type') || 'video';
+            
+            if (!videoUrl) {
+                showError('缺少视频URL参数');
+                return;
+            }
+            
+            // 显示视频URL
+            document.getElementById('videoUrl').textContent = videoUrl;
+            
+            // 获取真实的视频信息
+            fetchVideoInfo(videoUrl, downloadType);
+            
+            // 下载按钮事件
+            document.getElementById('downloadButton').addEventListener('click', () => {
+                if (selectedFormatId) {
+                    startDownload();
+                }
+            });
+        });
+
+        async function fetchVideoInfo(url, type) {
+            try {
+                const response = await fetch('/video-info', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '获取视频信息失败');
+                }
+
+                const videoInfo = await response.json();
+                videoData = videoInfo;
+                
+                // 更新页面标题
+                document.querySelector('.page-title').textContent = type === 'video' ? 'Download Video' : 'Download Audio';
+                
+                // 显示视频信息
+                document.getElementById('videoTitle').textContent = videoInfo.title;
+                
+                // 生成分辨率选项
+                generateResolutionOptions(videoInfo.formats, type);
+                
+                // 隐藏加载状态，显示主内容
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                
+            } catch (error) {
+                console.error('获取视频信息失败:', error);
+                showError('获取视频信息失败: ' + error.message);
+            }
+        }
+
+        function generateResolutionOptions(formats, type) {
+            const resolutionGrid = document.getElementById('resolutionGrid');
+            resolutionGrid.innerHTML = '';
+            
+            if (formats.length === 0) {
+                resolutionGrid.innerHTML = `
+                    <div class="col-span-full text-center p-6">
+                        <p class="text-gray-500 text-lg mb-2">未找到符合条件的${type === 'video' ? '视频' : '音频'}格式</p>
+                        <p class="text-gray-400 text-sm">我们只显示有明确文件大小的MP4格式视频</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            formats.forEach(format => {
+                const optionElement = document.createElement('div');
+                optionElement.className = 'resolution-option';
+                optionElement.dataset.formatId = format.format_id;
+                optionElement.dataset.resolution = format.resolution;
+                
+                // 格式化文件大小
+                const sizeText = formatFileSize(format.filesize);
+                
+                // 构建格式描述
+                const codecInfo = format.vcodec ? ` (${format.vcodec})` : '';
+                const fpsInfo = format.fps ? ` ${format.fps}fps` : '';
+                
+                // 为非MP4格式添加标识
+                const formatLabel = format.ext.toUpperCase() + (format.ext !== 'mp4' ? ' ⚠️' : '');
+                
+                optionElement.innerHTML = `
+                    <div class="resolution-label">${format.resolution}</div>
+                    <div class="resolution-details">${formatLabel}${codecInfo}${fpsInfo}</div>
+                    <div class="resolution-details">${sizeText}</div>
+                `;
+                
+                optionElement.addEventListener('click', () => selectResolution(format.format_id, format.resolution));
+                resolutionGrid.appendChild(optionElement);
+            });
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes || bytes === 0) return '未知大小';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function selectResolution(formatId, resolution) {
+            // 移除之前的选择
+            document.querySelectorAll('.resolution-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            // 选择当前选项
+            const selectedOption = document.querySelector(`[data-format-id="${formatId}"]`);
+            if (selectedOption) {
+                selectedOption.classList.add('selected');
+                selectedFormatId = formatId;
+                selectedResolution = resolution;
+                document.getElementById('downloadButton').disabled = false;
+            }
+        }
+
+        function startDownload() {
+            const downloadButton = document.getElementById('downloadButton');
+            downloadButton.disabled = true;
+            downloadButton.innerHTML = `
+                <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
+                正在准备下载...
+            `;
+            
+            // 获取URL参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const videoUrl = urlParams.get('url');
+            const downloadType = urlParams.get('type') || 'video';
+            
+            // 触发文件保存对话框
+            setTimeout(() => {
+                triggerFileDownload(videoUrl, downloadType, selectedFormatId, selectedResolution);
+            }, 1000);
+        }
+
+        function triggerFileDownload(url, type, formatId, resolution) {
+            // 检查是否支持 showSaveFilePicker API (现代浏览器)
+            if ('showSaveFilePicker' in window) {
+                triggerModernFileSave(url, type, formatId, resolution);
+            } else {
+                // 回退到传统下载方式
+                triggerTraditionalDownload(url, type, formatId, resolution);
+            }
+        }
+
+        async function triggerModernFileSave(url, type, formatId, resolution) {
+            try {
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const extension = type === 'video' ? 'mp4' : 'mp3';
+                const filename = `${videoData.title}_${resolution}_${timestamp}.${extension}`.replace(/[<>:"/\\|?*]/g, '_');
+                
+                // 使用现代文件系统访问API显示保存对话框
+                const fileHandle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: type === 'video' ? 'Video files' : 'Audio files',
+                        accept: type === 'video' ? { 'video/mp4': ['.mp4'] } : { 'audio/mp3': ['.mp3'] }
+                    }]
+                });
+
+                // 这里应该调用实际的下载API
+                // 模拟文件数据（实际应用中这里会是真实的文件内容）
+                const blob = new Blob([`模拟下载内容 - Format ID: ${formatId}`], { 
+                    type: type === 'video' ? 'video/mp4' : 'audio/mp3' 
+                });
+                
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                
+                alert('文件保存成功！');
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('保存文件时出错:', error);
+                    alert('保存文件失败: ' + error.message);
+                }
+                // 如果用户取消了对话框，回退到传统下载
+                triggerTraditionalDownload(url, type, formatId, resolution);
+            } finally {
+                resetDownloadButton();
+            }
+        }
+
+        function triggerTraditionalDownload(url, type, formatId, resolution) {
+            // 创建一个临时的a标签来触发文件下载
+            const link = document.createElement('a');
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            const extension = type === 'video' ? 'mp4' : 'mp3';
+            const filename = `${videoData.title}_${resolution}_${timestamp}.${extension}`.replace(/[<>:"/\\|?*]/g, '_');
+            
+            // 这里应该调用实际的下载API
+            // 模拟文件数据（实际应用中这里会是真实的文件内容）
+            const blob = new Blob([`模拟下载内容 - Format ID: ${formatId}`], { 
+                type: type === 'video' ? 'video/mp4' : 'audio/mp3' 
+            });
+            const objectUrl = URL.createObjectURL(blob);
+            
+            link.href = objectUrl;
+            link.download = filename;
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // 清理URL对象
+            URL.revokeObjectURL(objectUrl);
+            
+            resetDownloadButton();
+            alert('文件下载已开始！请检查您的下载文件夹。');
+        }
+
+        function resetDownloadButton() {
+            const downloadButton = document.getElementById('downloadButton');
+            downloadButton.disabled = false;
+            downloadButton.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                下载选中格式
+            `;
+        }
+
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorState').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

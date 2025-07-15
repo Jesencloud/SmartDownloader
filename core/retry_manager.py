@@ -181,7 +181,7 @@ class RetryManager:
                 raise
             except Exception as e:
                 log.error(f"未知错误: {e}", exc_info=True)
-                raise DownloaderException(f"未知错误: {e}")
+                raise
 
         raise MaxRetriesExceededException(f"操作在 {self.max_retries + 1} 次尝试后失败。")
 

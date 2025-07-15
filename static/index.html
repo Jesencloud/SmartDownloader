@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Downloader: 智能下载器</title>
+    <meta name="keywords" content="智能下载器, 视频下载, 音频下载, 播放列表下载" />
+    <meta name="description" content="Smart Downloader 允许您快速下载高质量的视频和音频。粘贴URL即可开始下载。" />
+
+    <meta content="https://your-domain.com/" property="og:url" />
+    <meta content="Smart Downloader" property="og:title" />
+    <meta property="og:site_name" content="Smart Downloader" />
+    <meta content="Smart Downloader 允许您快速下载高质量的视频和音频。粘贴URL即可开始下载。" property="og:description" />
+
+    <link rel="canonical" href="https://your-domain.com/">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Basic reset and styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: ui-sans-serif, -apple-system, system-ui, Segoe UI, Helvetica, Apple Color Emoji, Arial, sans-serif, Segoe UI Emoji, Segoe UI Symbol;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            background-color: #f3f4f6;
+            color: #000000;
+        }
+
+        /* Dark mode styles */
+        body.dark-mode {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+        }
+
+        body.dark-mode header {
+            background-color: #2d2d2d;
+            border-bottom: 1px solid #404040;
+        }
+
+        body.dark-mode .logo a {
+            color: #ffffff;
+        }
+
+        body.dark-mode .header-right a {
+            color: #ffffff;
+        }
+
+        body.dark-mode .container {
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        body.dark-mode h1, body.dark-mode h2, body.dark-mode h3 {
+            color: #ffffff;
+        }
+
+        body.dark-mode input[type="text"] {
+            background-color: #2d2d2d;
+            color: #ffffff;
+            border: 1px solid #404040;
+        }
+
+        body.dark-mode input[type="text"]:focus {
+            border: 1px solid #4a9eff;
+            box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1);
+        }
+
+        body.dark-mode .button {
+            background-color: #2d2d2d;
+            color: #ffffff;
+            border: 1px solid #404040;
+        }
+
+        body.dark-mode .button:hover {
+            background-color: #404040;
+            border-color: #606060;
+        }
+
+        body.dark-mode .status-area {
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+        }
+
+        body.dark-mode .status-pending {
+            background-color: #4a4a2a;
+            color: #ffeb3b;
+            border: 1px solid #666632;
+        }
+
+        body.dark-mode .status-success {
+            background-color: #2a4a2a;
+            color: #4caf50;
+            border: 1px solid #336633;
+        }
+
+        body.dark-mode .status-failure {
+            background-color: #4a2a2a;
+            color: #f44336;
+            border: 1px solid #663333;
+        }
+
+        body.dark-mode .dcontainer {
+            background-color: #1a1a1a;
+        }
+
+        body.dark-mode p {
+            color: #cccccc;
+        }
+
+        body.dark-mode .step {
+            background-color: #2d2d2d;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        body.dark-mode .step p {
+            color: #ffffff;
+        }
+
+        body.dark-mode .about-us {
+            background-color: #1a1a1a;
+        }
+
+        body.dark-mode .about-us h1 {
+            color: #ffffff;
+        }
+
+        body.dark-mode .about-us p {
+            color: #cccccc;
+        }
+
+        body.dark-mode .faq-container {
+            background-color: #1a1a1a;
+        }
+
+        body.dark-mode .faq-question {
+            background-color: #2d2d2d;
+            color: #ffffff;
+        }
+
+        body.dark-mode .faq-question:hover {
+            background-color: #404040;
+            box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
+        }
+
+        body.dark-mode .faq-question.active {
+            background-color: #1a3a5c;
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
+        }
+
+        body.dark-mode .faq-answer {
+            color: #cccccc;
+        }
+
+        body.dark-mode footer {
+            background-color: #2d2d2d;
+            border-top: 1px solid #404040;
+        }
+
+        body.dark-mode .footer-left a,
+        body.dark-mode .footer-right a {
+            color: #cccccc;
+        }
+
+        body.dark-mode .footer-left a:hover,
+        body.dark-mode .footer-right a:hover {
+            color: #ffffff;
+        }
+
+        /* Dark mode toggle button */
+        .dark-mode-toggle {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            margin-left: 15px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .dark-mode-toggle:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode .dark-mode-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        header {
+            background-color: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .logo img {
+            width: 100px; /* Placeholder for actual logo */
+        }
+        .logo a {
+            text-decoration: none;
+            color: #1e40af;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+        }
+
+        .header-right a {
+            margin-left: 15px;
+            text-decoration: none;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        /* Footer styling */
+        footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #f2f2f2;
+            border-top: 1px solid #e0e0e0;
+            font-size: 14px;
+        }
+
+        .footer-left a,
+        .footer-right a {
+            text-decoration: none;
+            color: #555;
+            margin-right: 15px;
+        }
+
+        .footer-left a:hover,
+        .footer-right a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive styling */
+        @media (max-width: 768px) {
+            .logo img {
+                width: 80px;
+            }
+
+            .header-right a {
+                font-size: 12px;
+                margin-left: 10px;
+            }
+
+            header {
+                padding: 10px 15px;
+            }
+
+            footer {
+                font-size: 12px;
+            }
+
+            .footer-left a,
+            .footer-right a {
+                margin-right: 10px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .logo img {
+                width: 60px;
+            }
+
+            .header-right a {
+                font-size: 11px;
+                margin-left: 5px;
+            }
+
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .header-right {
+                margin-top: 10px;
+            }
+
+            footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .footer-left,
+    .footer-right {
+                margin-bottom: 10px;
+            }
+
+            .footer-left a,
+            .footer-right a {
+                margin-bottom: 5px;
+            }
+        }
+
+        h2 {
+            display: block;
+            font-size: 1.5em;
+            text-align: center;
+            margin-block-start: 0.83em;
+            margin-block-end: 0.83em;
+            margin-inline-start: 0px;
+            margin-inline-end: 0px;
+            font-weight: bold;
+            unicode-bidi: isolate;
+        }
+
+        .hero-section {
+            background: linear-gradient(135deg, #0099ff 0%, #2392d6 100%);
+            padding: 2rem;
+            border-radius: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background-color: white;
+            border-radius: 1rem;
+            padding: 0.25rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 0.75rem;
+            font-size: 16px;
+            background-color: transparent;
+            outline: none;
+        }
+
+        .paste-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, #0099ff 0%, #2392d6 100%);
+            color: white;
+            border: none;
+            border-radius: 0.75rem;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .paste-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 153, 255, 0.3);
+        }
+
+        .clear-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #6b7280;
+            color: white;
+            border: none;
+            border-radius: 0.75rem;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 0.5rem;
+        }
+
+        .clear-button:hover {
+            background: #4b5563;
+            transform: translateY(-1px);
+        }
+
+        /* Dark mode styles for paste button */
+        body.dark-mode .input-container {
+            background-color: #374151;
+        }
+
+        body.dark-mode input[type="text"] {
+            color: #ffffff;
+        }
+
+        body.dark-mode .paste-button {
+            background: linear-gradient(135deg, #0099ff 0%, #2392d6 100%);
+        }
+
+        body.dark-mode .clear-button {
+            background: #6b7280;
+        }
+
+        body.dark-mode .clear-button:hover {
+            background: #4b5563;
+        }
+
+        div#message {
+            color: red;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, #0099ff 0%, #2392d6 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0.5rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 153, 255, 0.3);
+        }
+
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .img-list-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 20px;
+            padding: 20px;
+            width: 100%;
+            max-width: 1280px;
+            margin: auto;
+        }
+
+        .img-list-container img {
+            border: 2px solid #000;
+            border-radius: 8px;
+            margin: 10px;
+            width: auto;
+            max-width: 1280px;
+        }
+
+        .download-button {
+            display: inline-block;
+            margin-top: 10px;
+            background-color: #fff;
+            color: #333;
+            padding: 8px 19px;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 14px;
+            text-decoration: none;
+            border-color: #ccc;
+            border: 1px solid #ccc;
+        }
+
+        .download-button:hover {
+            color: #333;
+            background-color: #f0f0f0;
+            border-color: #d3d3d3;
+        }
+
+        .thumbnail-preview img {
+            width: 100%;
+            max-width: 1280px;
+            height: auto;
+            border: 3px solid #1c62b9;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        /* aa */
+        .thumbnail-container img {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #1c62b9;
+            border-radius: 8px;
+        }
+
+        /* Basic styling for progress bar */
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #f3f3f3;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%; /* Will be controlled by JS if needed, or just 100% for static display */
+            background-color: #4CAF50; /* Green color */
+            text-align: center;
+            color: white;
+            line-height: 20px;
+            transition: width 0.5s ease-in-out;
+        }
+
+        /* Basic styling for status area */
+        .status-area {
+            margin: 20px auto 0;
+            padding: 1.5rem;
+            background: white;
+            border-radius: 1rem;
+            min-height: 50px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .status-pending { 
+            background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            border-radius: 0.5rem;
+        }
+        .status-success { 
+            background: linear-gradient(135deg, #d1fae5 0%, #10b981 100%);
+            color: #065f46;
+            border: 1px solid #059669;
+            border-radius: 0.5rem;
+        }
+        .status-failure { 
+            background: linear-gradient(135deg, #fee2e2 0%, #ef4444 100%);
+            color: #991b1b;
+            border: 1px solid #dc2626;
+            border-radius: 0.5rem;
+        }
+
+        .faq-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #202124;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .faq-item {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .faq-question {
+            background-color: white;
+            color: #202124;
+            border: none;
+            padding: 15px 20px;
+            width: 100%;
+            text-align: left;
+            font-size: 18px;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.3s, box-shadow 0.3s;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .faq-question:hover {
+            background-color: #f1f3f4;
+            box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3);
+        }
+
+        .faq-question:focus {
+            box-shadow: 0 0 8px rgba(26, 115, 232, 0.5);
+        }
+
+        .faq-answer {
+            display: none;
+            padding: 15px 20px;
+            color: #5f6368;
+            font-size: 16px;
+        }
+
+        .faq-question::after {
+            content: '▼';
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+
+        .faq-answer p {
+            margin: 0;
+        }
+
+        .faq-question.active::after {
+            transform: rotate(-180deg);
+        }
+
+        .faq-question.active {
+            background-color: #e8f0fe;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(60, 64, 67, 0.3);
+        }
+
+        .dcontainer {
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+        }
+
+        p {
+            color: #555;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .steps {
+            margin-top: 20px;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .step-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            background-color: #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+
+        .step p {
+            margin: 0;
+            color: #333;
+        }
+
+        .about-us {
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+        }
+
+        .about-us h1 {
+            font-size: 2em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .about-us p {
+            font-size: 1em;
+            line-height: 1.6;
+            color: #666;
+        }
+
+        h3 {
+            display: block;
+            font-size: 1.5em;
+            text-align: center;
+            margin-block-start: 0.83em;
+            margin-block-end: 0.83em;
+            margin-inline-start: 0px;
+            margin-inline-end: 0px;
+            font-weight: bold;
+            unicode-bidi: isolate;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header Start -->
+    <header class="bg-gray-100 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-3">
+                <div class="logo">
+                    <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
+                </div>
+                <div class="header-right flex items-center">
+                    <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4">Home</a>
+                    <button id="darkModeToggle" class="dark-mode-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌙</button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- Header End -->
+
+    <!-- Main Content Here -->
+    <div class="hero-section text-center">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-white mb-8">智能下载器</h1>
+            
+            <div class="input-group mb-6">
+                <div class="input-container">
+                    <input type="text" id="videoUrl" placeholder="粘贴视频或播放列表URL..." required>
+                    <button class="clear-button" type="button" id="clearButton" style="display: none;" title="清除链接并重新粘贴">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 4L4 12m0-8l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>清除</span>
+                    </button>
+                    <button class="paste-button" type="button" id="pasteButton" title="从剪贴板粘贴链接">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <g clip-path="url(#clip0_4001_1112)">
+                                <path d="M14.8333 6.6665H9.16667C8.52267 6.6665 8 7.18917 8 7.83317V14.8332C8 15.4772 8.52267 15.9998 9.16667 15.9998H14.8333C15.4773 15.9998 16 15.4772 16 14.8332V7.83317C16 7.18917 15.4773 6.6665 14.8333 6.6665ZM13.4167 13.3332H10.4167C10.1407 13.3332 9.91667 13.1092 9.91667 12.8332C9.91667 12.5572 10.1407 12.3332 10.4167 12.3332H13.4167C13.6927 12.3332 13.9167 12.5572 13.9167 12.8332C13.9167 13.1092 13.6927 13.3332 13.4167 13.3332ZM13.4167 11.3332H10.4167C10.1407 11.3332 9.91667 11.1092 9.91667 10.8332C9.91667 10.5572 10.1407 10.3332 10.4167 10.3332H13.4167C13.6927 10.3332 13.9167 10.5572 13.9167 10.8332C13.9167 11.1092 13.6927 11.3332 13.4167 11.3332Z" fill="white" />
+                                <path d="M9.5 2H8.66667V1.83333C8.66667 1.55733 8.44267 1.33333 8.16667 1.33333H7.43067C7.212 0.564667 6.50467 0 5.66667 0C4.82867 0 4.12133 0.564667 3.90267 1.33333H3.16667C2.89067 1.33333 2.66667 1.55733 2.66667 1.83333V2H1.83333C0.822 2 0 2.822 0 3.83333V12.1667C0 13.178 0.822 14 1.83333 14H7V7.83333C7 6.63867 7.972 5.66667 9.16667 5.66667H11.3333V3.83333C11.3333 2.822 10.5113 2 9.5 2ZM3.66667 2.33333H4.33333C4.60933 2.33333 4.83333 2.10933 4.83333 1.83333C4.83333 1.374 5.20733 1 5.66667 1C6.126 1 6.5 1.374 6.5 1.83333C6.5 2.10933 6.724 2.33333 7 2.33333H7.66667V3.16667C7.66667 3.25867 7.592 3.33333 7.5 3.33333H3.83333C3.74133 3.33333 3.66667 3.25867 3.66667 3.16667V2.33333Z" fill="white" />
+                            </g>
+                            <defs>
+                                <clipPath id="clip0_4001_1112">
+                                    <rect width="16" height="16" fill="white" />
+                                </clipPath>
+                            </defs>
+                        </svg>
+                        <span>粘贴</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button type="button" id="downloadVideoButton" class="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    提取视频
+                </button>
+                <button type="button" id="downloadAudioButton" class="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 18V5l12-2v13M9 13c0 1.105-1.12 2-2.5 2S4 14.105 4 13s1.12-2 2.5-2 2.5.895 2.5 2zm12-2c0 1.105-1.12 2-2.5 2s-2.5-.895-2.5-2 1.12-2 2.5-2 2.5.895 2.5 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    提取音频
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div id="statusArea" class="status-area">
+            <div id="progressBar" class="progress hidden">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div id="statusMessages">
+                <p class="text-gray-500">在此处查看下载状态...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="dcontainer">
+        <h2>智能下载器介绍</h2>
+        <p>
+            智能下载器 – 免费高质量下载视频和音频。只需在下方输入框中粘贴视频URL，点击“提取”按钮，即可立即保存您所需分辨率的视频或音频。
+        </p>
+        <br>
+        <p>
+            如何轻松下载视频和音频？视频和音频是内容呈现的关键部分，通过引人注目的视觉和听觉吸引注意力。如果您想保存视频或音频，使用智能下载器可以轻松���成。许多工具允许您通过几次点击即可从各种平台下载内容。
+        </p>
+        <br>
+        <p>
+            使用智能下载器非常简单。您只需粘贴视频链接，工具将立即获取并允许您在几秒钟内下载高质量的视频或音频。这非常适合内容创作者、研究人员或任何想要保存媒体内容以供个人使用的人。
+        </p>
+        <br>
+        <p>
+            为了快速可靠地下载视频和音频，请尝试使用这款易于使用的工具。
+        </p>
+    </div>
+
+    <!-- How to download Start -->
+    <section>
+        <div class="dcontainer">
+            <h2>如何使用智能下载器</h2>
+            <p>按照以下简单步骤使用我们的工具下载视频和音频：</p>
+            <div class="steps">
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <p>复制您想要下载视频或音频的URL。</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <p>将URL粘贴到我们工具的输入框中。</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <p>点击“提取视频”或“提取音频”按钮。</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">4</span>
+                    <p>下载将开始，您可以在状态区域查看进度。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- How to download End -->
+
+    <!-- About Start -->
+    <section class="about-us">
+        <h2>关于我们</h2>
+        <p>欢迎使用我们的智能下载器！我们提供一种简单快捷的方式来下载高质量的视频和音频。我们的目标是通过用户友好的界面和可靠的服务，让您的体验尽可能无缝。</p>
+        <br>
+        <p>我们的团队热��于帮助您充分利用您的媒体体验。无论您是内容创作者、营销人员还是仅仅是爱好者，我们都会协助您获取所需的视觉和听觉内容。</p>
+        <br>
+        <p>感谢您的选择！</p>
+    </section>
+    <!-- About End -->
+
+    <!-- faq Start -->
+    <section>
+        <div class="faq-container">
+            <h3>常见问题</h3>
+
+            <div class="faq-item">
+                <button class="faq-question">什么是智能下载器？</button>
+                <div class="faq-answer">
+                    <p>智能下载器允许您通过简单地输入视频URL来下载视频和音频。</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <button class="faq-question">如何使用智能下载器？</button>
+                <div class="faq-answer">
+                    <p>只需将视频URL复制并粘贴到我们主页的输入框中，然后点击下载按钮。视频或音频将下载到您的设备。</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <button class="faq-question">使用此服务免费吗？</button>
+                <div class="faq-answer">
+                    <p>是的，我们的智能下载器完全免费使用。</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <button class="faq-question">我可以下载不同大小的视频或音频吗？</button>
+                <div class="faq-answer">
+                    <p>这取决于原始视频的可用格式。我们的工具会尝试获取最高质量的可用选项。</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <button class="faq-question">下载视频或音频合法吗？</button>
+                <div class="faq-answer">
+                    <p>下载视频或音频供个人使用通常是允许的，但请确保您没有侵犯任何版权或知识产权。</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <button class="faq-question">支持哪些设备？</button>
+                <div class="faq-answer">
+                    <p>我们的智能下载器兼容所有设备，包括智能手机、平板电脑和电脑。</p>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // Toggle answer visibility on question click
+            document.querySelectorAll('.faq-question').forEach(button => {
+                button.addEventListener('click', () => {
+                    const answer = button.nextElementSibling;
+                    answer.style.display = answer.style.display === 'block' ? 'none' : 'block';
+                });
+            });
+        </script>
+    </section>
+    <!-- faq End -->
+
+    <!-- Footer Start -->
+    <footer>
+        <div class="footer-left">
+            <!-- Add any left-aligned footer content here if needed -->
+        </div>
+
+        <div class="footer-right">
+            <a href="#">隐私政策</a>
+            <a href="#">免责声明</a>
+            <a href="#">关于我们</a>
+            <a href="#">联系我们</a>
+        </div>
+    </footer>
+    <!-- Footer End -->
+
+    <script type="text/javascript" src="/static/script.js"></script>
+</body>
+</html>

@@ -16,6 +16,9 @@ folders:
 
 # 下载器设置
 downloader:
+  # 保存路径
+  save_path: "downloads"        # 下载文件的保存目录
+  
   # 重试机制
   max_retries: 3                # 最大重试次数
   base_delay: 10.0              # 基础延迟秒数

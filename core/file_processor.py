@@ -8,6 +8,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import Optional, List
+import aiofiles.os
 
 from rich.console import Console
 
@@ -196,6 +197,10 @@ class FileProcessor:
         except Exception as e:
             log.warning(f'清理临时文件时出错: {e}', exc_info=True)
     
+    import aiofiles.os
+
+# ... (rest of the file) ...
+
     async def _cleanup_temp_files(self, files: List[Path]):
         """
         内部方法：清理指定的文件列表。
@@ -205,8 +210,8 @@ class FileProcessor:
         """
         for file_path in files:
             try:
-                if file_path.exists():
-                    file_path.unlink()
+                if await aiofiles.os.path.exists(file_path):
+                    await aiofiles.os.remove(file_path)
                     log.debug(f'删除临时文件: {file_path.name}')
             except OSError as e:
                 log.warning(f'删除文件失败 {file_path}: {e}')

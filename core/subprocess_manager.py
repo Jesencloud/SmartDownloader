@@ -167,7 +167,7 @@ class SubprocessManager:
                         raise DownloadStalledException(f'下载停滞: {error_msg}')
                 else:
                     # 创建适当的异常类型
-                    exception = self.error_handler.create_exception(return_code, error_msg)
+                    exception = self.error_handler.create_appropriate_exception(error_msg, " ".join(cmd))
                     raise exception
             
             return return_code, stdout.decode('utf-8', errors='ignore'), stderr.decode('utf-8', errors='ignore')

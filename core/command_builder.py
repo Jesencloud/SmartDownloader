@@ -28,7 +28,7 @@ class CommandBuilder:
 
     def build_yt_dlp_base_cmd(self) -> List[str]:
         """构建基础的yt-dlp命令"""
-        cmd = ['yt-dlp', '--ignore-config', '--no-warnings', '--no-color']
+        cmd = ['yt-dlp', '--ignore-config', '--no-warnings', '--no-color', '--force-overwrites']
         
         if self.proxy:
             cmd.extend(['--proxy', self.proxy])
