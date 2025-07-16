@@ -224,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultContainer.style.display = 'none';
         resultContainer.innerHTML = '';
         urlInput.value = '';
+        urlInput.dispatchEvent(new Event('input')); // Trigger input event to update button visibility
     }
 
     function formatFileSize(bytes) {
