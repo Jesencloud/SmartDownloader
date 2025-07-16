@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = getTranslations();
         mainHeading.textContent = data.title;
         // --- NEW: Adjust title font size ---
-        mainHeading.className = 'text-xl font-bold text-white mb-4';
+        mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left';
 
         const formatsToShow = data.formats.filter(f => {
             return data.download_type === 'video' ? f.vcodec !== 'none' : f.acodec !== 'none';
