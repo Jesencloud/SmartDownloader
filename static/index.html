@@ -210,6 +210,10 @@
         header {
             background-color: #f3f4f6;
             border-bottom: 1px solid #e5e7eb;
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 1000; /* Ensure it stays on top */
         }
 
         .logo img {
@@ -670,7 +674,7 @@
     <!-- Header Start -->
     <header class="bg-gray-100 border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center py-3">
+            <div class="flex justify-between items-center py-0.5">
                 <div class="logo">
                     <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
                 </div>
