@@ -1,7 +1,7 @@
 # web/main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from celery.result import AsyncResult
 from typing import Literal, Dict, Any, List
@@ -24,20 +24,19 @@ app = FastAPI(
 # 获取项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 挂载 static 目录，让 FastAPI 可以直接提供静态文件服务
-# /static 是URL路径，directory是文件系统中的路径
+# 挂载 static 目录
 app.mount(
     "/static",
     StaticFiles(directory=BASE_DIR / "static"),
     name="static"
 )
 
-# --- Pydantic Models for Request and Response ---
+# --- Pydantic Models ---
 
 class DownloadRequest(BaseModel):
-    url: str = Field(..., description="The URL of the video to download.", example="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    url: str = Field(..., description="The URL of the video to download.")
     download_type: Literal['video', 'audio'] = Field('video', description="The type of content to download.")
-    custom_path: str = Field(None, description="Custom download path (optional).")
+    format_id: str = Field(..., description="The specific format ID to download.")
 
 class DownloadResponse(BaseModel):
     task_id: str = Field(..., description="The ID of the background download task.")
@@ -46,257 +45,127 @@ class DownloadResponse(BaseModel):
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: str
-    result: Dict[str, Any] | str | None = Field(None, description="The result of the task. If successful, it's a dictionary. If failed, it's an error message.")
+    result: Dict[str, Any] | str | None = Field(None, description="Task result or error message.")
 
 class VideoFormat(BaseModel):
-    format_id: str = Field(..., description="Format ID from yt-dlp")
-    resolution: str = Field(..., description="Resolution like '1080p', '720p'")
-    ext: str = Field(..., description="File extension")
-    filesize: float | None = Field(None, description="File size in bytes")
-    quality: str = Field(..., description="Quality description")
-    fps: float | None = Field(None, description="Frames per second")
-    vcodec: str | None = Field(None, description="Video codec")
-    acodec: str | None = Field(None, description="Audio codec")
+    format_id: str
+    resolution: str
+    ext: str
+    filesize: float | None
+    quality: str
+    fps: float | None
+    vcodec: str | None
+    acodec: str | None
+    abr: int | None = None
 
 class VideoInfo(BaseModel):
-    title: str = Field(..., description="Video title")
-    duration: float | None = Field(None, description="Duration in seconds")
-    uploader: str | None = Field(None, description="Uploader name")
-    thumbnail: str | None = Field(None, description="Thumbnail URL")
-    formats: List[VideoFormat] = Field(..., description="Available formats")
+    title: str
+    duration: float | None
+    uploader: str | None
+    thumbnail: str | None
+    formats: List[VideoFormat]
+    original_url: str
+    download_type: Literal['video', 'audio']
 
 class VideoInfoRequest(BaseModel):
     url: str = Field(..., description="Video URL to analyze")
-
+    download_type: Literal['video', 'audio'] = Field('video')
 
 # --- API Endpoints ---
 
 @app.get("/", response_class=FileResponse)
 async def read_index():
-    """
-    提供前端主页 (index.html)。
-    """
     return FileResponse(BASE_DIR / "static" / "index.html")
-
-@app.get("/download", response_class=FileResponse)
-async def read_download():
-    """
-    提供下载页面 (download.html)。
-    """
-    return FileResponse(BASE_DIR / "static" / "download.html")
 
 @app.post("/video-info", response_model=VideoInfo)
 async def get_video_info(request: VideoInfoRequest):
     """
-    获取视频信息和可用格式。
+    Fetches video information using yt-dlp and returns it as JSON.
     """
     try:
-        # 使用yt-dlp获取视频信息
         cmd = [
-            "yt-dlp", 
-            "--dump-json", 
+            str(BASE_DIR / "bin" / "yt-dlp_macos"),
+            "--dump-json",
             "--no-download",
             "--no-playlist",
             request.url
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
+        video_data_raw = json.loads(result.stdout)
         
-        if result.returncode != 0:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Failed to get video info: {result.stderr}"
-            )
+        title = video_data_raw.get('title', 'Unknown Title')
+        duration = video_data_raw.get('duration')
+        uploader = video_data_raw.get('uploader')
+        thumbnail = video_data_raw.get('thumbnail')
         
-        # 解析JSON输出
-        video_data = json.loads(result.stdout)
-        
-        # 提取视频信息
-        title = video_data.get('title', 'Unknown Title')
-        duration = video_data.get('duration')
-        uploader = video_data.get('uploader')
-        thumbnail = video_data.get('thumbnail')
-        
-        # 处理格式信息
         formats = []
-        raw_formats = video_data.get('formats', [])
+        raw_formats = video_data_raw.get('formats', [])
         
-        print(f"Found {len(raw_formats)} formats for video: {title}")
-        
-        # 过滤和处理格式
         for fmt in raw_formats:
-            try:
-                # 对于视频，只处理有视频流的格式
-                # 对于音频，只处理有音频流的格式
-                if fmt.get('vcodec') != 'none' and fmt.get('height'):
-                    # 视频格式
-                    resolution = f"{fmt.get('height')}p"
-                    
-                    # 计算文件大小（估算）
-                    filesize = fmt.get('filesize') or fmt.get('filesize_approx')
-                    
-                    # 获取文件扩展名
-                    ext = fmt.get('ext', 'mp4')
-                    
-                    # 过滤条件：只保留mp4格式且有文件大小信息的视频
-                    if ext == 'mp4' and filesize and filesize > 0:
-                        format_info = VideoFormat(
-                            format_id=fmt.get('format_id', ''),
-                            resolution=resolution,
-                            ext=ext,
-                            filesize=filesize,
-                            quality=fmt.get('format_note', resolution),
-                            fps=fmt.get('fps'),
-                            vcodec=fmt.get('vcodec'),
-                            acodec=fmt.get('acodec')
-                        )
-                        formats.append(format_info)
-                elif fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
-                    # 纯音频格式
-                    # 构建质量描述
-                    abr = fmt.get('abr', 0)
-                    if abr:
-                        quality_desc = f"{int(abr)}kbps"
-                    else:
-                        quality_desc = fmt.get('format_note', 'Unknown')
-                    
-                    filesize = fmt.get('filesize') or fmt.get('filesize_approx')
-                    ext = fmt.get('ext', 'mp3')
-                    
-                    # 对于音频，保留有文件大小信息的格式
-                    if filesize and filesize > 0:
-                        format_info = VideoFormat(
-                            format_id=fmt.get('format_id', ''),
-                            resolution=quality_desc,  # 对于音频，用质量代替分辨率
-                            ext=ext,
-                            filesize=filesize,
-                            quality=quality_desc,
-                            fps=None,
-                            vcodec=None,
-                            acodec=fmt.get('acodec')
-                        )
-                        formats.append(format_info)
-            except Exception as format_error:
-                print(f"Error processing format {fmt.get('format_id', 'unknown')}: {format_error}")
-                continue
-        
-        # 去重并按分辨率排序
-        unique_formats = {}
-        for fmt in formats:
-            key = (fmt.resolution, fmt.ext)
-            if key not in unique_formats or (fmt.filesize and fmt.filesize > (unique_formats[key].filesize or 0)):
-                unique_formats[key] = fmt
-        
-        # 按分辨率排序（从高到低）
-        sorted_formats = sorted(
-            unique_formats.values(),
-            key=lambda x: int(re.findall(r'\d+', x.resolution)[0]) if re.findall(r'\d+', x.resolution) else 0,
-            reverse=True
-        )
-        
-        print(f"Processed {len(sorted_formats)} unique formats after filtering")
-        
-        # 如果没有找到符合条件的格式，提供一些提示
-        if not sorted_formats:
-            print("No formats found matching criteria (MP4 with known file size)")
-            print("Trying fallback: allowing other video formats with known file size")
-            
-            # 备选逻辑：允许其他视频格式，但仍要求有文件大小
-            fallback_formats = []
-            for fmt in raw_formats:
-                try:
-                    if fmt.get('vcodec') != 'none' and fmt.get('height'):
-                        resolution = f"{fmt.get('height')}p"
-                        filesize = fmt.get('filesize') or fmt.get('filesize_approx')
-                        ext = fmt.get('ext', 'mp4')
-                        
-                        # 放宽条件：允许常见的视频格式，但仍要求有文件大小
-                        if ext in ['mp4', 'webm', 'mkv', 'avi'] and filesize and filesize > 0:
-                            format_info = VideoFormat(
-                                format_id=fmt.get('format_id', ''),
-                                resolution=resolution,
-                                ext=ext,
-                                filesize=filesize,
-                                quality=fmt.get('format_note', resolution),
-                                fps=fmt.get('fps'),
-                                vcodec=fmt.get('vcodec'),
-                                acodec=fmt.get('acodec')
-                            )
-                            fallback_formats.append(format_info)
-                except Exception as e:
-                    continue
-            
-            if fallback_formats:
-                # 去重并排序备选格式
-                fallback_unique = {}
-                for fmt in fallback_formats:
-                    key = (fmt.resolution, fmt.ext)
-                    if key not in fallback_unique or (fmt.filesize and fmt.filesize > (fallback_unique[key].filesize or 0)):
-                        fallback_unique[key] = fmt
-                
-                sorted_formats = sorted(
-                    fallback_unique.values(),
-                    key=lambda x: int(re.findall(r'\d+', x.resolution)[0]) if re.findall(r'\d+', x.resolution) else 0,
-                    reverse=True
-                )
-                print(f"Found {len(sorted_formats)} fallback formats")
-            else:
-                print("No suitable video formats found even with fallback")
-        
-        # 确保数据类型正确
-        duration_value = duration
-        if duration_value is not None:
-            try:
-                duration_value = float(duration_value)
-            except (ValueError, TypeError):
-                duration_value = None
-        
+            # Video streams
+            if fmt.get('width') and fmt.get('height'):
+                if fmt.get('ext') in ['mp4', 'webm']:
+                    formats.append(VideoFormat(
+                        format_id=fmt.get('format_id', ''),
+                        resolution=f"{fmt.get('width')}x{fmt.get('height')}",
+                        ext=fmt.get('ext'),
+                        filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
+                        quality=fmt.get('format_note', f"{fmt.get('height')}p"),
+                        fps=fmt.get('fps'),
+                        vcodec=fmt.get('vcodec'),
+                        acodec=fmt.get('acodec')
+                    ))
+            # Audio streams
+            elif fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
+                abr = fmt.get('abr')
+                quality_desc = f"{int(abr)}k" if abr else fmt.get('format_note', 'Unknown')
+                formats.append(VideoFormat(
+                    format_id=fmt.get('format_id', ''),
+                    resolution=quality_desc,
+                    ext=fmt.get('ext'),
+                    filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
+                    quality=quality_desc,
+                    fps=None,
+                    vcodec=None,
+                    acodec=fmt.get('acodec'),
+                    abr=int(abr) if abr else None
+                ))
+
         return VideoInfo(
             title=title,
-            duration=duration_value,
+            duration=float(duration) if duration else None,
             uploader=uploader,
             thumbnail=thumbnail,
-            formats=sorted_formats
+            formats=formats,
+            original_url=request.url,
+            download_type=request.download_type
         )
-        
+
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=408, detail="Request timeout")
+        raise HTTPException(status_code=408, detail="Request to video service timed out.")
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get video info: {e.stderr}")
     except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Failed to parse video information")
+        raise HTTPException(status_code=500, detail="Failed to parse video information from service.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+
 
 @app.post("/downloads", response_model=DownloadResponse, status_code=202)
 async def start_download(request: DownloadRequest):
-    """
-    在后台启动一个新的下载任务。
-    
-    这个端点会立即返回一个任务ID，客户端可以使用这个ID来查询下载状态。
-    """
-    # `.delay()` 是启动Celery任务的关键，它会将任务发送到队列中。
     task = download_video_task.delay(
         video_url=request.url, 
         download_type=request.download_type,
-        custom_path=request.custom_path
+        format_id=request.format_id
     )
     return {"task_id": task.id, "status": "pending"}
 
 @app.get("/downloads/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
-    """
-    检索下载任务的状态和结果。
-    """
-    # 使用任务ID从Celery后端获取任务结果对象。
     task_result = AsyncResult(task_id, app=celery_app)
-    
     result = task_result.result
-    # 如果任务失败，结果会是一个Exception对象，我们需要将它转换为字符串以便JSON序列化。
     if isinstance(task_result.result, Exception):
         result = str(task_result.result)
-
-    return {
-        "task_id": task_id,
-        "status": task_result.status,
-        "result": result
-    }
+    return {"task_id": task_id, "status": task_result.status, "result": result}
 

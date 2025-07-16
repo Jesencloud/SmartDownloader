@@ -167,6 +167,46 @@
             background-color: rgba(255, 255, 255, 0.1);
         }
 
+        /* Language Selector Styles */
+        .language-toggle {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .language-toggle:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode .language-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .language-menu {
+            min-width: 120px;
+        }
+
+        .language-menu.hidden {
+            display: none;
+        }
+
+        body.dark-mode .language-menu {
+            background-color: #2d2d2d;
+            border-color: #404040;
+        }
+
+        body.dark-mode .language-option {
+            color: #ffffff;
+        }
+
+        body.dark-mode .language-option:hover {
+            background-color: #404040;
+        }
+
         header {
             background-color: #f3f4f6;
             border-bottom: 1px solid #e5e7eb;
@@ -633,6 +673,14 @@
                     <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
                 </div>
                 <div class="header-right flex items-center">
+                    <!-- Language Selector -->
+                    <div class="relative mr-4">
+                        <button id="languageToggle" class="language-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌍</button>
+                        <div id="languageMenu" class="language-menu absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 hidden">
+                            <button class="language-option block w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors" data-lang="zh">中文简体</button>
+                            <button class="language-option block w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors" data-lang="en">English</button>
+                        </div>
+                    </div>
                     <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4">Home</a>
                     <button id="darkModeToggle" class="dark-mode-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌙</button>
                 </div>
@@ -648,7 +696,7 @@
             
             <div class="input-group mb-6">
                 <div class="input-container">
-                    <input type="text" id="videoUrl" placeholder="粘贴视频或播放列表URL..." required>
+                    <input type="text" id="videoUrl" name="url" placeholder="粘贴视频或播放列表URL..." required>
                     <button class="clear-button" type="button" id="clearButton" style="display: none;" title="清除链接并重新粘贴">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 4L4 12m0-8l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -686,6 +734,9 @@
                     提取音频
                 </button>
             </div>
+            
+            <!-- Container for results, initially hidden -->
+            <div id="resultContainer" class="mt-8"></div>
         </div>
     </div>
 
@@ -696,7 +747,7 @@
         </p>
         <br>
         <p>
-            如何轻松下载视频和音频？视频和音频是内容呈现的关键部分，通过引人注目的视觉和听觉吸引注意力。如果您想保存视频或音频，使用智能下载器可以轻松���成。许多工具允许您通过几次点击即可从各种平台下载内容。
+            如何轻松下载视频和音频？视频和音频是内容呈现的关键部分，通过引人注目的视觉和听觉吸引注意力。如果您想保存视频或音频，使用智能下载器可以轻松完成。许多工具允许您通过几次点击即可从各种平台下载内容。
         </p>
         <br>
         <p>
@@ -811,6 +862,7 @@
     </footer>
     <!-- Footer End -->
 
+    <script type="text/javascript" src="/static/common.js"></script>
     <script type="text/javascript" src="/static/script.js"></script>
 </body>
 </html>

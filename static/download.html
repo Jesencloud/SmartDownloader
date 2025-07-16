@@ -48,7 +48,7 @@
         }
 
         body.dark-mode .resolution-option {
-            background-color: #374151;
+            background-color: #1a1a1a; /* Changed to match dark mode main page background */
             border-color: #4b5563;
             color: #ffffff;
         }
@@ -81,6 +81,46 @@
 
         body.dark-mode .dark-mode-toggle:hover {
             background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Language Selector Styles */
+        .language-toggle {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .language-toggle:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode .language-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .language-menu {
+            min-width: 120px;
+        }
+
+        .language-menu.hidden {
+            display: none;
+        }
+
+        body.dark-mode .language-menu {
+            background-color: #2d2d2d;
+            border-color: #404040;
+        }
+
+        body.dark-mode .language-option {
+            color: #ffffff;
+        }
+
+        body.dark-mode .language-option:hover {
+            background-color: #404040;
         }
 
         header {
@@ -148,6 +188,9 @@
 
         .resolution-section {
             margin-bottom: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Centers children (title and grid) horizontally */
         }
 
         .section-title {
@@ -155,11 +198,13 @@
             font-weight: 600;
             color: #1f2937;
             margin-bottom: 1rem;
+            text-align: center; /* Added for centering the title */
         }
 
         .resolution-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Centers the resolution options horizontally within the grid */
             gap: 1rem;
             margin-bottom: 2rem;
         }
@@ -174,8 +219,12 @@
             padding: 1rem;
             cursor: pointer;
             transition: all 0.2s ease;
-            background: white;
-            text-align: center;
+            background-color: #f3f4f6; /* Changed to match main page background */
+            display: flex;
+            justify-content: center; /* Centers the parameters within the option */
+            gap: 1rem;
+            text-align: center; /* Fallback for text centering */
+            width: 250px; /* Added fixed width for better centering control */
         }
 
         .resolution-option:hover {
@@ -324,6 +373,14 @@
                     <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
                 </div>
                 <div class="header-right flex items-center">
+                    <!-- Language Selector -->
+                    <div class="relative mr-4">
+                        <button id="languageToggle" class="language-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌍</button>
+                        <div id="languageMenu" class="language-menu absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 hidden">
+                            <button class="language-option block w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors" data-lang="zh">中文简体</button>
+                            <button class="language-option block w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors" data-lang="en">English</button>
+                        </div>
+                    </div>
                     <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4">返回主页</a>
                     <button id="darkModeToggle" class="dark-mode-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌙</button>
                 </div>
@@ -355,15 +412,8 @@
 
             <!-- Main Content -->
             <div id="mainContent" style="display: none;">
-                <!-- Video Info -->
-                <div class="video-info">
-                    <div class="video-title" id="videoTitle">视频标题</div>
-                    <div class="video-url" id="videoUrl">视频链接</div>
-                </div>
-
                 <!-- Resolution Selection -->
                 <div class="resolution-section">
-                    <h2 class="section-title">选择分辨率</h2>
                     <div class="resolution-grid" id="resolutionGrid">
                         <!-- 分辨率选项将通过JavaScript动态添加 -->
                     </div>
@@ -383,312 +433,7 @@
         </div>
     </div>
 
-    <script>
-        // Dark mode functionality
-        function initializeDarkMode() {
-            const darkModeToggle = document.getElementById('darkModeToggle');
-            const body = document.body;
-            
-            if (!darkModeToggle) {
-                console.error('Dark mode toggle button not found!');
-                return;
-            }
-            
-            // Check for saved theme preference or default to light mode
-            const currentTheme = localStorage.getItem('theme') || 'light';
-            
-            if (currentTheme === 'dark') {
-                body.classList.add('dark-mode');
-                darkModeToggle.textContent = '☀️';
-            } else {
-                darkModeToggle.textContent = '🌙';
-            }
-            
-            // Toggle dark mode
-            darkModeToggle.addEventListener('click', () => {
-                body.classList.toggle('dark-mode');
-                
-                if (body.classList.contains('dark-mode')) {
-                    darkModeToggle.textContent = '☀️';
-                    localStorage.setItem('theme', 'dark');
-                } else {
-                    darkModeToggle.textContent = '🌙';
-                    localStorage.setItem('theme', 'light');
-                }
-            });
-        }
-
-        // 全局变量
-        let selectedResolution = null;
-        let selectedFormatId = null;
-        let videoData = null;
-
-        // 安全的文件名清理函数
-        function sanitizeFilename(filename) {
-            if (!filename) return 'untitled';
-            
-            // 移除或替换危险字符
-            const cleaned = filename
-                .replace(/[<>:"/\\|?*\x00-\x1F\x7F-\x9F]/g, '_')  // 替换非法字符
-                .replace(/^\./g, '_')                              // 不能以点开头
-                .replace(/\s+/g, '_')                             // 替换空格为下划线
-                .replace(/_{2,}/g, '_')                           // 合并多个下划线
-                .replace(/^_+|_+$/g, '')                          // 移除开头和结尾的下划线
-                .substring(0, 200);                               // 限制长度
-            
-            // 确保文件名不为空
-            return cleaned || 'untitled';
-        }
-
-        // 生成安全的文件名
-        function generateSafeFilename(title, resolution, type) {
-            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-            const extension = type === 'video' ? 'mp4' : 'mp3';
-            const cleanTitle = sanitizeFilename(title);
-            const cleanResolution = sanitizeFilename(resolution);
-            
-            return `${cleanTitle}_${cleanResolution}_${timestamp}.${extension}`;
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            // Initialize dark mode
-            initializeDarkMode();
-            
-            // 获取URL参数
-            const urlParams = new URLSearchParams(window.location.search);
-            const videoUrl = urlParams.get('url');
-            const downloadType = urlParams.get('type') || 'video';
-            
-            if (!videoUrl) {
-                showError('缺少视频URL参数');
-                return;
-            }
-            
-            // 显示视频URL
-            document.getElementById('videoUrl').textContent = videoUrl;
-            
-            // 获取真实的视频信息
-            fetchVideoInfo(videoUrl, downloadType);
-            
-            // 下载按钮事件
-            document.getElementById('downloadButton').addEventListener('click', () => {
-                if (selectedFormatId) {
-                    startDownload();
-                }
-            });
-        });
-
-        async function fetchVideoInfo(url, type) {
-            try {
-                const response = await fetch('/video-info', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ url: url }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || '获取视频信息失败');
-                }
-
-                const videoInfo = await response.json();
-                videoData = videoInfo;
-                
-                // 更新页面标题
-                document.querySelector('.page-title').textContent = type === 'video' ? 'Download Video' : 'Download Audio';
-                
-                // 显示视频信息
-                document.getElementById('videoTitle').textContent = videoInfo.title;
-                
-                // 生成分辨率选项
-                generateResolutionOptions(videoInfo.formats, type);
-                
-                // 隐藏加载状态，显示主内容
-                document.getElementById('loadingState').style.display = 'none';
-                document.getElementById('mainContent').style.display = 'block';
-                
-            } catch (error) {
-                console.error('获取视频信息失败:', error);
-                showError('获取视频信息失败: ' + error.message);
-            }
-        }
-
-        function generateResolutionOptions(formats, type) {
-            const resolutionGrid = document.getElementById('resolutionGrid');
-            resolutionGrid.innerHTML = '';
-            
-            if (formats.length === 0) {
-                resolutionGrid.innerHTML = `
-                    <div class="col-span-full text-center p-6">
-                        <p class="text-gray-500 text-lg mb-2">未找到符合条件的${type === 'video' ? '视频' : '音频'}格式</p>
-                        <p class="text-gray-400 text-sm">我们只显示有明确文件大小的MP4格式视频</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            formats.forEach(format => {
-                const optionElement = document.createElement('div');
-                optionElement.className = 'resolution-option';
-                optionElement.dataset.formatId = format.format_id;
-                optionElement.dataset.resolution = format.resolution;
-                
-                // 格式化文件大小
-                const sizeText = formatFileSize(format.filesize);
-                
-                // 构建格式描述
-                const codecInfo = format.vcodec ? ` (${format.vcodec})` : '';
-                const fpsInfo = format.fps ? ` ${format.fps}fps` : '';
-                
-                // 为非MP4格式添加标识
-                const formatLabel = format.ext.toUpperCase() + (format.ext !== 'mp4' ? ' ⚠️' : '');
-                
-                optionElement.innerHTML = `
-                    <div class="resolution-label">${format.resolution}</div>
-                    <div class="resolution-details">${formatLabel}${codecInfo}${fpsInfo}</div>
-                    <div class="resolution-details">${sizeText}</div>
-                `;
-                
-                optionElement.addEventListener('click', () => selectResolution(format.format_id, format.resolution));
-                resolutionGrid.appendChild(optionElement);
-            });
-        }
-
-        function formatFileSize(bytes) {
-            if (!bytes || bytes === 0) return '未知大小';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        function selectResolution(formatId, resolution) {
-            // 移除之前的选择
-            document.querySelectorAll('.resolution-option').forEach(option => {
-                option.classList.remove('selected');
-            });
-            
-            // 选择当前选项
-            const selectedOption = document.querySelector(`[data-format-id="${formatId}"]`);
-            if (selectedOption) {
-                selectedOption.classList.add('selected');
-                selectedFormatId = formatId;
-                selectedResolution = resolution;
-                document.getElementById('downloadButton').disabled = false;
-            }
-        }
-
-        function startDownload() {
-            const downloadButton = document.getElementById('downloadButton');
-            downloadButton.disabled = true;
-            downloadButton.innerHTML = `
-                <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
-                正在准备下载...
-            `;
-            
-            // 获取URL参数
-            const urlParams = new URLSearchParams(window.location.search);
-            const videoUrl = urlParams.get('url');
-            const downloadType = urlParams.get('type') || 'video';
-            
-            // 触发文件保存对话框
-            setTimeout(() => {
-                triggerFileDownload(videoUrl, downloadType, selectedFormatId, selectedResolution);
-            }, 1000);
-        }
-
-        function triggerFileDownload(url, type, formatId, resolution) {
-            // 检查是否支持 showSaveFilePicker API (现代浏览器)
-            if ('showSaveFilePicker' in window) {
-                triggerModernFileSave(url, type, formatId, resolution);
-            } else {
-                // 回退到传统下载方式
-                triggerTraditionalDownload(url, type, formatId, resolution);
-            }
-        }
-
-        async function triggerModernFileSave(url, type, formatId, resolution) {
-            try {
-                const filename = generateSafeFilename(videoData.title, resolution, type);
-                
-                // 使用现代文件系统访问API显示保存对话框
-                const fileHandle = await window.showSaveFilePicker({
-                    suggestedName: filename,
-                    types: [{
-                        description: type === 'video' ? 'Video files' : 'Audio files',
-                        accept: type === 'video' ? { 'video/mp4': ['.mp4'] } : { 'audio/mp3': ['.mp3'] }
-                    }]
-                });
-
-                // 这里应该调用实际的下载API
-                // 模拟文件数据（实际应用中这里会是真实的文件内容）
-                const blob = new Blob([`模拟下载内容 - Format ID: ${formatId}`], { 
-                    type: type === 'video' ? 'video/mp4' : 'audio/mp3' 
-                });
-                
-                const writable = await fileHandle.createWritable();
-                await writable.write(blob);
-                await writable.close();
-                
-                alert('文件保存成功！');
-            } catch (error) {
-                if (error.name !== 'AbortError') {
-                    console.error('保存文件时出错:', error);
-                    alert('保存文件失败: ' + error.message);
-                }
-                // 如果用户取消了对话框，回退到传统下载
-                triggerTraditionalDownload(url, type, formatId, resolution);
-            } finally {
-                resetDownloadButton();
-            }
-        }
-
-        function triggerTraditionalDownload(url, type, formatId, resolution) {
-            // 创建一个临时的a标签来触发文件下载
-            const link = document.createElement('a');
-            
-            const filename = generateSafeFilename(videoData.title, resolution, type);
-            
-            // 这里应该调用实际的下载API
-            // 模拟文件数据（实际应用中这里会是真实的文件内容）
-            const blob = new Blob([`模拟下载内容 - Format ID: ${formatId}`], { 
-                type: type === 'video' ? 'video/mp4' : 'audio/mp3' 
-            });
-            const objectUrl = URL.createObjectURL(blob);
-            
-            link.href = objectUrl;
-            link.download = filename;
-            link.style.display = 'none';
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            // 清理URL对象
-            URL.revokeObjectURL(objectUrl);
-            
-            resetDownloadButton();
-            alert('文件下载已开始！请检查您的下载文件夹。');
-        }
-
-        function resetDownloadButton() {
-            const downloadButton = document.getElementById('downloadButton');
-            downloadButton.disabled = false;
-            downloadButton.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                下载选中格式
-            `;
-        }
-
-        function showError(message) {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('errorMessage').textContent = message;
-            document.getElementById('errorState').style.display = 'block';
-        }
-    </script>
+    <script type="text/javascript" src="/static/common.js"></script>
+    <script type="text/javascript" src="/static/download.js"></script>
 </body>
 </html>
