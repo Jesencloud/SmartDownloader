@@ -18,6 +18,7 @@ def test_build_combined_download_cmd_basic():
         '--ignore-config',
         '--no-warnings',
         '--no-color',
+        '--force-overwrites',
         '--progress',
         '--progress-template', '%(progress)j',
         '-f', config.downloader.ytdlp_combined_format,
