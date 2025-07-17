@@ -319,6 +319,16 @@
             .footer-right a {
                 margin-bottom: 5px;
             }
+
+            /* 在小屏幕上，为节省空间，隐藏按钮文字并缩小内边距 */
+            .paste-button span, .clear-button span {
+                display: none;
+            }
+            .paste-button, .clear-button {
+                /* 缩小内边距，让按钮更像一个方形的图标按钮 */
+                padding: 0.5rem; 
+                gap: 0;
+            }
         }
 
         h2 {
@@ -746,7 +756,7 @@
     </div>
 
     <div class="dcontainer">
-        <h2 class="font-bold text-xl">智能下载器介绍</h2>
+        <h2 class="font-bold text-xl mb-4">智能下载器介绍</h2>
         <p>
             智能下载器 – 免费高质量下载视频和音频。只需在下方输入框中粘贴视频URL，点击“提取”按钮，即可立即保存您所需分辨率的视频或音频。
         </p>
@@ -767,7 +777,7 @@
     <!-- How to download Start -->
     <section>
         <div class="dcontainer">
-            <h2 class="font-bold text-xl">如何使用智能下载器</h2>
+            <h2 class="font-bold text-xl mb-4">如何使用智能下载器</h2>
             <p>按照以下简单步骤使用我们的工具下载视频和音频：</p>
             <div class="steps">
                 <div class="step">
@@ -793,7 +803,7 @@
 
     <!-- About Start -->
     <section class="about-us">
-        <h2 class="font-bold text-xl">关于我们</h2>
+        <h2 class="font-bold text-xl mb-4">关于我们</h2>
         <p>欢迎使用我们的智能下载器！我们提供一种简单快捷的方式来下载高质量的视频和音频。我们的目标是通过用户友好的界面和可靠的服务，让您的体验尽可能无缝。</p>
         <br>
         <p>我们的团队热衷于帮助您充分利用您的媒体体验。无论您是内容创作者、营销人员还是仅仅是爱好者，我们都会协助您获取所需的视觉和听觉内容。</p>
@@ -805,7 +815,7 @@
     <!-- faq Start -->
     <section>
         <div class="faq-container">
-            <h3 class="font-bold text-xl">常见问题</h3>
+            <h3 class="font-bold text-xl mb-4">常见问题</h3>
 
             <div class="faq-item">
                 <button class="faq-question">什么是智能下载器？</button>

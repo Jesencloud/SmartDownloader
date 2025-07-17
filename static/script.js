@@ -27,6 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentVideoData = null; // To store fetched video data
 
+    // Listen for the custom languageChanged event dispatched from common.js
+    document.addEventListener('languageChanged', () => {
+        // If video data exists, it means we are in the results view.
+        // Re-render the results to apply the new translations.
+        if (currentVideoData) {
+            renderResults(currentVideoData);
+        }
+    });
     // --- Main Event Listeners ---
     downloadVideoButton.addEventListener('click', () => startVideoAnalysis('video'));
     downloadAudioButton.addEventListener('click', () => startVideoAnalysis('audio'));
@@ -51,8 +59,19 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to fetch video info.');
+                const contentType = response.headers.get("content-type");
+                let errorMessage;
+                if (contentType && contentType.includes("application/json")) {
+                    const errorData = await response.json();
+                    errorMessage = errorData.detail || `API Error: ${response.status}`;
+                } else {
+                    // If the response isn't JSON, it's likely a server error page (e.g., from a timeout or crash)
+                    // This is exactly what happens with Live Server
+                    const serverText = await response.text();
+                    console.error("Non-JSON error response from server:", serverText);
+                    errorMessage = `${t.errorTitle} (${response.status} ${response.statusText}). The server might be busy or the request timed out.`;
+                }
+                throw new Error(errorMessage);
             }
 
             currentVideoData = await response.json();
@@ -94,10 +113,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     adjustButtonFontSize(downloadVideoButton);
-    adjustButtonFontSize(downloadAudioButton);
-    adjustButtonFontSize(backButton);
-    adjustButtonFontSize(returnHomeButton);
-    
+    adjustButtonFontSize(downloadAudioButton);    
+    adjustButtonFontSize(pasteButton);
+    adjustButtonFontSize(clearButton);
     function showErrorState(message) {
         const t = getTranslations();
         mainHeading.textContent = t.analysisFailed;
@@ -106,9 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <strong class="font-bold">${t.errorTitle}:</strong>
                 <span class="block sm:inline">${message}</span>
             </div>
-            <div class="text-center mt-4">
-                <button id="backButton" class="button">${t.returnHome}</button>
-            </div>`;
+            <div class="text-center mt-4">                
+                <button id="backButton" class="button">${t.returnHome}</button>                
+            </div>`;        
         document.getElementById('backButton').addEventListener('click', resetUI);
     }
 
@@ -177,6 +195,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>`;
 
+        // --- NEW: Adjust back button font size after it's created ---
+        const backButton = document.getElementById('backButton');
+        if (backButton) adjustButtonFontSize(backButton);
+
         document.querySelectorAll('.resolution-option').forEach(el => {
             el.addEventListener('click', () => handleDownload(el.dataset.formatId));
         });
@@ -226,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resetUI() {
+        currentVideoData = null; // 清除已存储的视频数据
         const t = getTranslations();
         mainHeading.textContent = t.mainHeading;
         // --- NEW: Restore original title font size ---

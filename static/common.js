@@ -49,6 +49,7 @@ const translations = {
         loading: '正在获取视频信息...',
         videoLoading: '你的视频正在加载中',
         audioLoading: '你的音频正在提取中',
+        parsingVideoPleaseWait: '正在解析视频，请稍候...',
         errorTitle: '获取视频信息失败',
         returnHome: '返回主页',
         selectResolution: '选择分辨率',
@@ -115,6 +116,7 @@ const translations = {
         loading: 'Getting video information...',
         videoLoading: 'Your video is loading',
         audioLoading: 'Your audio is being extracted',
+        parsingVideoPleaseWait: 'Parsing video, please wait...',
         errorTitle: 'Failed to get video information',
         returnHome: 'Back to Home',
         selectResolution: 'Select Video Resolution',
@@ -162,8 +164,14 @@ function switchLanguage(lang) {
             }
         }
         
+        // Check if the results are currently displayed to avoid overwriting the dynamic video title.
+        const resultContainer = document.querySelector('#resultContainer');
+        const isResultsView = resultContainer && resultContainer.style.display !== 'none';
+
         // Main hero section (index.html)
-        updateIfExists('.hero-section h1', t.mainHeading);
+        if (!isResultsView) {
+            updateIfExists('.hero-section h1', t.mainHeading);
+        }
         const urlInput = document.querySelector('#videoUrl');
         if (urlInput) urlInput.placeholder = t.urlPlaceholder;
         
@@ -258,7 +266,7 @@ function switchLanguage(lang) {
         }
 
         // Download page elements (download.html)
-        updateIfExists('#loadingState p', t.loading);
+        updateIfExists('#loadingState h2', t.loading); // Corrected selector
         updateIfExists('#errorMessage', t.errorTitle);
         updateIfExists('.section-title', t.selectResolution);
         updateIfExists('#downloadButton .text', t.downloadSelected);
@@ -278,4 +286,8 @@ function switchLanguage(lang) {
     };
 
     updateTextContent();
+
+    // Dispatch a custom event so that other scripts (like script.js) can react
+    // to the language change and update any dynamic content they manage.
+    document.dispatchEvent(new CustomEvent('languageChanged'));
 }

@@ -186,6 +186,9 @@ async function fetchVideoInfo(url, type) {
         // Redirect to the new page
         window.location.href = '/result_normal';
         
+        //--- NEW: update language on content load
+        switchLanguage(window.currentLanguage);
+
     } catch (error) {
         console.error('获取视频信息失败:', error);
         console.error('Error details:', error.message, error.name, error.stack); // Added detailed error logging
