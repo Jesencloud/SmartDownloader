@@ -44,6 +44,20 @@ document.addEventListener('DOMContentLoaded', () => {
     async function startVideoAnalysis(downloadType) {
         const url = urlInput.value.trim();
         const t = getTranslations();
+
+        // --- NEW: Developer Test Mode ---
+        if (url === 'test-video' || url === 'test-audio') {
+            showLoadingState(downloadType);
+
+            // Simulate a short delay to mimic network latency
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const mockData = url === 'test-video' ? getMockVideoData() : getMockAudioData();
+            currentVideoData = mockData; // Store it for language switching
+            renderResults(mockData);
+            return; // Exit the function to prevent the real fetch
+        }
+        // --- END: Developer Test Mode ---
         if (!url) {
             alert(t.urlPlaceholder);
             return;
@@ -175,8 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const qualityText = data.download_type === 'video' ? format.resolution : format.quality;
             // --- NEW: Updated display format ---
             return `
-                <div class="resolution-option bg-blue-900 bg-opacity-50 p-4 rounded-lg flex justify-between items-center cursor-pointer hover:bg-blue-800 transition-colors" data-format-id="${format.format_id}">
-                    <div class="flex items-center">
+                <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${format.format_id}">
+                    <div class="flex-grow text-center">
                         <span class="font-semibold">${t.download} ${qualityText} ${format.ext}</span>
                     </div>
                     <div class="download-icon">
@@ -187,9 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
 
         resultContainer.innerHTML = `
-            <div class="download-container bg-gray-800 bg-opacity-40 p-6 rounded-2xl text-white">
+            <div class="download-container bg-gray-900 bg-opacity-50 p-6 rounded-2xl text-white">
                 <h3 class="text-xl font-bold mb-4">${data.download_type === 'video' ? t.selectResolution : t.selectAudioQuality}</h3>
-                <div class="resolution-grid grid grid-cols-1 md:grid-cols-2 gap-4">${optionsHTML}</div>
+                <div class="resolution-grid grid grid-cols-1 gap-4">${optionsHTML}</div>
                 <div class="text-center mt-6">
                     <button id="backButton" class="button bg-gray-600 hover:bg-gray-700">${t.returnHome}</button>
                 </div>
@@ -312,6 +326,54 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+// --- NEW: Mock Data for Developer Testing ---
+function getMockVideoData() {
+    return {
+        title: "【本地测试视频】一个非常精彩的演示视频",
+        original_url: "local-test-video",
+        download_type: "video",
+        formats: [
+            {
+                format_id: "test-vid-1080p",
+                resolution: "1920x1080",
+                vcodec: "avc1.640028",
+                acodec: "mp4a.40.2",
+                ext: "mp4",
+                fps: 60,
+            },
+            {
+                format_id: "test-vid-720p",
+                resolution: "1280x720",
+                vcodec: "avc1.4d401f",
+                acodec: "mp4a.40.2",
+                ext: "mp4",
+                fps: 30,
+            },
+            {
+                format_id: "test-vid-360p",
+                resolution: "640x360",
+                vcodec: "avc1.42c01e",
+                acodec: "mp4a.40.2",
+                ext: "mp4",
+                fps: 30,
+            }
+        ]
+    };
+}
+
+function getMockAudioData() {
+    return {
+        title: "【本地测试音频】轻松愉快的背景音乐",
+        original_url: "local-test-audio",
+        download_type: "audio",
+       formats: [
+           { format_id: "test-aud-high", quality: "高品质", ext: "m4a", abr: 128, filesize: 5 * 1024 * 1024 }, // 5MB
+           { format_id: "test-aud-medium", quality: "中等品质", ext: "m4a", abr: 96, filesize: 3.5 * 1024 * 1024 }, // 3.5MB
+           { format_id: "test-aud-low", quality: "普通品质", ext: "m4a", abr: 64, filesize: 2 * 1024 * 1024 }, // 2MB
+       ]
+   };
+}
 
 
 // --- Helper functions for dark mode and language ---
