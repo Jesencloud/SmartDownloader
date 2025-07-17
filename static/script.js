@@ -80,7 +80,24 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
         resultContainer.style.display = 'block';
     }
+    function adjustButtonFontSize(button) {
+        const maxWidth = button.offsetWidth; // Button's width
+        const textWidth = button.scrollWidth;  // Text's "ideal" width
 
+        if (textWidth > maxWidth) {
+            let currentSize = parseFloat(window.getComputedStyle(button).fontSize);
+            while (button.scrollWidth > maxWidth && currentSize > 10) { // Don't go below 10px
+                currentSize -= 1;
+                button.style.fontSize = `${currentSize}px`;
+            }
+        }
+    }
+
+    adjustButtonFontSize(downloadVideoButton);
+    adjustButtonFontSize(downloadAudioButton);
+    adjustButtonFontSize(backButton);
+    adjustButtonFontSize(returnHomeButton);
+    
     function showErrorState(message) {
         const t = getTranslations();
         mainHeading.textContent = t.analysisFailed;
