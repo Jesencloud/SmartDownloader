@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadVideoButton = document.getElementById('downloadVideoButton');
     const downloadAudioButton = document.getElementById('downloadAudioButton');
     const resultContainer = document.getElementById('resultContainer');
-    const mainHeading = document.querySelector('.hero-section h1');
+    const mainHeading = document.querySelector('.hero-section h1'); // This is fine, but for consistency let's assume it could be reused.
     const inputGroup = document.querySelector('.input-group');
     const buttonGroup = document.querySelector('.button-group');
 
@@ -69,9 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const loadingText = downloadType === 'video' ? t.videoLoading : t.audioLoading;
         
         mainHeading.textContent = loadingText;
-        // Correctly select the parent of the input container to hide it
-        const inputGroupContainer = document.querySelector('.input-group');
-        if (inputGroupContainer) inputGroupContainer.style.display = 'none';
+        if (inputGroup) inputGroup.style.display = 'none';
         
         buttonGroup.style.display = 'none';
 
@@ -216,9 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- NEW: Restore original title font size ---
         mainHeading.className = 'text-4xl md:text-5xl font-bold text-white mb-8';
         
-        // Correctly select the parent of the input container to show it
-        const inputGroupContainer = document.querySelector('.input-group');
-        if (inputGroupContainer) inputGroupContainer.style.display = 'block';
+        if (inputGroup) inputGroup.style.display = 'block';
         
         buttonGroup.style.display = 'flex';
         resultContainer.style.display = 'none';

@@ -210,7 +210,7 @@
         header {
             background-color: #f3f4f6;
             border-bottom: 1px solid #e5e7eb;
-            position: fixed;
+            position: sticky;
             top: 0;
             width: 100%;
             z-index: 1000; /* Ensure it stays on top */
@@ -243,10 +243,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 15px 20px;
+            padding: 8px 20px;
             background-color: #f2f2f2;
             border-top: 1px solid #e0e0e0;
-            font-size: 14px;
+            font-size: 12px;
         }
 
         .footer-left a,
@@ -277,7 +277,7 @@
             }
 
             footer {
-                font-size: 12px;
+                font-size: 10px;
             }
 
             .footer-left a,
@@ -334,7 +334,7 @@
         }
 
         .hero-section {
-            background: linear-gradient(135deg, #0099ff 0%, #2392d6 100%);
+            background: linear-gradient(135deg, #603bb0 0%, #2392d6 100%);
             padding: 2rem;
             border-radius: 1rem;
             margin-bottom: 2rem;
@@ -348,7 +348,7 @@
             border-radius: 1rem;
             padding: 0.25rem;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            max-width: 600px;
+            max-width: 800px;
             margin: 0 auto;
         }
 
@@ -564,7 +564,6 @@
             display: none;
             padding: 15px 20px;
             color: #5f6368;
-            font-size: 14px;
         }
 
         .faq-question::after {
@@ -575,6 +574,8 @@
 
         .faq-answer p {
             margin: 0;
+            /* 让段落继承父元素（.faq-answer）的字体大小 */
+            font-size: inherit;
         }
 
         .faq-question.active::after {
@@ -745,7 +746,7 @@
     </div>
 
     <div class="dcontainer">
-        <h2>智能下载器介绍</h2>
+        <h2 class="font-bold text-xl">智能下载器介绍</h2>
         <p>
             智能下载器 – 免费高质量下载视频和音频。只需在下方输入框中粘贴视频URL，点击“提取”按钮，即可立即保存您所需分辨率的视频或音频。
         </p>
@@ -766,7 +767,7 @@
     <!-- How to download Start -->
     <section>
         <div class="dcontainer">
-            <h2>如何使用智能下载器</h2>
+            <h2 class="font-bold text-xl">如何使用智能下载器</h2>
             <p>按照以下简单步骤使用我们的工具下载视频和音频：</p>
             <div class="steps">
                 <div class="step">
@@ -792,10 +793,10 @@
 
     <!-- About Start -->
     <section class="about-us">
-        <h2>关于我们</h2>
+        <h2 class="font-bold text-xl">关于我们</h2>
         <p>欢迎使用我们的智能下载器！我们提供一种简单快捷的方式来下载高质量的视频和音频。我们的目标是通过用户友好的界面和可靠的服务，让您的体验尽可能无缝。</p>
         <br>
-        <p>我们的团队热��于帮助您充分利用您的媒体体验。无论您是内容创作者、营销人员还是仅仅是爱好者，我们都会协助您获取所需的视觉和听觉内容。</p>
+        <p>我们的团队热衷于帮助您充分利用您的媒体体验。无论您是内容创作者、营销人员还是仅仅是爱好者，我们都会协助您获取所需的视觉和听觉内容。</p>
         <br>
         <p>感谢您的选择！</p>
     </section>
@@ -804,46 +805,46 @@
     <!-- faq Start -->
     <section>
         <div class="faq-container">
-            <h3>常见问题</h3>
+            <h3 class="font-bold text-xl">常见问题</h3>
 
             <div class="faq-item">
                 <button class="faq-question">什么是智能下载器？</button>
-                <div class="faq-answer">
+                <div class="faq-answer mt-2 text-gray-700 text-xs">
                     <p>智能下载器允许您通过简单地输入视频URL来下载视频和音频。</p>
                 </div>
             </div>
 
             <div class="faq-item">
                 <button class="faq-question">如何使用智能下载器？</button>
-                <div class="faq-answer">
+                <div class="faq-answer mt-2 text-gray-700 text-xs">
                     <p>只需将视频URL复制并粘贴到我们主页的输入框中，然后点击下载按钮。视频或音频将下载到您的设备。</p>
                 </div>
             </div>
 
             <div class="faq-item">
                 <button class="faq-question">使用此服务免费吗？</button>
-                <div class="faq-answer">
+                <div class="faq-answer mt-2 text-gray-700 text-xs">
                     <p>是的，我们的智能下载器完全免费使用。</p>
                 </div>
             </div>
 
             <div class="faq-item">
                 <button class="faq-question">我可以下载不同大小的视频或音频吗？</button>
-                <div class="faq-answer">
+                <div class="faq-answer mt-2 text-gray-700 text-xs">
                     <p>这取决于原始视频的可用格式。我们的工具会尝试获取最高质量的可用选项。</p>
                 </div>
             </div>
 
             <div class="faq-item">
                 <button class="faq-question">下载视频或音频合法吗？</button>
-                <div class="faq-answer">
+                <div class="faq-answer mt-2 text-gray-700 text-xs">
                     <p>下载视频或音频供个人使用通常是允许的，但请确保您没有侵犯任何版权或知识产权。</p>
                 </div>
             </div>
 
             <div class="faq-item">
                 <button class="faq-question">支持哪些设备？</button>
-                <div class="faq-answer">
+                <div class="faq-answer mt-2 text-gray-700 text-xs">
                     <p>我们的智能下载器兼容所有设备，包括智能手机、平板电脑和电脑。</p>
                 </div>
             </div>
