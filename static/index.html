@@ -438,6 +438,50 @@
             color: red;
         }
 
+ /* New Loading Animation Styles - With Increased Specificity */
+ .enhanced-loading-animation .loading-animation-container {
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+ }
+
+ .enhanced-loading-animation .loading-animation {
+     margin-bottom: 1rem;
+ }
+
+ .enhanced-loading-animation .line {
+     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+ }
+
+ .enhanced-loading-animation .animate-pulse {
+     animation: wave 1.2s ease-in-out infinite; /* Further shorten duration */
+ }
+
+ /* Calculate animation delays as percentages of the animation duration */
+ .enhanced-loading-animation .line {
+     --animation-duration: 1.2s; /* Match duration in .animate-pulse */
+     animation-duration: var(--animation-duration); /* Add this line */
+ }
+
+ .enhanced-loading-animation .animation-delay-100 {
+     animation-delay: calc(var(--animation-duration) * 0.1); /* 10% */
+ }
+ .enhanced-loading-animation .animation-delay-200 {
+     animation-delay: calc(var(--animation-duration) * 0.2); /* 20% */
+        }
+ .enhanced-loading-animation .animation-delay-300 {
+     animation-delay: calc(var(--animation-duration) * 0.3); /* 30% */
+        }
+ .enhanced-loading-animation .animation-delay-400 {
+     animation-delay: calc(var(--animation-duration) * 0.4); /* 40% */
+        }
+
+ @keyframes wave {
+     0%, 40%, 100% { transform: scaleY(0.4); }
+     20% { transform: scaleY(1.0); }
+ }
+ /* End New Loading Animation Styles */
+
         .button {
             display: inline-flex;
             align-items: center;
