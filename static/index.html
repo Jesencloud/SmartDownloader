@@ -679,14 +679,10 @@
                     <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
                 </div>
                 <div class="header-right flex items-center">
-                    <!-- Language Selector -->
-                    <div class="relative mr-4">
-                        <button id="languageToggle" class="language-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌍</button>
-                        <div id="languageMenu" class="language-menu absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 hidden">
-                            <button class="language-option block w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors" data-lang="zh">中文简体</button>
-                            <button class="language-option block w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors" data-lang="en">English</button>
-                        </div>
-                    </div>
+                    <!-- Language Selection as Text -->
+                    <button id="languageZh" class="language-option text-gray-700 hover:text-blue-600 transition-colors mr-2" data-lang="zh">中文简体</button>
+                    <span class="text-gray-400">|</span>
+                    <button id="languageEn" class="language-option text-gray-700 hover:text-blue-600 transition-colors ml-2" data-lang="en">English</button>
                     <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4">Home</a>
                     <button id="darkModeToggle" class="dark-mode-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌙</button>
                 </div>
@@ -854,7 +850,15 @@
         </div>
     </section>
 
-    <script>
+    <script>    
+        // Language selection event listeners
+        document.querySelectorAll('.language-option').forEach(button => {
+            button.addEventListener('click', () => {
+                switchLanguage(button.dataset.lang);
+            });
+        });
+
+        // FAQ toggle functionality
         document.querySelectorAll('.faq-question').forEach(button => {
             button.addEventListener('click', () => {
                 const answer = button.nextElementSibling;
