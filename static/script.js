@@ -99,11 +99,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showLoadingState(downloadType) {
         const t = getTranslations();
-        const loadingText = downloadType === 'video' ? t.videoLoading : t.audioLoading;
+        const loadingTextKey = downloadType === 'video' ? 'videoLoading' : 'audioLoading';
         
-        mainHeading.textContent = loadingText;
+        // Set the text directly AND set the data-translate attribute for future switches
+        mainHeading.textContent = t[loadingTextKey];
+        mainHeading.setAttribute('data-translate', loadingTextKey);
+
         if (inputGroup) inputGroup.style.display = 'none';
-        
         buttonGroup.style.display = 'none';
 
         resultContainer.innerHTML = createLoadingAnimationHTML(t.parsingVideoPleaseWait);
@@ -173,12 +175,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Find the best audio format by filesize
         const bestAudioFormat = audioFormats.reduce((best, current) => {
             return (current.filesize || 0) > (best.filesize || 0) ? current : best;
         }, audioFormats[0]);
 
-        // --- Create High Bitrate Option ---
         const highBitrateText = `${t.losslessAudio} ${bestAudioFormat.ext} ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
             <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${bestAudioFormat.format_id}">
@@ -190,8 +190,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>`;
 
-        // --- Create MP3 Compatibility Option ---
-        // We use the best format's info but request an MP3 conversion by using a special format_id
         const mp3FormatId = `mp3-conversion-${bestAudioFormat.format_id}`;
         const compatibilityText = `${t.betterCompatibility} mp3 < ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
@@ -212,14 +210,27 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        videoFormats.sort((a, b) => {
-            const aHeight = a.resolution ? parseInt(a.resolution.split('x')[1], 10) : 0;
-            const bHeight = b.resolution ? parseInt(b.resolution.split('x')[1], 10) : 0;
-            if (bHeight !== aHeight) return bHeight - aHeight;
-            return (b.fps || 0) - (a.fps || 0);
+        // Group formats by resolution and select the best quality (highest FPS) for each.
+        const bestFormatsByResolution = new Map();
+        for (const format of videoFormats) {
+            if (!format.resolution) continue;
+
+            const existing = bestFormatsByResolution.get(format.resolution);
+            if (!existing || (format.fps || 0) > (existing.fps || 0)) {
+                bestFormatsByResolution.set(format.resolution, format);
+            }
+        }
+
+        // Convert map back to an array and sort by resolution height
+        const uniqueBestFormats = Array.from(bestFormatsByResolution.values());
+        uniqueBestFormats.sort((a, b) => {
+            const aHeight = parseInt(a.resolution.split('x')[1], 10);
+            const bHeight = parseInt(b.resolution.split('x')[1], 10);
+            return bHeight - aHeight;
         });
 
-        const topFormats = videoFormats.slice(0, 3);
+        // Take the top 3 distinct resolutions
+        const topFormats = uniqueBestFormats.slice(0, 3);
 
         optionsHTML = topFormats.map(format => {
             let displayText = format.resolution;
@@ -299,10 +310,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetUI() {
     currentVideoData = null; // Clear any stored video data
 
-    // Restore the main heading's original class for proper styling
+    // Restore the main heading's original class and translation key
     const mainHeading = document.querySelector('.hero-section h1');
     if (mainHeading) {
         mainHeading.className = 'text-4xl md:text-5xl font-bold text-white mt-8 mb-8';
+        mainHeading.setAttribute('data-translate', 'mainHeading');
     }
 
     // Show the main input and buttons, hide the results container
