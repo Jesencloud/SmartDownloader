@@ -111,19 +111,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function createLoadingAnimationHTML(text) {
-     return `
-         <div class="enhanced-loading-animation">  <!-- Wrapping class -->
-             <div class="loading-animation-container text-center p-6 text-white">
-                 <div class="loading-animation flex justify-center space-x-2">
-                     <div class="line h-8 w-1 bg-white rounded-full animate-pulse"></div>
-                     <div class="line h-10 w-1 bg-white rounded-full animate-pulse animation-delay-100"></div>
-                     <div class="line h-12 w-1 bg-white rounded-full animate-pulse animation-delay-200"></div>
-                     <div class="line h-10 w-1 bg-white rounded-full animate-pulse animation-delay-300"></div>
-                     <div class="line h-8 w-1 bg-white rounded-full animate-pulse animation-delay-400"></div>
-                 </div>
-                 <p class="mt-4">${text}</p>
+ return `
+     <div class="enhanced-loading-animation">  <!-- Wrapping class -->
+         <div class="loading-animation-container text-center p-6 text-white">
+             <div class="loading-animation flex justify-center space-x-2">
+                 <div class="line h-8 w-1 bg-white rounded-full animate-pulse"></div>
+                 <div class="line h-10 w-1 bg-white rounded-full animate-pulse animation-delay-100"></div>
+                 <div class="line h-12 w-1 bg-white rounded-full animate-pulse animation-delay-200"></div>
+                 <div class="line h-10 w-1 bg-white rounded-full animate-pulse animation-delay-300"></div>
+                 <div class="line h-8 w-1 bg-white rounded-full animate-pulse animation-delay-400"></div>
              </div>
-         </div>`;
+             <p class="mt-4" data-translate="parsingVideoPleaseWait">${text}</p>
+         </div>
+     </div>`;
  }
  
     function adjustButtonFontSize(button) {
