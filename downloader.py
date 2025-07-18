@@ -327,25 +327,24 @@ class Downloader:
             raise
     
     @with_retries(max_retries=3)
-    async def download_audio_directly(self, video_url: str, file_prefix: str) -> Optional[Path]:
+    async def download_audio_directly(self, video_url: str, file_prefix: str, format_id: Optional[str] = None, to_mp3: bool = False) -> Optional[Path]:
         """
-        直接下载音频文件。
+        直接下载音频文件，或下载并转换为MP3。
         
         Args:
             video_url: 视频URL
             file_prefix: 文件前缀
+            format_id: 要下载的特定音频格式ID (可选)
+            to_mp3: 是否强制转换为MP3 (可选)
             
         Returns:
             下载的音频文件路径，失败返回None
-            
-        Raises:
-            DownloaderException: 下载失败
         """
         try:
-            log.info(f'开始直接下载音频: {file_prefix}')
+            log.info(f'开始下载音频: {file_prefix} (MP3: {to_mp3})')
             
             audio_cmd = self.command_builder.build_audio_download_cmd(
-                str(self.download_folder), video_url, file_prefix
+                str(self.download_folder), video_url, file_prefix, format_id=format_id, to_mp3=to_mp3
             )
             
             async with _progress_semaphore:
@@ -367,7 +366,10 @@ class Downloader:
                         video_url, audio_cmd, progress, task_id, file_prefix, timeout=1800
                     )
             
-            output_file = await self._find_output_file(file_prefix, ('.mp3', '.m4a', '.opus', '.aac', '.webm'))
+            # 查找输出文件时，如果是mp3转换，优先查找.mp3
+            expected_extensions = ('.mp3',) if to_mp3 else ('.m4a', '.opus', '.aac', '.webm')
+            output_file = await self._find_output_file(file_prefix, expected_extensions)
+
             if output_file and await self.file_processor.verify_file_integrity(output_file):
                 log.info(f'音频下载成功: {output_file.name}')
                 return output_file

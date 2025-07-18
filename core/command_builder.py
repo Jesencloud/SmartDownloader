@@ -56,16 +56,26 @@ class CommandBuilder:
         
         return cmd
 
-    def build_audio_download_cmd(self, output_path: str, url: str, filename_prefix: str = None) -> List[str]:
+    def build_audio_download_cmd(self, output_path: str, url: str, filename_prefix: str = None, format_id: Optional[str] = None, to_mp3: bool = False) -> List[str]:
         """构建音频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
         
-        audio_format = config.downloader.ytdlp_audio_format
-        
         output_template = f"{output_path}/{filename_prefix or '%(title)s'}.%(ext)s"
         
+        if to_mp3:
+            # 如果需要转换为MP3，使用特定参数
+            cmd.extend([
+                '-f', 'bestaudio', # 选择最佳音质的源
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '0', # 0是最高质量
+            ])
+        else:
+            # 否则，使用指定的format_id或默认配置
+            audio_format = format_id or config.downloader.ytdlp_audio_format
+            cmd.extend(['-f', audio_format])
+
         cmd.extend([
-            '-f', audio_format,
             '--newline',
             '-o', output_template,
             url

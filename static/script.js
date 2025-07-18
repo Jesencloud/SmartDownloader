@@ -158,79 +158,101 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderResults(data) {
-        const t = getTranslations();
-        mainHeading.textContent = data.title;
-        // --- NEW: Adjust title font size ---
-        mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left';
+    const t = getTranslations();
+    mainHeading.textContent = data.title;
+    mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left';
 
-        const formatsToShow = data.formats.filter(f => {
-            return data.download_type === 'video' ? f.vcodec !== 'none' : f.acodec !== 'none';
-        });
+    let optionsHTML = '';
+    const headerKey = data.download_type === 'video' ? 'selectResolution' : 'selectAudioQuality';
 
-        if (formatsToShow.length === 0) {
+    if (data.download_type === 'audio') {
+        const audioFormats = data.formats.filter(f => (f.vcodec === 'none' || f.vcodec == null) && f.acodec !== 'none' && f.acodec != null);
+
+        if (audioFormats.length === 0) {
             showErrorState(t.noFormats);
             return;
         }
 
-        // --- NEW: Filter for unique resolutions ---
-        const uniqueFormats = [];
-        const seenResolutions = new Set();
-        for (const format of formatsToShow) {
-            if (!seenResolutions.has(format.resolution)) {
-                seenResolutions.add(format.resolution);
-                uniqueFormats.push(format);
-            }
-        }
-        // --- END NEW ---
+        // Find the best audio format by filesize
+        const bestAudioFormat = audioFormats.reduce((best, current) => {
+            return (current.filesize || 0) > (best.filesize || 0) ? current : best;
+        }, audioFormats[0]);
 
-        // Sort formats
-        uniqueFormats.sort((a, b) => {
-            if (data.download_type === 'video') {
-                const aHeight = a.resolution ? parseInt(a.resolution.split('x')[1]) : 0;
-                const bHeight = b.resolution ? parseInt(b.resolution.split('x')[1]) : 0;
-                if (bHeight !== aHeight) return bHeight - aHeight;
-                return (b.fps || 0) - (a.fps || 0);
-            } else {
-                return (b.abr || 0) - (a.abr || 0);
-            }
+        // --- Create High Bitrate Option ---
+        const highBitrateText = `${t.losslessAudio} ${bestAudioFormat.ext} ${formatFileSize(bestAudioFormat.filesize)}`;
+        optionsHTML += `
+            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${bestAudioFormat.format_id}">
+                <div class="flex-grow text-center">
+                    <span class="font-semibold">${highBitrateText}</span>
+                </div>
+                <div class="download-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            </div>`;
+
+        // --- Create MP3 Compatibility Option ---
+        // We use the best format's info but request an MP3 conversion by using a special format_id
+        const mp3FormatId = `mp3-conversion-${bestAudioFormat.format_id}`;
+        const compatibilityText = `${t.betterCompatibility} mp3 < ${formatFileSize(bestAudioFormat.filesize)}`;
+        optionsHTML += `
+            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${mp3FormatId}">
+                <div class="flex-grow text-center">
+                    <span class="font-semibold">${compatibilityText}</span>
+                </div>
+                <div class="download-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            </div>`;
+
+    } else { // Video logic
+        const videoFormats = data.formats.filter(f => f.vcodec !== 'none' && f.vcodec != null);
+
+        if (videoFormats.length === 0) {
+            showErrorState(t.noFormats);
+            return;
+        }
+
+        videoFormats.sort((a, b) => {
+            const aHeight = a.resolution ? parseInt(a.resolution.split('x')[1], 10) : 0;
+            const bHeight = b.resolution ? parseInt(b.resolution.split('x')[1], 10) : 0;
+            if (bHeight !== aHeight) return bHeight - aHeight;
+            return (b.fps || 0) - (a.fps || 0);
         });
 
-        // --- NEW: Keep only the top 3 ---
-        const topFormats = uniqueFormats.slice(0, 3);
+        const topFormats = videoFormats.slice(0, 3);
 
-        let optionsHTML = topFormats.map(format => {
-            const qualityText = data.download_type === 'video' ? format.resolution : format.quality;
-            // --- NEW: Updated display format ---
+        optionsHTML = topFormats.map(format => {
+            let displayText = format.resolution;
+            if (format.fps) {
+                displayText += ` ${Math.round(format.fps)}fps`;
+            }
+            
             return `
                 <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${format.format_id}">
                     <div class="flex-grow text-center">
-                        <span class="font-semibold">${t.download} ${qualityText} ${format.ext}</span>
+                        <span class="font-semibold">${t.download} ${displayText} ${format.ext}</span>
                     </div>
                     <div class="download-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                 </div>`;
-            // --- END NEW ---
         }).join('');
-
-        resultContainer.innerHTML = `
-            <div class="download-container bg-gray-900 bg-opacity-50 p-6 rounded-2xl text-white">
-                <h3 class="text-xl font-bold mb-4">${data.download_type === 'video' ? t.selectResolution : t.selectAudioQuality}</h3>
-                <div class="resolution-grid grid grid-cols-1 gap-4">${optionsHTML}</div>
-                <div class="text-center mt-6">
-                    <button id="backButton" class="button bg-gray-600 hover:bg-gray-700">${t.returnHome}</button>
-                </div>
-            </div>`;
-
-        // --- NEW: Adjust back button font size after it's created ---
-        const backButton = document.getElementById('backButton');
-        if (backButton) adjustButtonFontSize(backButton);
-
-        document.querySelectorAll('.resolution-option').forEach(el => {
-            el.addEventListener('click', () => handleDownload(el.dataset.formatId));
-        });
-        document.getElementById('backButton').addEventListener('click', resetUI);
     }
+
+    resultContainer.innerHTML = `
+        <div class="download-container bg-gray-900 bg-opacity-50 p-6 rounded-2xl text-white">
+            <h3 class="text-xl font-bold mb-4" data-translate="${headerKey}">${t[headerKey]}</h3>
+            <div class="resolution-grid grid grid-cols-1 gap-4">${optionsHTML}</div>
+            <div class="text-center mt-6">
+                <button id="backButton" class="button bg-gray-600 hover:bg-gray-700" data-translate="returnHome">${t.returnHome}</button>
+            </div>
+        </div>`;
+
+    document.querySelectorAll('.resolution-option').forEach(el => {
+        el.addEventListener('click', () => handleDownload(el.dataset.formatId));
+    });
+    document.getElementById('backButton').addEventListener('click', resetUI);
+}
     
     function handleDownload(formatId) {
         if (!currentVideoData) return;

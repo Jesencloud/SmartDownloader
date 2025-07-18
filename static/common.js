@@ -65,7 +65,9 @@ const translations = {
         audioFormats: '音频',
         analysisFailed: '解析失败',
         errorBackButton: '返回主页',
-        download: '下载'
+        download: '下载',
+        losslessAudio: '高比特率',
+        betterCompatibility: '兼容性佳'
     },
     en: {
         // From script.js
@@ -131,7 +133,9 @@ const translations = {
         audioFormats: 'audio',
         analysisFailed: 'Analysis Failed',
         errorBackButton: 'Back to Home',
-        download: 'Download'
+        download: 'Download',
+        losslessAudio: 'High Bitrate',
+        betterCompatibility: 'Better Compatibility'
     }
 };
 
