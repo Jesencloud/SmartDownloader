@@ -8,7 +8,8 @@ from typing import Literal, Dict, Any, List
 from pathlib import Path
 import subprocess
 import json
-import re
+import asyncio
+from cachetools import TTLCache, cached
 
 from .celery_app import celery_app
 from .tasks import download_video_task
@@ -21,15 +22,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 获取项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
-# 挂载 static 目录
-app.mount(
-    "/static",
-    StaticFiles(directory=BASE_DIR / "static"),
-    name="static"
-)
+# --- Cache Setup ---
+# Create a cache with a Time-To-Live (TTL) of 1 hour.
+# It will store up to 1024 recent results.
+cache = TTLCache(maxsize=1024, ttl=3600)
 
 # --- Pydantic Models ---
 
@@ -71,6 +70,32 @@ class VideoInfoRequest(BaseModel):
     url: str = Field(..., description="Video URL to analyze")
     download_type: Literal['video', 'audio'] = Field('video')
 
+# --- Helper Functions with Caching ---
+
+@cached(cache)
+def fetch_video_info_sync(url: str) -> dict:
+    """
+    This is a SYNCHRONOUS and BLOCKING function that fetches video info.
+    Its results are cached by @cached. It should be run in a thread.
+    """
+    try:
+        cmd = [
+            str(BASE_DIR / "bin" / "yt-dlp_macos"),
+            "--dump-json",
+            "--no-download",
+            "--no-playlist",
+            url
+        ]
+        process = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
+        return json.loads(process.stdout)
+    except subprocess.TimeoutExpired:
+        # Raise standard exceptions to be handled by the endpoint
+        raise TimeoutError("Request to video service timed out.")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to get video info: yt-dlp returned an error. Stderr: {e.stderr}")
+    except json.JSONDecodeError:
+        raise ValueError("Failed to parse video information from the service.")
+
 # --- API Endpoints ---
 
 @app.get("/", response_class=FileResponse)
@@ -80,77 +105,65 @@ async def read_index():
 @app.post("/video-info", response_model=VideoInfo)
 async def get_video_info(request: VideoInfoRequest):
     """
-    Fetches video information using yt-dlp and returns it as JSON.
+    Fetches video information using a cached, thread-safe helper function.
     """
     try:
-        cmd = [
-            str(BASE_DIR / "bin" / "yt-dlp_macos"),
-            "--dump-json",
-            "--no-download",
-            "--no-playlist",
-            request.url
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
-        video_data_raw = json.loads(result.stdout)
-        
-        title = video_data_raw.get('title', 'Unknown Title')
-        duration = video_data_raw.get('duration')
-        uploader = video_data_raw.get('uploader')
-        thumbnail = video_data_raw.get('thumbnail')
-        
-        formats = []
-        raw_formats = video_data_raw.get('formats', [])
-        
-        for fmt in raw_formats:
-            # Video streams
-            if fmt.get('width') and fmt.get('height'):
-                if fmt.get('ext') in ['mp4', 'webm']:
-                    formats.append(VideoFormat(
-                        format_id=fmt.get('format_id', ''),
-                        resolution=f"{fmt.get('width')}x{fmt.get('height')}",
-                        ext=fmt.get('ext'),
-                        filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
-                        quality=fmt.get('format_note', f"{fmt.get('height')}p"),
-                        fps=fmt.get('fps'),
-                        vcodec=fmt.get('vcodec'),
-                        acodec=fmt.get('acodec')
-                    ))
-            # Audio streams
-            elif fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
-                abr = fmt.get('abr')
-                quality_desc = f"{int(abr)}k" if abr else fmt.get('format_note', 'Unknown')
+        # Run the synchronous, cached function in a separate thread to avoid
+        # blocking the main FastAPI event loop.
+        video_data_raw = await asyncio.to_thread(fetch_video_info_sync, request.url)
+    except TimeoutError as e:
+        raise HTTPException(status_code=408, detail=str(e))
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected internal server error occurred: {str(e)}")
+
+    # --- Process the raw data (this part is unchanged) ---
+    title = video_data_raw.get('title', 'Unknown Title')
+    duration = video_data_raw.get('duration')
+    uploader = video_data_raw.get('uploader')
+    thumbnail = video_data_raw.get('thumbnail')
+    
+    formats = []
+    raw_formats = video_data_raw.get('formats', [])
+    
+    for fmt in raw_formats:
+        if fmt.get('width') and fmt.get('height'):
+            if fmt.get('ext') in ['mp4', 'webm']:
                 formats.append(VideoFormat(
                     format_id=fmt.get('format_id', ''),
-                    resolution=quality_desc,
+                    resolution=f"{fmt.get('width')}x{fmt.get('height')}",
                     ext=fmt.get('ext'),
                     filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
-                    quality=quality_desc,
-                    fps=None,
-                    vcodec=None,
-                    acodec=fmt.get('acodec'),
-                    abr=int(abr) if abr else None
+                    quality=fmt.get('format_note', f"{fmt.get('height')}p"),
+                    fps=fmt.get('fps'),
+                    vcodec=fmt.get('vcodec'),
+                    acodec=fmt.get('acodec')
                 ))
+        elif fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
+            abr = fmt.get('abr')
+            quality_desc = f"{int(abr)}k" if abr else fmt.get('format_note', 'Unknown')
+            formats.append(VideoFormat(
+                format_id=fmt.get('format_id', ''),
+                resolution=quality_desc,
+                ext=fmt.get('ext'),
+                filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
+                quality=quality_desc,
+                fps=None,
+                vcodec=None,
+                acodec=fmt.get('acodec'),
+                abr=int(abr) if abr else None
+            ))
 
-        return VideoInfo(
-            title=title,
-            duration=float(duration) if duration else None,
-            uploader=uploader,
-            thumbnail=thumbnail,
-            formats=formats,
-            original_url=request.url,
-            download_type=request.download_type
-        )
-
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=408, detail="Request to video service timed out.")
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=400, detail=f"Failed to get video info: {e.stderr}")
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Failed to parse video information from service.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
-
+    return VideoInfo(
+        title=title,
+        duration=float(duration) if duration else None,
+        uploader=uploader,
+        thumbnail=thumbnail,
+        formats=formats,
+        original_url=request.url,
+        download_type=request.download_type
+    )
 
 @app.post("/downloads", response_model=DownloadResponse, status_code=202)
 async def start_download(request: DownloadRequest):
