@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from celery.result import AsyncResult
 from typing import Literal, Dict, Any, List
 from pathlib import Path
+from urllib.parse import urlparse
 import subprocess
 import json
 import asyncio
@@ -13,6 +14,7 @@ from cachetools import TTLCache, cached
 
 from .celery_app import celery_app
 from .tasks import download_video_task
+from config_manager import config
 
 # --- App and Static Files Setup ---
 
@@ -107,6 +109,27 @@ async def get_video_info(request: VideoInfoRequest):
     """
     Fetches video information using a cached, thread-safe helper function.
     """
+    # --- Whitelist Enforcement ---
+    allowed_domains = config.security.allowed_domains
+    if allowed_domains:  # Only check if the list is not empty
+        try:
+            parsed_url = urlparse(request.url)
+            domain = parsed_url.netloc.lower()
+
+            # Check if the domain or any of its parent domains are in the whitelist
+            # e.g., 'music.youtube.com' should match 'youtube.com'
+            is_allowed = any(domain.endswith(allowed_domain) for allowed_domain in allowed_domains)
+
+            if not is_allowed:
+                raise HTTPException(
+                    status_code=403,  # 403 Forbidden is appropriate here
+                    detail=f"Downloads from '{parsed_url.netloc}' are not allowed. Only downloads from the following sites are permitted: {', '.join(allowed_domains)}"
+                )
+        except Exception:
+            # If URL parsing fails, let it proceed. yt-dlp will handle the invalid URL.
+            pass
+    # --- End of Whitelist Enforcement ---
+
     try:
         # Run the synchronous, cached function in a separate thread to avoid
         # blocking the main FastAPI event loop.
@@ -181,4 +204,3 @@ async def get_task_status(task_id: str):
     if isinstance(task_result.result, Exception):
         result = str(task_result.result)
     return {"task_id": task_id, "status": task_result.status, "result": result}
-

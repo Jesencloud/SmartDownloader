@@ -242,3 +242,11 @@ advanced:
   # 代理检测
   proxy_test_url: "http://httpbin.org/ip"  # 代理测试URL
   proxy_test_timeout: 10               # 代理测试超时
+
+# 安全设置
+security:
+  # 允许下载的网站域名白名单。如果列表为空，则允许所有网站。
+  allowed_domains:
+    - "x.com"
+    - "youtube.com"
+    - "bilibili.com"

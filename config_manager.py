@@ -252,6 +252,14 @@ class AdvancedConfig(BaseConfig):
     proxy_test_timeout: int = Field(default=10, gt=0, le=60, description="代理测试超时(秒)")
 
 
+class SecurityConfig(BaseConfig):
+    """安全相关配置"""
+    allowed_domains: List[str] = Field(
+        default=[],
+        description="允许下载的网站域名白名单。如果列表为空，则允许所有网站。"
+    )
+
+
 class AppConfig(BaseConfig):
     """应用完整配置"""
     folders: FoldersConfig = Field(default_factory=FoldersConfig)
@@ -262,6 +270,7 @@ class AppConfig(BaseConfig):
     ui: UIConfig = Field(default_factory=UIConfig)
     cookies: CookiesConfig = Field(default_factory=CookiesConfig)
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
 
 
 # ==================== 配置管理器 ====================

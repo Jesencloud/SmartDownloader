@@ -45,6 +45,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = urlInput.value.trim();
         const t = getTranslations();
 
+        // --- Frontend Whitelist Check ---
+        // This list should ideally be fetched from the backend to stay in sync.
+        // NOTE: This is NOT a security measure, just a user-friendly check.
+        // The real enforcement is on the backend.
+        const allowedDomains = ["x.com", "youtube.com", "bilibili.com"]; 
+        
+        if (url && allowedDomains.length > 0) {
+            try {
+                const urlHostname = new URL(url).hostname.toLowerCase();
+                const isAllowed = allowedDomains.some(domain => urlHostname.endsWith(domain));
+                
+                if (!isAllowed) {
+                    alert(`Sorry, downloads from "${urlHostname}" are not allowed by the site administrator.`);
+                    return; // Stop processing
+                }
+            } catch (e) { /* Invalid URL, let the backend handle it. */ }
+        }
+        // --- End of Frontend Whitelist Check ---
+
         // --- NEW: Developer Test Mode ---
         if (url === 'test-video' || url === 'test-audio') {
             showLoadingState(downloadType);
