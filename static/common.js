@@ -4,7 +4,6 @@ const translations = {
     zh: {
         // From script.js
         homeButton: '主页',
-        mainTitle: '智能下载器',
         mainHeading: '智能下载器',
         urlPlaceholder: '粘贴视频或播放列表URL...',
         pasteButton: '粘贴',
@@ -71,7 +70,6 @@ const translations = {
     en: {
         // From script.js
         homeButton: 'Home',
-        mainTitle: 'Smart Downloader',
         mainHeading: 'Smart Downloader',
         urlPlaceholder: 'Paste video or playlist URL...',
         pasteButton: 'Paste',
@@ -138,156 +136,42 @@ const translations = {
 };
 
 function switchLanguage(lang) {
-    // Save language preference
+    // Save language preference and set a global variable
     localStorage.setItem('language', lang);
+    window.currentLanguage = lang;
     
+    // Get the correct translation dictionary
     const t = translations[lang] || translations.zh;
     
-    // Update text content based on elements that exist on the page
-    const updateIfExists = (selector, text) => {
-        const element = document.querySelector(selector);
-        if (element) element.textContent = text;
-    };
-
-    // This function is generic and can be used by both pages
-    const updateTextContent = () => {
-        // Header
-        updateIfExists('.header-right a[href="/"]', t.homeButton);
-        
-        // Page title and meta
-        const titleElement = document.querySelector('title');
-        if (titleElement) {
-            if (window.location.pathname.includes('download.html')) {
-                titleElement.textContent = t.title;
+    // Update all elements that have a `data-translate` attribute
+    document.querySelectorAll('[data-translate]').forEach(element => {
+        const key = element.getAttribute('data-translate');
+        if (t[key]) {
+            // If the attribute is for a placeholder, update the placeholder
+            if (element.hasAttribute('data-translate-placeholder')) {
+                element.placeholder = t[key];
             } else {
-                titleElement.textContent = lang === 'en' ? 'Smart Downloader: Intelligent Video Downloader' : 'Smart Downloader: 智能下载器';
+                // Otherwise, update the text content of the element
+                element.textContent = t[key];
             }
         }
-        
-        // Check if the results are currently displayed to avoid overwriting the dynamic video title.
-        const resultContainer = document.querySelector('#resultContainer');
-        const isResultsView = resultContainer && resultContainer.style.display !== 'none';
+    });
 
-        // Main hero section (index.html)
+    // Update the page title separately
+    const titleElement = document.querySelector('title');
+    if (titleElement) {
+        // Check if we are on the main page and not in the results view
+        const resultContainer = document.getElementById('resultContainer');
+        const isResultsView = resultContainer && resultContainer.style.display !== 'none' && resultContainer.innerHTML.trim() !== '';
+        
         if (!isResultsView) {
-            updateIfExists('.hero-section h1', t.mainHeading);
+             titleElement.textContent = t.mainHeading;
         }
-        const urlInput = document.querySelector('#videoUrl');
-        if (urlInput) urlInput.placeholder = t.urlPlaceholder;
-        
-        // Buttons (index.html)
-        const pasteButtonSpan = document.querySelector('#pasteButton span');
-        if (pasteButtonSpan) pasteButtonSpan.textContent = t.pasteButton;
-        
-        const clearButtonSpan = document.querySelector('#clearButton span');
-        if (clearButtonSpan) clearButtonSpan.textContent = t.clearButton;
-        
-        const videoButton = document.querySelector('#downloadVideoButton');
-        if (videoButton) {
-            const textNode = Array.from(videoButton.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.nodeValue.trim());
-            if (textNode) textNode.nodeValue = t.videoButton;
-        }
-        
-        const audioButton = document.querySelector('#downloadAudioButton');
-        if (audioButton) {
-            const textNode = Array.from(audioButton.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.nodeValue.trim());
-            if (textNode) textNode.nodeValue = t.audioButton;
-        }
-        
-        // Introduction section (index.html)
-        const introSectionH2 = document.querySelector('.dcontainer h2');
-        if (introSectionH2) introSectionH2.textContent = t.introTitle;
-        
-        const dcontainer = document.querySelector('.dcontainer');
-        if (dcontainer) {
-            const introPs = dcontainer.querySelectorAll('p');
-            if (introPs.length >= 4) {
-                introPs[0].textContent = t.introDesc1;
-                introPs[1].textContent = t.introDesc2;
-                introPs[2].textContent = t.introDesc3;
-                introPs[3].textContent = t.introDesc4;
-            }
-        }
-        
-        // How to use section (index.html)
-        const howToSection = Array.from(document.querySelectorAll('section')).find(s => s.querySelector('h2')?.textContent.includes('如何使用') || s.querySelector('h2')?.textContent.includes('How to Use'));
-        if (howToSection) {
-            howToSection.querySelector('h2').textContent = t.howToTitle;
-            const howToContainer = howToSection.querySelector('.dcontainer');
-            if (howToContainer) {
-                howToContainer.querySelector('p').textContent = t.howToDesc;
-                const steps = howToContainer.querySelectorAll('.step p');
-                if (steps.length >= 4) {
-                    steps[0].textContent = t.step1;
-                    steps[1].textContent = t.step2;
-                    steps[2].textContent = t.step3;
-                    steps[3].textContent = t.step4;
-                }
-            }
-        }
-        
-        // About section (index.html)
-        const aboutSection = document.querySelector('.about-us');
-        if (aboutSection) {
-            aboutSection.querySelector('h2').textContent = t.aboutTitle;
-            const aboutPs = aboutSection.querySelectorAll('p');
-            if (aboutPs.length >= 3) {
-                aboutPs[0].textContent = t.aboutDesc1;
-                aboutPs[1].textContent = t.aboutDesc2;
-                aboutPs[2].textContent = t.aboutDesc3;
-            }
-        }
-        
-        // FAQ section (index.html)
-        const faqH3 = document.querySelector('.faq-container h3');
-        if (faqH3) faqH3.textContent = t.faqTitle;
-        
-        const faqItems = document.querySelectorAll('.faq-item');
-        const faqTranslations = [
-            { q: t.faq1Q, a: t.faq1A }, { q: t.faq2Q, a: t.faq2A }, { q: t.faq3Q, a: t.faq3A },
-            { q: t.faq4Q, a: t.faq4A }, { q: t.faq5Q, a: t.faq5A }, { q: t.faq6Q, a: t.faq6A }
-        ];
-        faqItems.forEach((item, index) => {
-            if (faqTranslations[index]) {
-                const question = item.querySelector('.faq-question');
-                const answer = item.querySelector('.faq-answer p');
-                if (question) question.textContent = faqTranslations[index].q;
-                if (answer) answer.textContent = faqTranslations[index].a;
-            }
-        });
-        
-        // Footer (shared)
-        const footerLinks = document.querySelectorAll('.footer-right a');
-        if (footerLinks.length >= 4) {
-            footerLinks[0].textContent = t.footerPrivacy;
-            footerLinks[1].textContent = t.footerDisclaimer;
-            footerLinks[2].textContent = t.footerAbout;
-            footerLinks[3].textContent = t.footerContact;
-        }
+    }
 
-        // Download page elements (download.html)
-        updateIfExists('#loadingState h2', t.loading); // Corrected selector
-        updateIfExists('#errorMessage', t.errorTitle);
-        updateIfExists('.section-title', t.selectResolution);
-        updateIfExists('#downloadButton .text', t.downloadSelected);
-        
-        const returnHomeLinks = document.querySelectorAll('a[href="/"]');
-        returnHomeLinks.forEach(link => {
-            if (link.textContent.includes('返回主页') || link.textContent.includes('Back to Home')) {
-                link.textContent = t.returnHome;
-            }
-        });
-
-        // Update HTML lang attribute
-        document.documentElement.setAttribute('lang', lang === 'en' ? 'en-US' : 'zh-CN');
-        
-        // Store current language for use in other functions
-        window.currentLanguage = lang;
-    };
-
-    updateTextContent();
-
-    // Dispatch a custom event so that other scripts (like script.js) can react
-    // to the language change and update any dynamic content they manage.
+    // Update the document's language attribute
+    document.documentElement.setAttribute('lang', lang === 'en' ? 'en-US' : 'zh-CN');
+    
+    // Dispatch a custom event to let other scripts know the language has changed
     document.dispatchEvent(new CustomEvent('languageChanged'));
 }

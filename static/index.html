@@ -731,14 +731,14 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center py-0.5">
                 <div class="logo">
-                    <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
+                    <a href="/" class="text-blue-600 font-bold text-2xl" data-translate="mainHeading">Smart Downloader</a>
                 </div>
                 <div class="header-right flex items-center">
                     <!-- Language Selection as Text -->
                     <button id="languageZh" class="language-option text-gray-700 hover:text-blue-600 transition-colors mr-2 text-xs" data-lang="zh">中文</button>
                     <span class="text-gray-400">|</span>
                     <button id="languageEn" class="language-option text-gray-700 hover:text-blue-600 transition-colors ml-2 text-xs" data-lang="en">English</button>
-                    <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4 text-xs">Home</a>
+                    <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4 text-xs" data-translate="homeButton">Home</a>
                     <button id="darkModeToggle" class="dark-mode-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌙</button>
                 </div>
             </div>
@@ -750,17 +750,17 @@
     <div class="hero-section">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div class="text-center">
-                <h1 class="text-4xl md:text-5xl font-bold text-white mt-8 mb-8">智能下载器</h1>
+                <h1 class="text-4xl md:text-5xl font-bold text-white mt-8 mb-8" data-translate="mainHeading">智能下载器</h1>
             </div>
             
             <div class="input-group mb-6">
                 <div class="input-container">
-                    <input type="text" id="videoUrl" name="url" placeholder="粘贴视频或播放列表URL..." required>
+                    <input type="text" id="videoUrl" name="url" placeholder="粘贴视频或播放列表URL..." data-translate="urlPlaceholder" required>
                     <button class="clear-button" type="button" id="clearButton" style="display: none;" title="清除链接并重新粘贴">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 4L4 12m0-8l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                        <span>清除</span>
+                        <span data-translate="clearButton">清除</span>
                     </button>
                     <button class="paste-button" type="button" id="pasteButton" title="从剪贴板粘贴链接">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -774,19 +774,19 @@
                                 </clipPath>
                             </defs>
                         </svg>
-                        <span>粘贴</span>
+                        <span data-translate="pasteButton">粘贴</span>
                     </button>
                 </div>
             </div>
 
             <div class="button-group flex justify-center">
-                <button type="button" id="downloadVideoButton" class="button">
+                <button type="button" id="downloadVideoButton" class="button" data-translate="videoButton">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                     提取视频
                 </button>
-                <button type="button" id="downloadAudioButton" class="button">
+                <button type="button" id="downloadAudioButton" class="button" data-translate="audioButton">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 18V5l12-2v13M9 13c0 1.105-1.12 2-2.5 2S4 14.105 4 13s1.12-2 2.5-2 2.5.895 2.5 2zm12-2c0 1.105-1.12 2-2.5 2s-2.5-.895-2.5-2 1.12-2 2.5-2 2.5.895 2.5 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
@@ -800,20 +800,20 @@
     </div>
 
     <div class="dcontainer">
-        <h2 class="font-bold text-xl mb-4">智能下载器介绍</h2>
-        <p>
+        <h2 class="font-bold text-xl mb-4" data-translate="introTitle">智能下载器介绍</h2>
+        <p data-translate="introDesc1">
             智能下载器 – 免费高质量下载视频和音频。只需在下方输入框中粘贴视频URL，点击“提取”按钮，即可立即保存您所需分辨率的视频或音频。
         </p>
         <br>
-        <p>
+        <p data-translate="introDesc2">
             如何轻松下载视频和音频？视频和音频是内容呈现的关键部分，通过引人注目的视觉和听觉吸引注意力。如果您想保存视频或音频，使用智能下载器可以轻松完成。许多工具允许您通过几次点击即可从各种平台下载内容。
         </p>
         <br>
-        <p>
+        <p data-translate="introDesc3">
             使用智能下载器非常简单。您只需粘贴视频链接，工具将立即获取并允许您在几秒钟内下载高质量的视频或音频。这非常适合内容创作者、研究人员或任何想要保存媒体内容以供个人使用的人。
         </p>
         <br>
-        <p>
+        <p data-translate="introDesc4">
             为了快速可靠地下载视频和音频，请尝试使用这款易于使用的工具。
         </p>
     </div>
@@ -821,24 +821,24 @@
     <!-- How to download Start -->
     <section>
         <div class="dcontainer">
-            <h2 class="font-bold text-xl mb-4">如何使用智能下载器</h2>
-            <p>按照以下简单步骤使用我们的工具下载视频和音频：</p>
+            <h2 class="font-bold text-xl mb-4" data-translate="howToTitle">如何使用智能下载器</h2>
+            <p data-translate="howToDesc">按照以下简单步骤使用我们的工具��载视频和音频：</p>
             <div class="steps">
                 <div class="step">
                     <span class="step-number">1</span>
-                    <p>复制您想要下载视频或音频的URL。</p>
+                    <p data-translate="step1">复制您想要下载视频或音频的URL。</p>
                 </div>
                 <div class="step">
                     <span class="step-number">2</span>
-                    <p>将URL粘贴到我们工具的输入框中。</p>
+                    <p data-translate="step2">将URL粘贴到我们工具的输入框中。</p>
                 </div>
                 <div class="step">
                     <span class="step-number">3</span>
-                    <p>点击“提取视频”或“提取音频”按钮。</p>
+                    <p data-translate="step3">点击“提取视频”或“提取音频”按钮。</p>
                 </div>
                 <div class="step">
                     <span class="step-number">4</span>
-                    <p>下载将开始，您可以在状态区域查看进度。</p>
+                    <p data-translate="step4">下载将开始，您可以在状态区域查看进度。</p>
                 </div>
             </div>
         </div>
@@ -847,59 +847,59 @@
 
     <!-- About Start -->
     <section class="about-us">
-        <h2 class="font-bold text-xl mb-4">关于我们</h2>
-        <p>欢迎使用我们的智能下载器！我们提供一种简单快捷的方式来下载高质量的视频和音频。我们的目标是通过用户友好的界面和可靠的服务，让您的体验尽可能无缝。</p>
+        <h2 class="font-bold text-xl mb-4" data-translate="aboutTitle">关于我们</h2>
+        <p data-translate="aboutDesc1">欢迎使用我们的智能下载器！我们提供一种简单快捷的方式来下载高质量的视频和音频。我们的目标是通过用户友好的界面和可靠的服务，让您的体验尽可能无缝。</p>
         <br>
-        <p>我们的团队热衷于帮助您充分利用您的媒体体验。无论您是内容创作者、营销人员还是仅仅是爱好者，我们都会协助您获取所需的视觉和听觉内容。</p>
+        <p data-translate="aboutDesc2">我们的团队热衷于帮助您充分利用您的媒体体验。无论您是内容创作者、营销人员还是仅仅是爱好者，我们都会协助您获取所需的视觉和听觉内容。</p>
         <br>
-        <p>感谢您的选择！</p>
+        <p data-translate="aboutDesc3">感谢您的选择！</p>
     </section>
     <!-- About End -->
 
     <!-- faq Start -->
     <section>
         <div class="faq-container">
-            <h3 class="font-bold text-xl mb-4">常见问题</h3>
+            <h3 class="font-bold text-xl mb-4" data-translate="faqTitle">常见问题</h3>
 
             <div class="faq-item">
-                <button class="faq-question">什么是智能下载器？</button>
+                <button class="faq-question" data-translate="faq1Q">什么是智能下载器？</button>
                 <div class="faq-answer mt-2 text-gray-700 text-xs">
-                    <p>智能下载器允许您通过简单地输入视频URL来下载视频和音频。</p>
+                    <p data-translate="faq1A">智能下载器允许您通过简单地输入视频URL来下载视频和音频。</p>
                 </div>
             </div>
 
             <div class="faq-item">
-                <button class="faq-question">如何使用智能下载器？</button>
+                <button class="faq-question" data-translate="faq2Q">如何使用智能下载器？</button>
                 <div class="faq-answer mt-2 text-gray-700 text-xs">
-                    <p>只需将视频URL复制并粘贴到我们主页的输入框中，然后点击下载按钮。视频或音频将下载到您的设备。</p>
+                    <p data-translate="faq2A">只需将视频URL复制并粘贴到我们主页的输入框中，然后点击下载按钮。视频或音频将下载到您的设备。</p>
                 </div>
             </div>
 
             <div class="faq-item">
-                <button class="faq-question">使用此服务免费吗？</button>
+                <button class="faq-question" data-translate="faq3Q">使用此服务免费吗？</button>
                 <div class="faq-answer mt-2 text-gray-700 text-xs">
-                    <p>是的，我们的智能下载器完全免费使用。</p>
+                    <p data-translate="faq3A">是的，我们的智能下载器完全免费使用。</p>
                 </div>
             </div>
 
             <div class="faq-item">
-                <button class="faq-question">我可以下载不同大小的视频或音频吗？</button>
+                <button class="faq-question" data-translate="faq4Q">我可以下载不同��小的视频或音频吗？</button>
                 <div class="faq-answer mt-2 text-gray-700 text-xs">
-                    <p>这取决于原始视频的可用格式。我们的工具会尝试获取最高质量的可用选项。</p>
+                    <p data-translate="faq4A">这取决于原始视频的可用格式。我们的工具会尝试获取最高质量的可用选项。</p>
                 </div>
             </div>
 
             <div class="faq-item">
-                <button class="faq-question">下载视频或音频合法吗？</button>
+                <button class="faq-question" data-translate="faq5Q">下载视频或音频合法吗？</button>
                 <div class="faq-answer mt-2 text-gray-700 text-xs">
-                    <p>下载视频或音频供个人使用通常是允许的，但请确保您没有侵犯任何版权或知识产权。</p>
+                    <p data-translate="faq5A">下载视频或音频供个人使用通常是允许的，但请确保您没有侵犯任何版权或知识产权。</p>
                 </div>
             </div>
 
             <div class="faq-item">
-                <button class="faq-question">支持哪些设备？</button>
+                <button class="faq-question" data-translate="faq6Q">支持哪些设备？</button>
                 <div class="faq-answer mt-2 text-gray-700 text-xs">
-                    <p>我们的智能下载器兼容所有设备，包括智能手机、平板电脑和电脑。</p>
+                    <p data-translate="faq6A">我们的智能下载器兼容所有设备，包括智能手机、平板电脑和电脑。</p>
                 </div>
             </div>
         </div>
@@ -933,10 +933,10 @@
         </div>
 
         <div class="footer-right">
-            <a href="#">隐私政策</a>
-            <a href="#">免责声明</a>
-            <a href="#">关于我们</a>
-            <a href="#">联系我们</a>
+            <a href="#" data-translate="footerPrivacy">隐私政策</a>
+            <a href="#" data-translate="footerDisclaimer">免责声明</a>
+            <a href="#" data-translate="footerAbout">关于我们</a>
+            <a href="#" data-translate="footerContact">联系我们</a>
         </div>
     </footer>
     <!-- Footer End -->

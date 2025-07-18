@@ -275,20 +275,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resetUI() {
-        currentVideoData = null; // 清除已存储的视频数据
-        const t = getTranslations();
-        mainHeading.textContent = t.mainHeading;
-        // --- NEW: Restore original title font size ---
-        mainHeading.className = 'text-4xl md:text-5xl font-bold text-white mb-8';
-        
-        if (inputGroup) inputGroup.style.display = 'block';
-        
-        buttonGroup.style.display = 'flex';
+    currentVideoData = null; // Clear any stored video data
+
+    // Restore the main heading's original class for proper styling
+    const mainHeading = document.querySelector('.hero-section h1');
+    if (mainHeading) {
+        mainHeading.className = 'text-4xl md:text-5xl font-bold text-white mt-8 mb-8';
+    }
+
+    // Show the main input and buttons, hide the results container
+    const inputGroup = document.querySelector('.input-group');
+    if (inputGroup) inputGroup.style.display = 'block';
+    
+    const buttonGroup = document.querySelector('.button-group');
+    if (buttonGroup) buttonGroup.style.display = 'flex';
+
+    const resultContainer = document.getElementById('resultContainer');
+    if (resultContainer) {
         resultContainer.style.display = 'none';
         resultContainer.innerHTML = '';
-        urlInput.value = '';
-        urlInput.dispatchEvent(new Event('input')); // Trigger input event to update button visibility
     }
+    
+    // Clear the URL input field
+    const urlInput = document.getElementById('videoUrl');
+    if (urlInput) {
+        urlInput.value = '';
+        urlInput.dispatchEvent(new Event('input')); // Trigger event to reset paste/clear buttons
+    }
+
+    // Re-apply translations for the entire page to ensure consistency
+    const lang = localStorage.getItem('language') || 'zh';
+    switchLanguage(lang);
+}
 
     function formatFileSize(bytes) {
         const t = getTranslations();

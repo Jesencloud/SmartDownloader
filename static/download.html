@@ -370,14 +370,14 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center py-3">
                 <div class="logo">
-                    <a href="/" class="text-blue-600 font-bold text-2xl">Smart Downloader</a>
+                    <a href="/" class="text-blue-600 font-bold text-2xl" data-translate="mainHeading">Smart Downloader</a>
                 </div>
                 <div class="header-right flex items-center">
                     <!-- Language Selection as Text -->
                     <button id="languageZh" class="language-option text-gray-700 hover:text-blue-600 transition-colors mr-2" data-lang="zh">中文简体</button>
                     <span class="text-gray-400">|</span>
                     <button id="languageEn" class="language-option text-gray-700 hover:text-blue-600 transition-colors ml-2" data-lang="en">English</button>
-                    <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4">返回主页</a>
+                    <a href="/" class="text-gray-700 hover:text-blue-600 transition-colors mr-4 return-home-link" data-translate="returnHome">返回主页</a>
                     <button id="darkModeToggle" class="dark-mode-toggle p-2 rounded-lg hover:bg-gray-200 transition-colors">🌙</button>
                 </div>
             </div>
@@ -388,21 +388,21 @@
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="download-container">
-            <h1 class="page-title">Download Video</h1>
+            <h1 class="page-title" data-translate="title">Download Video</h1>
             
             <!-- Loading State -->
             <div id="loadingState" class="loading-state">
                 <div class="spinner"></div>
-                <p>正在获取视频信息...</p>
+                <p data-translate="loading">正在获取视频信息...</p>
             </div>
 
             <!-- Error State -->
             <div id="errorState" style="display: none;">
                 <div class="error-message">
-                    <p id="errorMessage">获取视频信息失败</p>
+                    <p id="errorMessage" data-translate="errorTitle">获取视频信息失败</p>
                 </div>
                 <div class="action-buttons">
-                    <a href="/" class="btn btn-secondary">返回主页</a>
+                    <a href="/" class="btn btn-secondary return-home-link" data-translate="returnHome">返回主页</a>
                 </div>
             </div>
 
@@ -417,12 +417,12 @@
 
                 <!-- Action Buttons -->
                 <div class="action-buttons">
-                    <a href="/" class="btn btn-secondary">返回主页</a>
+                    <a href="/" class="btn btn-secondary return-home-link" data-translate="returnHome">返回主页</a>
                     <button id="downloadButton" class="btn btn-primary" disabled>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        下载选中格式
+                        <span class="text" data-translate="downloadSelected">下载选中格式</span>
                     </button>
                 </div>
             </div>
