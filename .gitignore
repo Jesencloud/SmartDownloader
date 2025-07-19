@@ -14,6 +14,7 @@ __pycache__/
 # Python virtual environment
 venv/
 .venv/
+.direnv/
 
 # Distribution / packaging
 build/
@@ -99,3 +100,4 @@ venv/
 .cache
 nosetests.xml
 
+dump.rdb

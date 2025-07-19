@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // This list should ideally be fetched from the backend to stay in sync.
         // NOTE: This is NOT a security measure, just a user-friendly check.
         // The real enforcement is on the backend.
-        const allowedDomains = ["x.com", "youtube.com", "bilibili.com"]; 
+        const allowedDomains = ["x.com", "youtube.com", "bilibili.com", "youtu.be"]; 
         
         if (url && allowedDomains.length > 0) {
             try {
