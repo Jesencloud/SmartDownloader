@@ -222,7 +222,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
 
     } else { // Video logic
-        const videoFormats = data.formats.filter(f => f.vcodec !== 'none' && f.vcodec != null);
+        // Filter for video formats that have video codec and are in MP4 format
+        const videoFormats = data.formats.filter(f => f.vcodec !== 'none' && f.vcodec != null && f.ext === 'mp4');
 
         if (videoFormats.length === 0) {
             showErrorState(t.noFormats);

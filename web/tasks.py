@@ -27,7 +27,12 @@ def download_video_task(self, video_url: str, download_type: str, format_id: str
         downloader = Downloader(download_folder=download_folder)
 
         if download_type == 'video':
-            output_file = await downloader.download_and_merge(video_url, file_prefix, format_id)
+            # Pass the format_id to ensure the correct video quality is downloaded
+            output_file = await downloader.download_and_merge(
+                video_url=video_url,
+                file_prefix=file_prefix,
+                format_id=format_id if format_id != 'best' else None
+            )
         elif download_type == 'audio':
             to_mp3 = False
             actual_format_id = format_id

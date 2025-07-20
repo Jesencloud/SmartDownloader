@@ -12,8 +12,9 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 
 from rich.console import Console
 from rich.progress import (
-    Progress, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn,
-    DownloadColumn, TransferSpeedColumn, TaskID, Task, ProgressColumn
+    Progress, BarColumn, DownloadColumn, ProgressColumn, TaskID,
+    TextColumn, TimeElapsedColumn, TimeRemainingColumn, TransferSpeedColumn,
+    SpinnerColumn, Task
 )
 from rich.text import Text
 
@@ -272,13 +273,14 @@ class Downloader:
             except Exception as e:
                 raise e
 
-    async def download_and_merge(self, video_url: str, file_prefix: str) -> Optional[Path]:
+    async def download_and_merge(self, video_url: str, file_prefix: str, format_id: str = None) -> Optional[Path]:
         """
         下载视频和音频并合并为MP4格式。
         
         Args:
             video_url: 视频URL
             file_prefix: 文件前缀
+            format_id: 要下载的特定视频格式ID (可选)
             
         Returns:
             合并后的文件路径，失败返回None
@@ -288,75 +290,86 @@ class Downloader:
         """
         try:
             log.info(f'开始下载并合并: {file_prefix}')
+            log.info(f'视频URL: {video_url}')
+            log.info(f'格式ID: {format_id if format_id else "默认格式"}')
             
+            # 构建下载命令，确保包含视频和音频流
             download_cmd, _ = self.command_builder.build_combined_download_cmd(
-                str(self.download_folder), video_url
+                str(self.download_folder), 
+                video_url, 
+                format_id=format_id
             )
+            
+            log.info(f'下载命令: {" ".join(download_cmd)}')
             
             async with _progress_semaphore:
                 with Progress(
-                    TextColumn('[progress.description]{task.description}'),
+                    TextColumn("[progress.description]{task.description}"),
                     BarColumn(),
-                    DownloadColumn(),
-                    SpeedOrFinishMarkColumn(mark="✅"),
-                    TimeElapsedColumn(),
+                    "[progress.percentage]{task.percentage:>3.0f}%",
+                    "•",
                     TimeRemainingColumn(),
+                    "•",
+                    TransferSpeedColumn(),
                     console=console
                 ) as progress:
+                    task = progress.add_task("⬇️ 下载合并视频", total=100)
                     
-                    task_id = progress.add_task(
-                        f'⬇️ 下载合并视频', total=None
+                    process = await asyncio.create_subprocess_exec(
+                        *download_cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
                     )
                     
-                    await self._execute_download_with_auth_retry(
-                        video_url, download_cmd, progress, task_id, timeout=1800
-                    )
+                    # 处理进度输出
+                    while True:
+                        output = await process.stderr.readline()
+                        if output == b'' and process.returncode is not None:
+                            break
+                            
+                        line = output.decode('utf-8', 'ignore').strip()
+                        if not line:
+                            continue
+                            
+                        # 解析下载进度
+                        if '[download]' in line and '%' in line:
+                            try:
+                                percent = float(line.split('%')[0].split()[-1])
+                                progress.update(task, completed=percent)
+                            except (ValueError, IndexError):
+                                pass
+                        
+                        log.debug(f"yt-dlp: {line}")
+                    
+                    await process.wait()
+                    
+                    if process.returncode != 0:
+                        error_output = await process.stderr.read()
+                        error_msg = f"下载失败: {error_output.decode('utf-8', 'ignore')}"
+                        log.error(error_msg)
+                        
+                        # 如果合并失败，尝试使用FFmpeg手动合并
+                        if "already been downloaded" in error_msg or "has already been downloaded" in error_msg:
+                            log.info("检测到文件已存在，尝试查找输出文件...")
+                        else:
+                            raise DownloaderException(error_msg)
+                    
+                    progress.update(task, completed=100)
             
+            # 查找下载的文件
             output_file = await self._find_output_file(file_prefix, ('.mp4', '.webm', '.mkv', '.avi'))
             if output_file and await self.file_processor.verify_file_integrity(output_file):
                 log.info(f'下载合并成功: {output_file.name}')
                 return output_file
             else:
-                raise DownloaderException(f'下载合并失败，未找到有效的输出文件')
+                # 如果自动合并失败，尝试手动合并
+                log.warning('自动合并失败，尝试手动合并...')
+                video_file = await self._find_output_file(f"{file_prefix}.f{format_id}", ('.mp4', '.webm', '.mkv'))
+                audio_file = await self._find_output_file(f"{file_prefix}.f251" or f"{file_prefix}.f140", ('.m4a', '.webm', '.mp3', '.opus'))
                 
-        except Exception as e:
-            log.error(f'下载合并过程失败: {e}', exc_info=True)
-            await self.file_processor.cleanup_temp_files(
-                str(self.download_folder / file_prefix)
-            )
-            raise
-    
-    @with_retries(max_retries=3)
-    async def download_audio_directly(self, video_url: str, file_prefix: str, format_id: Optional[str] = None, to_mp3: bool = False) -> Optional[Path]:
-        """
-        直接下载音频文件，或下载并转换为MP3。
-        
-        Args:
-            video_url: 视频URL
-            file_prefix: 文件前缀
-            format_id: 要下载的特定音频格式ID (可选)
-            to_mp3: 是否强制转换为MP3 (可选)
-            
-        Returns:
-            下载的音频文件路径，失败返回None
-        """
-        try:
-            log.info(f'开始下载音频: {file_prefix} (MP3: {to_mp3})')
-            
-            audio_cmd = self.command_builder.build_audio_download_cmd(
-                str(self.download_folder), video_url, file_prefix, format_id=format_id, to_mp3=to_mp3
-            )
-            
-            async with _progress_semaphore:
-                with Progress(
-                    TextColumn('[progress.description]{task.description}'),
-                    BarColumn(),
-                    DownloadColumn(),
-                    SpeedOrFinishMarkColumn(mark="✅"),
-                    TimeElapsedColumn(),
-                    TimeRemainingColumn(),
-                    console=console
-                ) as progress:
+                if video_file and audio_file:
+                    log.info(f'找到单独的视频和音频文件，尝试合并: {video_file.name} + {audio_file.name}')
+                    output_path = video_file.parent / f"{file_prefix}_merged.mp4"
                     
                     task_id = progress.add_task(
                         f'⬇️ 下载音频', total=None

@@ -83,18 +83,42 @@ class CommandBuilder:
         
         return cmd
 
-    def build_combined_download_cmd(self, output_path: str, url: str) -> Tuple[List[str], str]:
-        """构建合并视频+音频下载命令"""
+    def build_combined_download_cmd(self, output_path: str, url: str, format_id: str = None) -> Tuple[List[str], str]:
+        """
+        构建合并视频+音频下载命令
+        
+        Args:
+            output_path: 输出目录
+            url: 视频URL
+            format_id: 要下载的特定视频格式ID (可选)
+            
+        Returns:
+            tuple: (命令列表, 使用的格式)
+        """
         cmd = self.build_yt_dlp_base_cmd()
         
-        combined_format = config.downloader.ytdlp_combined_format
-
         output_template = f"{output_path}/%(title)s.%(ext)s"
+        
+        # 如果指定了format_id，则组合视频和音频流
+        if format_id and format_id != 'best':
+            # 格式为: 视频流ID+bestaudio
+            combined_format = f"{format_id}+bestaudio"
+            log.info(f'使用视频格式: {format_id} + 最佳音频流')
+        else:
+            # 使用默认格式，通常是 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]'
+            combined_format = config.downloader.ytdlp_combined_format
+            log.info(f'使用默认的视频+音频格式: {combined_format}')
         
         cmd.extend([
             '-f', combined_format,
             '--merge-output-format', config.downloader.ytdlp_merge_output_format,
             '--newline',
+            '--embed-subs',  # 嵌入字幕（如果可用）
+            '--embed-thumbnail',  # 嵌入缩略图
+            '--embed-metadata',  # 嵌入元数据
+            '--embed-chapters',  # 嵌入章节信息
+            '--audio-quality', '0',  # 最佳音频质量
+            '--audio-format', 'best',  # 最佳音频格式
             '-o', output_template,
             url
         ])

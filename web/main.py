@@ -151,18 +151,18 @@ async def get_video_info(request: VideoInfoRequest):
     raw_formats = video_data_raw.get('formats', [])
     
     for fmt in raw_formats:
-        if fmt.get('width') and fmt.get('height'):
-            if fmt.get('ext') in ['mp4', 'webm']:
-                formats.append(VideoFormat(
-                    format_id=fmt.get('format_id', ''),
-                    resolution=f"{fmt.get('width')}x{fmt.get('height')}",
-                    ext=fmt.get('ext'),
-                    filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
-                    quality=fmt.get('format_note', f"{fmt.get('height')}p"),
-                    fps=fmt.get('fps'),
-                    vcodec=fmt.get('vcodec'),
-                    acodec=fmt.get('acodec')
-                ))
+        # Only process video formats with MP4 extension
+        if fmt.get('width') and fmt.get('height') and fmt.get('ext') == 'mp4':
+            formats.append(VideoFormat(
+                format_id=fmt.get('format_id', ''),
+                resolution=f"{fmt.get('width')}x{fmt.get('height')}",
+                ext='mp4',  # Force MP4 extension
+                filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
+                quality=fmt.get('format_note', f"{fmt.get('height')}p"),
+                fps=fmt.get('fps'),
+                vcodec=fmt.get('vcodec'),
+                acodec=fmt.get('acodec')
+            ))
         elif fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
             abr = fmt.get('abr')
             quality_desc = f"{int(abr)}k" if abr else fmt.get('format_note', 'Unknown')
