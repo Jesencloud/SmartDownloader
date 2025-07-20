@@ -82,7 +82,7 @@
     # AI 语音识别库 (即使我们主要用命令行，也建议安装以避免导入问题)
     openai-whisper
 
-    # 字幕翻译库
+    # 字幕翻译库 （可选，因为地区限制，无法使用）
     deep-translator
     ```
 3.  打开终端，`cd` 进入您的 `SmartDownloader` 文件夹，然后运行以下命令来安装所有库：
@@ -178,10 +178,10 @@
     # 以#开头的行是注释，会被忽略
     # https://www.youtube.com/watch?v=another-video
     ```
-2.  **准备Cookies文件 (可选)**:
+2.  **准备Cookies文件**:
     如果 `urls.txt` 中的任何链接指向的是需要登录才能观看的私有内容或会员视频，请确保 `cookies.txt` 文件也放在 `SmartDownloader` 文件夹中。
 
-3.  **确认您的代理服务**:
+3.  **确认您的代理服务 (可选)**:
     确保您的代理工具（如Shadowrocket）已经开启，并处于“全局模式”(Global Mode)。根据我们之前的调试，我们知道您的代理地址和端口是 `socks5://127.0.0.1:1086`。
 
 ##### **第二步：执行命令**
@@ -189,7 +189,7 @@
 打开您的“终端”应用，`cd` 进入 `SmartDownloader` 文件夹，然后运行以下命令：
 
 ```bash
-python main.py urls.txt -b -m both --ai-subs -p socks5://127.0.0.1:1086
+python main.py urls.txt -b -m both --ai-subs
 ```
 
 ##### **第三步：命令解析**
