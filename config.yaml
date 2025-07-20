@@ -5,19 +5,20 @@
 folders:
   # 下载文件夹设置
   base_download_folder: "downloads"     # 基础下载文件夹名称
-  use_timestamp_folder: true            # 是否在下载文件夹下创建时间戳子文件夹
+  use_timestamp_folder: false           # 是否在下载文件夹下创建时间戳子文件夹（已禁用）
   timestamp_format: "%Y%m%d-%H%M%S"     # 时间戳格式
   
   # 自定义下载路径 (如果设置了此项，会忽略上面的base_download_folder设置)
-  #custom_download_path: "/Users/jiantai/Downloads"          # 例如: "/Users/username/MyDownloads"
+  # 取消下面的注释并设置为你想要的完整路径
+  # custom_download_path: "/Users/jiantai/Downloads"  # 例如: "/Users/username/MyDownloads"
   
   # 相对路径设置
   relative_to_script: true              # 路径是否相对于脚本位置 (false=相对于当前工作目录)
 
 # 下载器设置
 downloader:
-  # 保存路径
-  save_path: "downloads"        # 下载文件的保存目录
+  # 保存路径 - 使用绝对路径
+  save_path: "/Users/jiantai/Documents/script/SmartDownloader/downloads"  # 使用绝对路径
   
   # 重试机制
   max_retries: 3                # 最大重试次数

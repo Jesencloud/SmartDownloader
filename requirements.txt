@@ -5,6 +5,7 @@ rich>=13.0.0
 requests>=2.31.0
 pydantic>=2.0
 aiofiles>=23.2.1
+mutagen>=1.57.0
 
 # AI字幕功能 (可选)
 #地区显示

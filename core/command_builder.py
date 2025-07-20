@@ -83,7 +83,7 @@ class CommandBuilder:
         
         return cmd
 
-    def build_combined_download_cmd(self, output_path: str, url: str, format_id: str = None) -> Tuple[List[str], str]:
+    def build_combined_download_cmd(self, output_path: str, url: str, format_id: str = None, resolution: str = None) -> Tuple[List[str], str]:
         """
         构建合并视频+音频下载命令
         
@@ -91,35 +91,65 @@ class CommandBuilder:
             output_path: 输出目录
             url: 视频URL
             format_id: 要下载的特定视频格式ID (可选)
+            resolution: 视频分辨率 (可选，例如: '720p60')
             
         Returns:
             tuple: (命令列表, 使用的格式)
         """
         cmd = self.build_yt_dlp_base_cmd()
         
-        output_template = f"{output_path}/%(title)s.%(ext)s"
+        # 确保下载目录存在
+        output_dir = Path(output_path).resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
         
-        # 如果指定了format_id，则组合视频和音频流
+        # 使用前端提供的分辨率信息
+        if resolution and resolution != 'best':
+            # 清理分辨率字符串，移除空格和特殊字符
+            resolution = resolution.strip().replace(' ', '_')
+            # 确保分辨率以p或i结尾（如1080p或1080i）
+            if not any(resolution.lower().endswith(x) for x in ['p', 'i']):
+                resolution += 'p'  # 默认添加p作为后缀
+            resolution = f'_{resolution}'  # 添加下划线前缀
+        
+        # 构建输出模板，确保路径正确，并移除可能的多余空格
+        output_template = str(output_dir / f"%(title)s{resolution if resolution else ''}.%(ext)s").replace(' .', '.').replace(' ', '_')
+        log.info(f"Using output template: {output_template}")
+        
+        # 构建格式选择器 - 简化格式选择，优先使用mp4容器
         if format_id and format_id != 'best':
-            # 格式为: 视频流ID+bestaudio
+            # 使用指定的视频格式 + 最佳音频
             combined_format = f"{format_id}+bestaudio"
-            log.info(f'使用视频格式: {format_id} + 最佳音频流')
         else:
-            # 使用默认格式，通常是 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]'
-            combined_format = config.downloader.ytdlp_combined_format
-            log.info(f'使用默认的视频+音频格式: {combined_format}')
+            # 默认使用 mp4 容器格式
+            combined_format = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+            
+            
+        # 添加格式选择
+        cmd.extend(['-f', combined_format])
         
+        # 简化命令，移除可能导致问题的后处理步骤
         cmd.extend([
-            '-f', combined_format,
-            '--merge-output-format', config.downloader.ytdlp_merge_output_format,
+            '--merge-output-format', 'mp4',  # 强制使用mp4作为输出格式
             '--newline',
-            '--embed-subs',  # 嵌入字幕（如果可用）
-            '--embed-thumbnail',  # 嵌入缩略图
-            '--embed-metadata',  # 嵌入元数据
-            '--embed-chapters',  # 嵌入章节信息
-            '--audio-quality', '0',  # 最佳音频质量
-            '--audio-format', 'best',  # 最佳音频格式
+            '--no-embed-subs',               # 暂时禁用字幕嵌入
+            '--no-embed-thumbnail',          # 暂时禁用缩略图嵌入
+            '--no-embed-metadata',           # 暂时禁用元数据嵌入
+            '--no-embed-chapters',           # 暂时禁用章节嵌入
+            '--audio-quality', '0',
+            '--audio-format', 'best',
+            '--no-check-formats',            # 不检查格式，直接下载
+            '--no-warnings',                 # 减少警告信息
+            '--no-playlist',                 # 不下载播放列表
+            '--no-part',                     # 不生成部分下载文件
+            '--no-mtime',                    # 不设置文件修改时间
+            '--no-overwrites',               # 不覆盖已存在的文件
+            '--no-post-overwrites',          # 不覆盖后处理文件
+            '--no-keep-fragments',           # 删除下载的片段
+            '--hls-prefer-native',           # 优先使用原生HLS下载
+            '--downloader', 'ffmpeg',        # 使用ffmpeg下载器
+            '--downloader-args', 'ffmpeg:-c copy -movflags +faststart',  # 优化mp4输出
             '-o', output_template,
+            '--',  # 分隔符，防止URL被误解为参数
             url
         ])
         

@@ -198,7 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return (current.filesize || 0) > (best.filesize || 0) ? current : best;
         }, audioFormats[0]);
 
-        const highBitrateText = `${t.losslessAudio} ${bestAudioFormat.ext} ${formatFileSize(bestAudioFormat.filesize)}`;
+        // Get the actual audio format from the format info
+        const audioFormat = bestAudioFormat.ext || 'webm'; // Fallback to 'webm' if not specified
+        const highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
             <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${bestAudioFormat.format_id}">
                 <div class="flex-grow text-center">
@@ -210,7 +212,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
 
         const mp3FormatId = `mp3-conversion-${bestAudioFormat.format_id}`;
-        const compatibilityText = `${t.betterCompatibility} mp3 < ${formatFileSize(bestAudioFormat.filesize)}`;
+        // Show the original format in the compatibility option
+        const compatibilityText = `${t.betterCompatibility} (${audioFormat.toUpperCase()} → MP3) < ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
             <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${mp3FormatId}">
                 <div class="flex-grow text-center">
@@ -254,12 +257,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         optionsHTML = topFormats.map(format => {
             let displayText = format.resolution;
+            let resolutionText = format.resolution;
             if (format.fps) {
                 displayText += ` ${Math.round(format.fps)}fps`;
+                // Convert resolution to 1080p60 format if it's in 1920x1080 format
+                if (resolutionText.includes('x')) {
+                    const [width, height] = resolutionText.split('x').map(Number);
+                    resolutionText = `${height}p${Math.round(format.fps) > 30 ? Math.round(format.fps) : ''}`;
+                }
             }
             
             return `
-                <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${format.format_id}">
+                <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
+                     data-format-id="${format.format_id}"
+                     data-resolution="${resolutionText}">
                     <div class="flex-grow text-center">
                         <span class="font-semibold">${t.download} ${displayText} ${format.ext}</span>
                     </div>
@@ -290,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = getTranslations();
         const optionElement = document.querySelector(`[data-format-id="${formatId}"]`);
         const iconElement = optionElement.querySelector('.download-icon');
+        const resolution = optionElement.dataset.resolution || '';
 
         iconElement.innerHTML = `<div class="spinner border-2 border-t-2 border-gray-200 border-t-blue-400 rounded-full w-6 h-6 animate-spin"></div>`;
         optionElement.style.pointerEvents = 'none';
@@ -301,7 +313,8 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify({
                 url: currentVideoData.original_url,
                 download_type: currentVideoData.download_type,
-                format_id: formatId
+                format_id: formatId,
+                resolution: resolution  // Send the resolution to the backend
             }),
         })
         .then(response => {

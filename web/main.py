@@ -38,6 +38,7 @@ class DownloadRequest(BaseModel):
     url: str = Field(..., description="The URL of the video to download.")
     download_type: Literal['video', 'audio'] = Field('video', description="The type of content to download.")
     format_id: str = Field(..., description="The specific format ID to download.")
+    resolution: str = Field('', description="The resolution of the video (e.g., '1080p60').")
 
 class DownloadResponse(BaseModel):
     task_id: str = Field(..., description="The ID of the background download task.")
@@ -193,7 +194,8 @@ async def start_download(request: DownloadRequest):
     task = download_video_task.delay(
         video_url=request.url, 
         download_type=request.download_type,
-        format_id=request.format_id
+        format_id=request.format_id,
+        resolution=request.resolution
     )
     return {"task_id": task.id, "status": "pending"}
 
