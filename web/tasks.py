@@ -39,16 +39,30 @@ def download_video_task(self, video_url: str, download_type: str, format_id: str
         downloader = Downloader(download_folder=download_folder)
 
         if download_type == 'video':
-            file_prefix = self.request.id
             # Pass the format_id and resolution to ensure the correct video quality is downloaded
             output_file = await downloader.download_and_merge(
                 video_url=video_url,
-                file_prefix=file_prefix,
+                # 文件名将由downloader根据视频标题自动生成
+                # 任务ID作为获取标题失败时的备用名称
+                fallback_prefix=self.request.id,
                 format_id=format_id if format_id != 'best' else None,
                 resolution=resolution  # Pass the resolution to the downloader
             )
         elif download_type == 'audio':
-            audio_format = format_id if format_id else 'mp3'
+            # If the format_id contains 'conversion', it's a request to convert to a specific format.
+            # Otherwise, it's a request to download the specified original audio stream.
+            if format_id and 'conversion' in format_id:
+                # Extract the target format from the id, e.g., "mp3-conversion-..." -> "mp3"
+                audio_format = format_id.split('-')[0]
+                # Ensure it's a valid conversion format, default to mp3 otherwise.
+                if audio_format not in ['mp3', 'm4a', 'wav']:
+                    audio_format = 'mp3'
+                log.info(f"音频转换任务: url={video_url}, 请求的format_id='{format_id}', 解析的audio_format='{audio_format}'")
+            else:
+                # It's a direct download of a specific audio format ID.
+                audio_format = format_id
+                log.info(f"直接音频下载任务: url={video_url}, 使用原始format_id='{audio_format}'")
+
             output_file = await downloader.download_audio(
                 video_url=video_url,
                 audio_format=audio_format

@@ -7,121 +7,168 @@ import stat
 from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock, call
 from downloader import Downloader
-from core.exceptions import DownloaderException
+from core.exceptions import DownloaderException, AuthenticationException
 
 @pytest.mark.asyncio
-async def test_download_and_merge_shows_success_mark_on_completion(mocker, tmp_path):
+async def test_download_and_merge_success(mocker, tmp_path):
     """
-    测试: 当 download_and_merge 成功完成时，它应该触发进度条的完成状态。
-    (间接验证了 '✅' 会被显示)
+    测试: 当 download_and_merge 成功完成时,返回预期的文件路径.
     """
-    # 1. 准备测试环境和模拟对象
-    
-    # 创建模拟的下载目录和文件
+    # 1. 准备
     download_folder = tmp_path / "downloads"
-    download_folder.mkdir()
-    
-    # 创建预期的输出文件
     expected_output_file = download_folder / "test_video.mp4"
-    expected_output_file.touch()
-    
-    # 创建模拟的 Path 对象
-    mock_path = MagicMock(spec=Path)
-    mock_path.__str__.return_value = str(expected_output_file)
-    mock_path.exists.return_value = True
-    mock_path.is_file.return_value = True
-    mock_path.stat.return_value = MagicMock(st_size=1024 * 1024)  # 1MB
-    mock_path.parent = download_folder
-    
-    # 模拟 glob 查找
-    def mock_glob(self, pattern):
-        if pattern == '*':
-            return [mock_path]
-        if str(self).endswith('.mp4'):
-            return [mock_path]
-        return []
-    
-    # 模拟 rglob 查找
-    def mock_rglob(self, pattern):
-        return [mock_path]
-    
-    # 应用模拟
-    mocker.patch('pathlib.Path', autospec=True)
-    mocker.patch('pathlib.Path.glob', mock_glob)
-    mocker.patch('pathlib.Path.rglob', mock_rglob)
-    mocker.patch('pathlib.Path.mkdir')
-    mocker.patch('pathlib.Path.stat', return_value=MagicMock(st_size=1024 * 1024))
-    mocker.patch('pathlib.Path.exists', return_value=True)
-    mocker.patch('pathlib.Path.is_file', return_value=True)
-    mocker.patch('pathlib.Path.parent', return_value=download_folder)
-    mocker.patch('pathlib.Path.name', return_value="test_video.mp4")
-    mocker.patch('pathlib.Path.__str__', return_value=str(expected_output_file))
-    
-    # 模拟 os.path 函数
-    mocker.patch('os.path.getmtime', return_value=1234567890)
-    
-    # 模拟 CommandBuilder
+
+    mocker.patch.object(Path, 'mkdir')
+    mocker.patch.object(Path, 'exists', return_value=True)
+    mocker.patch.object(Path, 'is_dir', return_value=True)
+    mocker.patch.object(Path, 'stat', return_value=MagicMock(st_size=1024))
+
+    async def mock_stream_info(*args, **kwargs):
+        yield {'title': 'test_video'}
+    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
+
     mock_build_cmd = mocker.patch(
         'core.command_builder.CommandBuilder.build_combined_download_cmd',
-        return_value=(['echo', 'test'], 'test_format', mock_path)
+        return_value=(['echo', 'test'], 'test_format', expected_output_file)
     )
     
-    # 模拟 subprocess_manager
-    mock_execute = mocker.patch(
-        'core.subprocess_manager.SubprocessManager.execute_with_progress',
-        return_value=(0, "Success", "")
-    )
-    
-    # 模拟 FileProcessor
-    mocker.patch(
-        'core.file_processor.FileProcessor.verify_file_integrity',
-        return_value=True
-    )
-    mocker.patch(
-        'core.file_processor.FileProcessor.merge_to_mp4',
-        return_value=True
-    )
-    
-    # 模拟 _find_output_file 方法
-    async def mock_find_output_file(self, *args, **kwargs):
-        return mock_path
-    
-    mocker.patch(
-        'downloader.Downloader._find_output_file',
-        new=mock_find_output_file
-    )
-    
-    # 模拟 glob 查找结果
-    def mock_glob_find_files(pattern):
-        if pattern == '*':
-            return [mock_path]
-        if pattern.endswith(('.mp4', '.webm', '.mkv')):
-            return [mock_path]
-        return []
-    
-    # 确保下载目录下的文件查找返回预期结果
-    def mock_iterdir(self):
-        return [mock_path]
-    
-    mocker.patch('pathlib.Path.glob', mock_glob_find_files)
-    mocker.patch('pathlib.Path.rglob', mock_glob_find_files)
-    mocker.patch('pathlib.Path.iterdir', mock_iterdir)
-    
-    # 2. 创建 Downloader 实例并执行测试
-    downloader = Downloader(download_folder=download_folder, proxy=None)
-    
-    # 3. 执行测试
-    result = await downloader.download_and_merge(
-        "https://example.com/video",
-        "test_video"
-    )
-    
-    # 4. 验证结果
-    # 验证返回了预期的文件路径
-    assert str(result) == str(expected_output_file)
-    
-    # 验证 build_combined_download_cmd 被调用
+    mock_executor = mocker.patch.object(Downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock)
+
+    # 2. 执行
+    downloader = Downloader(download_folder=download_folder)
+    result = await downloader.download_and_merge("https://example.com/video")
+
+    # 3. 验证
+    assert result == expected_output_file
     mock_build_cmd.assert_called_once()
+    mock_executor.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_download_audio_conversion_success(mocker, tmp_path):
+    """
+    测试: 当请求音频转换(如mp3)时,使用可预测路径策略并成功.
+    """
+    # 1. 准备
+    download_folder = tmp_path / "downloads"
+    expected_audio_file = download_folder / "test_audio.mp3"
+
+    mocker.patch.object(Path, 'mkdir')
+    mocker.patch.object(Path, 'exists', return_value=True)
+    mocker.patch.object(Path, 'is_file', return_value=True)
+    mocker.patch.object(Path, 'stat', return_value=MagicMock(st_size=1024))
+
+    async def mock_stream_info(*args, **kwargs):
+        yield {'title': 'test_audio'}
+    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
+
+    mock_build_audio_cmd = mocker.patch('core.command_builder.CommandBuilder.build_audio_download_cmd', return_value=['echo', 'test'])
+    mock_executor = mocker.patch.object(Downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock)
+
+    # 2. 执行
+    downloader = Downloader(download_folder=download_folder)
+    result = await downloader.download_audio("https://example.com/audio", audio_format='mp3')
+
+    # 3. 验证
+    assert result == expected_audio_file
+    mock_build_audio_cmd.assert_called_once()
+    assert mock_build_audio_cmd.call_args.kwargs['output_template'] == str(expected_audio_file)
+    mock_executor.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_download_audio_direct_download_success(mocker, tmp_path):
+    """
+    测试: 当请求原始音频流(如format_id)时,使用stderr解析策略并成功.
+    """
+    # 1. 准备
+    download_folder = tmp_path / "downloads"
+    # yt-dlp will name this file with the correct extension
+    expected_audio_file = download_folder / "test_audio.webm"
+
+    mocker.patch.object(Path, 'mkdir')
+    # Mock exists and stat for the parsed path
+    mocker.patch.object(Path, 'exists', return_value=True)
+    mocker.patch.object(Path, 'is_file', return_value=True)
+    mocker.patch.object(Path, 'stat', return_value=MagicMock(st_size=1024))
+
+    async def mock_stream_info(*args, **kwargs):
+        yield {'title': 'test_audio'}
+    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
+
+    mock_build_audio_cmd = mocker.patch('core.command_builder.CommandBuilder.build_audio_download_cmd', return_value=['echo', 'test'])
     
-    # 验证 execute_with_progress 被调用
-    mock_execute.assert_called_once()
+    # Mock the executor to return stderr containing the destination path
+    stderr_output = f"[download] Destination: {expected_audio_file}"
+    mock_executor = mocker.patch.object(
+        Downloader, 
+        '_execute_cmd_with_auth_retry', 
+        new_callable=AsyncMock,
+        return_value=(0, "", stderr_output)
+    )
+
+    # 2. 执行 (using a format_id that is not a conversion format)
+    downloader = Downloader(download_folder=download_folder)
+    result = await downloader.download_audio("https://example.com/audio", audio_format='251')
+
+    # 3. 验证
+    assert result == expected_audio_file
+    mock_build_audio_cmd.assert_called_once()
+    # Verify the output template was generic
+    assert mock_build_audio_cmd.call_args.kwargs['output_template'] == str(download_folder / "test_audio.%(ext)s")
+    mock_executor.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_download_audio_raises_exception_on_total_failure(mocker, tmp_path):
+    """
+    测试: 当所有策略都失败时, 抛出 DownloaderException.
+    """
+    # 1. 准备
+    download_folder = tmp_path / "downloads"
+    mocker.patch.object(Path, 'mkdir')
+    mocker.patch.object(Path, 'exists', return_value=False) # All checks fail
+
+    async def mock_stream_info(*args, **kwargs):
+        yield {'title': 'test_audio'}
+    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
+
+    mocker.patch('core.command_builder.CommandBuilder.build_audio_download_cmd', return_value=['echo', 'test'])
+    # Mock executor to return empty stderr
+    mocker.patch.object(Downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock, return_value=(0, "", ""))
+    # Mock fallback search to also fail
+    mocker.patch('downloader.Downloader._find_output_file', new_callable=AsyncMock, return_value=None)
+
+    # 2. 执行 & 验证
+    downloader = Downloader(download_folder=download_folder)
+    with pytest.raises(DownloaderException, match="音频下载后未找到文件"):
+        await downloader.download_audio("https://example.com/audio", audio_format='mp3')
+
+@pytest.mark.asyncio
+async def test_auth_retry_logic_rebuilds_command(mocker, tmp_path):
+    """
+    测试: _execute_cmd_with_auth_retry 在认证失败时会重新构建命令.
+    """
+    # 1. 准备
+    downloader = Downloader(download_folder=tmp_path, cookies_file="cookies.txt")
+    
+    mocker.patch('core.cookies_manager.CookiesManager.refresh_cookies_for_url', return_value="new_cookies.txt")
+    
+    mock_execute = mocker.patch.object(
+        downloader.subprocess_manager, 
+        'execute_simple', 
+        new_callable=AsyncMock,
+        side_effect=[AuthenticationException("auth failed"), (0, "Success", "")]
+    )
+    
+    cmd_builder_func = MagicMock(return_value=['rebuilt_command'])
+
+    # 2. 执行
+    await downloader._execute_cmd_with_auth_retry(
+        initial_cmd=['initial_command'],
+        cmd_builder_func=cmd_builder_func,
+        url="https://example.com/video",
+        cmd_builder_args={}
+    )
+
+    # 3. 验证
+    assert cmd_builder_func.call_count == 1
+    assert mock_execute.call_count == 2
+    assert mock_execute.call_args_list[1].args[0] == ['rebuilt_command']

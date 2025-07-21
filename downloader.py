@@ -180,111 +180,95 @@ class Downloader:
             raise DownloaderException(f'获取播放列表信息失败: {e}') from e
     
     @with_retries(max_retries=3)
-    async def _execute_download_with_auth_retry(self, video_url: str, download_cmd: list, progress, task_id: TaskID, timeout: int = 1800):
+    async def _execute_cmd_with_auth_retry(
+        self,
+        initial_cmd: list,
+        cmd_builder_func,
+        url: str,
+        cmd_builder_args: dict,
+        progress: Optional[Progress] = None,
+        task_id: Optional[TaskID] = None,
+        timeout: int = 1800
+    ):
         """
-        执行下载命令,支持认证错误自动重试
-        
-        Args:
-            video_url: 视频URL
-            download_cmd: 下载命令
-            progress: 进度条对象
-            task_id: 任务ID
-            timeout: 超时时间
-            
-        Returns:
-            tuple: (return_code, stdout, stderr)
-            
-        Raises:
-            各种下载相关异常
-        """
-        max_auth_retries = 1  # 最多重试1次认证错误
-        auth_retry_count = 0
-        
-        while auth_retry_count <= max_auth_retries:
-            try:
-                # 使用SubprocessManager执行命令
-                return await self.subprocess_manager.execute_with_progress(
-                    download_cmd, progress, task_id, timeout=timeout
-                )
-            except AuthenticationException as e:
-                if auth_retry_count < max_auth_retries and self.cookies_manager:
-                    log.warning(f"🍪 检测到认证错误,尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
-                    
-                    # 尝试自动刷新cookies
-                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(video_url)
-                    
-                    if new_cookies_file:
-                        # 更新命令构建器的cookies文件
-                        self.command_builder.update_cookies_file(new_cookies_file)
-                        # 重新构建下载命令
-                        download_cmd, _, _ = self.command_builder.build_combined_download_cmd(
-                            str(self.download_folder), video_url
-                        )
-                        auth_retry_count += 1
-                        log.info(f"✅ Cookies已更新,重试下载...")
-                        continue
-                    else:
-                        log.error(f"❌ 无法自动更新cookies,下载失败")
-                        raise e
-                else:
-                    if not self.cookies_manager:
-                        log.error(f"❌ 未配置cookies管理器,无法自动处理认证错误")
-                    else:
-                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries})")
-                    raise e
-            except Exception as e:
-                # 其他类型的错误,直接抛出
-                raise e
+        执行命令,支持认证错误自动重试,并可选择性地处理进度.
+        这是一个通用的执行器,可以处理带或不带进度条的命令.
 
-    async def _execute_audio_download_with_auth_retry(self, video_url: str, audio_cmd: list, progress, task_id: TaskID, file_prefix: str, timeout: int = 1800):
-        """
-        执行音频下载命令,支持认证错误自动重试
-        
         Args:
-            video_url: 视频URL
-            audio_cmd: 音频下载命令
-            progress: 进度条对象
-            task_id: 任务ID
-            file_prefix: 文件前缀
-            timeout: 超时时间
-            
+            initial_cmd: 首次尝试执行的、已经构建好的命令.
+            cmd_builder_func: 用于在重试时重新构建命令的CommandBuilder方法.
+            url: 视频URL.
+            cmd_builder_args: 传递给cmd_builder_func的参数字典.
+            progress: (可选) Rich Progress对象.
+            task_id: (可选) Rich TaskID.
+            timeout: 命令执行的超时时间.
+
         Returns:
             tuple: (return_code, stdout, stderr)
+
+        Raises:
+            各种下载或执行相关的异常.
         """
         max_auth_retries = 1
         auth_retry_count = 0
         
+        cmd = initial_cmd
+
         while auth_retry_count <= max_auth_retries:
             try:
-                return await self.subprocess_manager.execute_with_progress(
-                    audio_cmd, progress, task_id, timeout=timeout
-                )
+                if progress and task_id is not None:
+                    return await self.subprocess_manager.execute_with_progress(
+                        cmd, progress, task_id, timeout=timeout
+                    )
+                else:
+                    return await self.subprocess_manager.execute_simple(
+                        cmd, timeout=timeout
+                    )
             except AuthenticationException as e:
                 if auth_retry_count < max_auth_retries and self.cookies_manager:
-                    log.warning(f"🍪 音频下载认证错误,尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
+                    log.warning(f"🍪 检测到认证错误,尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
                     
-                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(video_url)
+                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(url)
                     
                     if new_cookies_file:
                         self.command_builder.update_cookies_file(new_cookies_file)
-                        # 重新构建音频下载命令
-                        audio_cmd = self.command_builder.build_audio_download_cmd(
-                            str(self.download_folder), video_url, file_prefix
-                        )
+                        # 在重试时才重新构建命令
+                        rebuilt_cmd = cmd_builder_func(**cmd_builder_args)
+                        cmd = rebuilt_cmd[0] if isinstance(rebuilt_cmd, tuple) else rebuilt_cmd
+                        
                         auth_retry_count += 1
-                        log.info(f"✅ Cookies已更新,重试音频下载...")
+                        log.info(f"✅ Cookies已更新,重试命令...")
                         continue
                     else:
-                        log.error(f"❌ 无法自动更新cookies,音频下载失败")
+                        log.error(f"❌ 无法自动更新cookies,命令执行失败.")
                         raise e
                 else:
                     if not self.cookies_manager:
-                        log.error(f"❌ 未配置cookies管理器,无法自动处理认证错误")
-                    else:
-                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries})")
+                        log.error(f"❌ 未配置cookies管理器,无法自动处理认证错误.")
+                    elif auth_retry_count >= max_auth_retries:
+                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries}).")
                     raise e
             except Exception as e:
                 raise e
+        raise DownloaderException("命令执行失败,所有重试均已用尽.")
+
+    def _parse_path_from_stderr(self, stderr: str) -> Optional[Path]:
+        """从yt-dlp的stderr输出中解析目标文件路径。"""
+        path_patterns = [
+            re.compile(r"\[ExtractAudio\] Destination:\s*(?P<path>.+)"),
+            re.compile(r"\[download\] Destination:\s*(?P<path>.+)"),
+            re.compile(r"\[Merger\] Merging formats into \"(?P<path>.+)\""),
+        ]
+
+        log.debug(f"yt-dlp stderr for parsing:\n{stderr}")
+        for line in stderr.strip().split('\n'):
+            for pattern in path_patterns:
+                match = pattern.search(line)
+                if match:
+                    found_path = match.group('path').strip('"')
+                    log.info(f"从yt-dlp输出中解析到文件路径: {found_path}")
+                    return Path(found_path)
+        return None
 
     async def _find_output_file(self, prefix: str, extensions: tuple) -> Optional[Path]:
         """
@@ -351,7 +335,7 @@ class Downloader:
         log.warning(f'目录内容: {list(self.download_folder.glob("*"))}')
         return None
 
-    async def download_and_merge(self, video_url: str, file_prefix: str, format_id: str = None, resolution: str = '') -> Optional[Path]:
+    async def download_and_merge(self, video_url: str, format_id: str = None, resolution: str = '', fallback_prefix: Optional[str] = None) -> Optional[Path]:
         """
         下载视频和音频并合并为MP4格式.
         采用主/备（Primary/Fallback）策略以提高可靠性。
@@ -360,7 +344,7 @@ class Downloader:
         
         Args:
             video_url: 视频URL
-            file_prefix: 文件前缀
+            fallback_prefix: 获取标题失败时的备用文件前缀 (可选)
             format_id: 要下载的特定视频格式ID (可选)
             resolution: 视频分辨率 (例如: '1080p60')
 
@@ -370,19 +354,33 @@ class Downloader:
         Raises:
             DownloaderException: 下载或合并失败, 请检查日志获取详细信息
         """
+        # --- 获取标题并生成文件名 ---
+        try:
+            # 1. Get video title
+            video_info_gen = self.stream_playlist_info(video_url)
+            video_info = await anext(video_info_gen)
+            video_title = video_info.get('title', 'video')
+            file_prefix = self._sanitize_filename(video_title)
+        except (StopAsyncIteration, DownloaderException) as e:
+            log.warning(f"无法获取视频标题: {e}。将使用备用前缀。")
+            # 使用 fallback_prefix 或一个默认值
+            file_prefix = fallback_prefix or "video"
+        log.info(f'使用文件前缀: {file_prefix}')
+
         log.info(f'开始下载并合并: {file_prefix}')
         self.download_folder.mkdir(parents=True, exist_ok=True)
 
         # --- 主策略：尝试一体化下载和合并 ---
         log.info("尝试主策略：一体化下载和合并...")
         try:
-            download_cmd, _, exact_output_path = self.command_builder.build_combined_download_cmd(
-                str(self.download_folder),
-                video_url,
-                file_prefix=file_prefix,
-                format_id=format_id,
-                resolution=resolution
-            )
+            cmd_builder_args = {
+                "output_path": str(self.download_folder),
+                "url": video_url,
+                "file_prefix": file_prefix,
+                "format_id": format_id,
+                "resolution": resolution
+            }
+            download_cmd, _, exact_output_path = self.command_builder.build_combined_download_cmd(**cmd_builder_args)
 
             async with _progress_semaphore:
                 with Progress(
@@ -394,7 +392,14 @@ class Downloader:
                     console=console
                 ) as progress:
                     download_task = progress.add_task("⬇️ 下载并合并", total=100)
-                    await self._execute_download_with_auth_retry(video_url, download_cmd, progress, download_task)
+                    await self._execute_cmd_with_auth_retry(
+                        initial_cmd=download_cmd,
+                        cmd_builder_func=self.command_builder.build_combined_download_cmd,
+                        url=video_url,
+                        cmd_builder_args=cmd_builder_args,
+                        progress=progress,
+                        task_id=download_task
+                    )
 
             if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
                 log.info(f"✅ 主策略成功: {exact_output_path.name}")
@@ -418,10 +423,21 @@ class Downloader:
             async with _progress_semaphore:
                 with Progress(console=console) as progress:
                     video_task = progress.add_task("⬇️ 下载视频部分", total=100)
-                    video_cmd = self.command_builder.build_separate_video_download_cmd(
-                        str(self.download_folder), video_url, file_prefix, format_id
+                    video_cmd_args = {
+                        "output_path": str(self.download_folder),
+                        "url": video_url,
+                        "file_prefix": file_prefix,
+                        "format_id": format_id
+                    }
+                    video_cmd = self.command_builder.build_separate_video_download_cmd(**video_cmd_args)
+                    await self._execute_cmd_with_auth_retry(
+                        initial_cmd=video_cmd,
+                        cmd_builder_func=self.command_builder.build_separate_video_download_cmd,
+                        url=video_url,
+                        cmd_builder_args=video_cmd_args,
+                        progress=progress,
+                        task_id=video_task
                     )
-                    await self._execute_download_with_auth_retry(video_url, video_cmd, progress, video_task)
 
             video_file = await self._find_output_file(f"{file_prefix}.video", ('.mp4', '.webm', '.mkv'))
             if not video_file:
@@ -432,10 +448,20 @@ class Downloader:
             async with _progress_semaphore:
                 with Progress(console=console) as progress:
                     audio_task = progress.add_task("⬇️ 下载音频部分", total=100)
-                    audio_cmd = self.command_builder.build_separate_audio_download_cmd(
-                        str(self.download_folder), video_url, file_prefix
+                    audio_cmd_args = {
+                        "output_path": str(self.download_folder),
+                        "url": video_url,
+                        "file_prefix": file_prefix
+                    }
+                    audio_cmd = self.command_builder.build_separate_audio_download_cmd(**audio_cmd_args)
+                    await self._execute_cmd_with_auth_retry(
+                        initial_cmd=audio_cmd,
+                        cmd_builder_func=self.command_builder.build_separate_audio_download_cmd,
+                        url=video_url,
+                        cmd_builder_args=audio_cmd_args,
+                        progress=progress,
+                        task_id=audio_task
                     )
-                    await self._execute_download_with_auth_retry(video_url, audio_cmd, progress, audio_task)
 
             audio_file = await self._find_output_file(f"{file_prefix}.audio", ('.m4a', '.mp3', '.opus', '.aac'))
             if not audio_file:
@@ -476,22 +502,22 @@ class Downloader:
     async def download_audio(self, video_url: str, audio_format: str = 'mp3') -> Optional[Path]:
         """
         下载指定URL的音频.
-        
+
         Args:
             video_url: 视频URL
-            audio_format: 音频格式 (例如: 'mp3', 'm4a', 'best')
-            
+            audio_format: 音频格式 (例如: 'mp3', 'm4a', 'best', 或一个特定的format_id)
+
         Returns:
             下载的音频文件路径,失败返回None
-            
+
         Raises:
             DownloaderException: 下载失败
         """
-        log.info(f'开始下载音频: {video_url}')
+        log.info(f'开始下载音频: {video_url} (格式: {audio_format})')
         self.download_folder.mkdir(parents=True, exist_ok=True)
         
         try:
-            # 1. Get video title
+            # 1. 获取视频标题
             try:
                 video_info_gen = self.stream_playlist_info(video_url)
                 video_info = await anext(video_info_gen)
@@ -499,36 +525,71 @@ class Downloader:
             except (StopAsyncIteration, DownloaderException):
                 video_title = "audio" # Fallback title
 
-            # 2. Sanitize title for filename
             file_prefix = self._sanitize_filename(video_title)
             log.info(f'使用文件前缀: {file_prefix}')
 
-            # 3. Build audio download command
-            audio_cmd = self.command_builder.build_audio_download_cmd(
-                str(self.download_folder), video_url, file_prefix, audio_format
-            )
-            
-            # 4. Execute download command (no progress bar, but captures output)
-            _, stdout, _ = await self.subprocess_manager.execute_simple(
-                audio_cmd, timeout=1800 # 30 min timeout
-            )
-            
-            # 5. Get filename from stdout and check existence
-            output_filename = stdout.strip().split('\n')[-1]
-            output_file = Path(output_filename)
+            # 2. 确定是转换请求还是直接下载
+            known_conversion_formats = ['mp3', 'm4a', 'wav', 'opus', 'aac', 'flac']
+            is_conversion = audio_format in known_conversion_formats
 
-            if output_file.exists() and output_file.is_file():
+            output_file = None
+            stderr = ""
+
+            if is_conversion:
+                # --- 策略1: 转换格式，路径可预测 ---
+                exact_output_path = self.download_folder / f"{file_prefix}.{audio_format}"
+                log.info(f"转换请求。确切的输出路径将被设置为: {exact_output_path}")
+
+                cmd_args = {"url": video_url, "output_template": str(exact_output_path), "audio_format": audio_format}
+                cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
+                
+                await self._execute_cmd_with_auth_retry(
+                    initial_cmd=cmd,
+                    cmd_builder_func=self.command_builder.build_audio_download_cmd,
+                    url=video_url,
+                    cmd_builder_args=cmd_args
+                )
+                
+                if exact_output_path.exists() and exact_output_path.is_file() and exact_output_path.stat().st_size > 0:
+                    output_file = exact_output_path
+                else:
+                    log.warning(f"预期的输出文件 '{exact_output_path}' 未找到或为空。")
+
+            else:
+                # --- 策略2: 直接下载原始流，路径需要解析 ---
+                log.info(f"直接下载请求，格式ID: {audio_format}。输出路径需要从stderr解析。")
+                # 使用一个通用模板，yt-dlp会处理扩展名
+                output_template = self.download_folder / f"{file_prefix}.%(ext)s"
+                
+                cmd_args = {"url": video_url, "output_template": str(output_template), "audio_format": audio_format}
+                cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
+
+                _, _, stderr = await self._execute_cmd_with_auth_retry(
+                    initial_cmd=cmd,
+                    cmd_builder_func=self.command_builder.build_audio_download_cmd,
+                    url=video_url,
+                    cmd_builder_args=cmd_args
+                )
+                
+                parsed_path = self._parse_path_from_stderr(stderr)
+                if parsed_path and parsed_path.exists() and parsed_path.is_file() and parsed_path.stat().st_size > 0:
+                    output_file = parsed_path
+                else:
+                    log.warning("无法从yt-dlp输出中解析到有效文件路径。")
+
+            # 3. 最终验证和备用方案
+            if output_file:
                 log.info(f'✅ 音频下载成功: {output_file.name}')
                 return output_file
             else:
-                # Fallback to glob search if direct check fails
-                log.warning("Direct file check failed, falling back to glob search.")
-                extensions = ('.mp3', '.m4a', '.opus', '.webm', '.aac', '.flac', '.wav', '.ogg')
-                output_file = await self._find_output_file(file_prefix, extensions)
-                if output_file:
-                    return output_file
+                log.warning("主动策略失败。回退到文件搜索。")
+                extensions = tuple(f'.{ext}' for ext in known_conversion_formats) + ('.webm',)
+                found_file = await self._find_output_file(file_prefix, extensions)
+                if found_file:
+                    log.info(f"✅ 通过文件搜索找到音频文件: {found_file.name}")
+                    return found_file
 
-            raise DownloaderException(f'音频下载后未找到文件: {output_filename}')
+            raise DownloaderException('音频下载后未找到文件，所有策略均失败。')
                 
         except asyncio.CancelledError:
             log.warning("音频下载任务被取消")

@@ -75,25 +75,31 @@ class CommandBuilder:
         
         return cmd
 
-    def build_audio_download_cmd(self, output_path: str, url: str, filename_prefix: str = None, audio_format: str = 'mp3') -> List[str]:
-        """构建音频下载命令"""
-        cmd = self.build_yt_dlp_base_cmd_no_progress() # Use no-progress base
-        output_template = f"{output_path}/{filename_prefix or '%(title)s'}.%(ext)s"
+    def build_audio_download_cmd(self, url: str, output_template: str, audio_format: str = 'mp3') -> List[str]:
+        """
+        构建音频下载命令。
 
-        # Always extract audio for any audio download request
+        Args:
+            url: 视频URL。
+            output_template: yt-dlp的输出模板,可以是目录或完整路径。
+            audio_format: 音频格式 (例如: 'mp3', 'm4a', 'best')。
+
+        Returns:
+            list: 命令列表。
+        """
+        cmd = self.build_yt_dlp_base_cmd_no_progress()
+
+        # 始终为任何音频下载请求提取音频
         cmd.extend(['--extract-audio'])
 
-        # If the format is a known conversion format, select best audio and then convert.
+        # 如果格式是已知的转换格式，则选择最佳音频然后进行转换。
         if audio_format in ['mp3', 'm4a', 'wav', 'opus', 'aac', 'flac']:
-            cmd.extend(['-f', 'bestaudio'])
+            cmd.extend(['-f', 'bestaudio/best'])
             cmd.extend(['--audio-format', audio_format])
             cmd.extend(['--audio-quality', '0'])
-        # Otherwise, assume it's a specific format ID to be downloaded directly.
+        # 否则，假定它是要直接下载的特定格式ID。
         else:
             cmd.extend(['-f', audio_format])
-
-        # Print the final filename to stdout
-        cmd.extend(['--print', 'filename'])
 
         cmd.extend(['--newline', '-o', output_template, url])
         return cmd
