@@ -88,14 +88,24 @@ class Downloader:
 
     def _sanitize_filename(self, filename: str) -> str:
         """Sanitizes a string to be a valid filename."""
+        max_len = config.file_processing.filename_max_length
+        suffix = config.file_processing.filename_truncate_suffix
         # Remove invalid characters for filenames
         sanitized = re.sub(r'[\\/*?:"<>|]', '', filename)
         # Replace multiple spaces with a single space and strip leading/trailing whitespace
         sanitized = re.sub(r'\s+', ' ', sanitized).strip()
         # Remove any trailing dots or spaces that might cause issues before appending extensions
         sanitized = sanitized.rstrip('. ')
-        # Limit length
-        return sanitized[:100] or "untitled"
+
+        # If the string is empty after sanitization, return a default name
+        if not sanitized:
+            return "untitled"
+
+        # Truncate and add suffix if necessary
+        if len(sanitized) > max_len:
+            return sanitized[:max_len] + suffix
+        
+        return sanitized
 
 
     async def _execute_info_cmd_with_auth_retry(self, url: str, info_cmd: list, timeout: int = 60):

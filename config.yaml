@@ -129,7 +129,7 @@ downloader:
 # 文件处理设置
 file_processing:
   # 文件名处理
-  filename_max_length: 50       # 文件名最大长度
+  filename_max_length: 30       # 文件名最大长度
   filename_truncate_suffix: "..." # 文件名截断后缀
   
   # 等待时间

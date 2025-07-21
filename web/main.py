@@ -11,6 +11,7 @@ import subprocess
 import json
 import asyncio
 from cachetools import TTLCache, cached
+import sys
 
 from .celery_app import celery_app
 from .tasks import download_video_task
@@ -134,7 +135,13 @@ async def get_video_info(request: VideoInfoRequest):
     try:
         # Run the synchronous, cached function in a separate thread to avoid
         # blocking the main FastAPI event loop.
-        video_data_raw = await asyncio.to_thread(fetch_video_info_sync, request.url)
+        # Provide backward compatibility for Python < 3.9
+        if sys.version_info >= (3, 9):
+            video_data_raw = await asyncio.to_thread(fetch_video_info_sync, request.url)
+        else:
+            loop = asyncio.get_running_loop()
+            video_data_raw = await loop.run_in_executor(None, fetch_video_info_sync, request.url)
+
     except TimeoutError as e:
         raise HTTPException(status_code=408, detail=str(e))
     except (RuntimeError, ValueError) as e:
