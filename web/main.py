@@ -151,31 +151,52 @@ async def get_video_info(request: VideoInfoRequest):
     formats = []
     raw_formats = video_data_raw.get('formats', [])
     
-    for fmt in raw_formats:
-        # Only process video formats with MP4 extension
-        if fmt.get('width') and fmt.get('height') and fmt.get('ext') == 'mp4':
+    if request.download_type == 'video':
+        for fmt in raw_formats:
+            has_resolution = fmt.get('width') and fmt.get('height')
+            is_special_audio = fmt.get('vcodec') == 'audio only'
+            if has_resolution and not is_special_audio and fmt.get('ext') == 'mp4':
+                formats.append(VideoFormat(
+                    format_id=fmt.get('format_id', ''),
+                    resolution=f"{fmt.get('width')}x{fmt.get('height')}",
+                    ext='mp4',
+                    filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
+                    quality=fmt.get('format_note', f"{fmt.get('height')}p"),
+                    fps=fmt.get('fps'),
+                    vcodec=fmt.get('vcodec'),
+                    acodec=fmt.get('acodec')
+                ))
+    
+    elif request.download_type == 'audio':
+        # For audio requests, find all valid audio streams and select the single best one.
+        candidate_audio_formats = []
+        for fmt in raw_formats:
+            has_resolution = fmt.get('width') and fmt.get('height')
+            is_special_audio = fmt.get('vcodec') == 'audio only'
+            has_abr = fmt.get('abr')
+
+            if is_special_audio or (not has_resolution and has_abr):
+                candidate_audio_formats.append(fmt)
+        
+        if candidate_audio_formats:
+            # Per user request, select the best format based on ABR (audio bitrate) to ensure highest quality.
+            best_audio_format_raw = max(
+                candidate_audio_formats, 
+                key=lambda f: f.get('abr') or 0
+            )
+            
+            # Create a single, standardized VideoFormat object for the frontend
+            abr = best_audio_format_raw.get('abr')
+            quality_desc = f"{int(abr)}k" if abr else best_audio_format_raw.get('format_note', 'Unknown')
             formats.append(VideoFormat(
-                format_id=fmt.get('format_id', ''),
-                resolution=f"{fmt.get('width')}x{fmt.get('height')}",
-                ext='mp4',  # Force MP4 extension
-                filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
-                quality=fmt.get('format_note', f"{fmt.get('height')}p"),
-                fps=fmt.get('fps'),
-                vcodec=fmt.get('vcodec'),
-                acodec=fmt.get('acodec')
-            ))
-        elif fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
-            abr = fmt.get('abr')
-            quality_desc = f"{int(abr)}k" if abr else fmt.get('format_note', 'Unknown')
-            formats.append(VideoFormat(
-                format_id=fmt.get('format_id', ''),
+                format_id=best_audio_format_raw.get('format_id', ''),
                 resolution=quality_desc,
-                ext=fmt.get('ext'),
-                filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
+                ext=best_audio_format_raw.get('ext'),
+                filesize=best_audio_format_raw.get('filesize') or best_audio_format_raw.get('filesize_approx'),
                 quality=quality_desc,
                 fps=None,
-                vcodec=None,
-                acodec=fmt.get('acodec'),
+                vcodec=None,  # CRITICAL: Standardize to None for the frontend
+                acodec=best_audio_format_raw.get('acodec'),
                 abr=int(abr) if abr else None
             ))
 

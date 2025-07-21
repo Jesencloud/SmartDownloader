@@ -65,7 +65,9 @@ def download_video_task(self, video_url: str, download_type: str, format_id: str
 
             output_file = await downloader.download_audio(
                 video_url=video_url,
-                audio_format=audio_format
+                audio_format=audio_format,
+                # 将任务ID作为获取标题失败时的备用名称
+                fallback_prefix=self.request.id
             )
         else:
             raise ValueError(f"无效的下载类型: {download_type}")

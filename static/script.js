@@ -187,7 +187,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const headerKey = data.download_type === 'video' ? 'selectResolution' : 'selectAudioQuality';
 
     if (data.download_type === 'audio') {
-        const audioFormats = data.formats.filter(f => (f.vcodec === 'none' || f.vcodec == null) && f.acodec !== 'none' && f.acodec != null);
+        // The backend already classified formats as audio by setting vcodec to null.
+        // We just need to trust the backend's classification and display them.
+        // The previous stricter filter on `acodec` was incorrectly filtering out X.com audio streams.
+        const audioFormats = data.formats.filter(f => f.vcodec === 'none' || f.vcodec == null);
 
         if (audioFormats.length === 0) {
             showErrorState(t.noFormats);

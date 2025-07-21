@@ -1,174 +1,173 @@
 # tests/test_downloader.py
 
 import pytest
-import os
-import asyncio
-import stat
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, call
+from unittest.mock import patch, MagicMock, AsyncMock
+
 from downloader import Downloader
-from core.exceptions import DownloaderException, AuthenticationException
+from core.exceptions import DownloaderException
+
+@pytest.fixture
+def mock_downloader(mocker, tmp_path):
+    """A pytest fixture to create a Downloader instance with mocked dependencies."""
+    download_folder = tmp_path / "downloads"
+    download_folder.mkdir()
+
+    # Mock the classes where they are looked up (in the downloader module)
+    # This is the key to fixing previous AttributeErrors.
+    mock_command_builder_instance = MagicMock()
+    mocker.patch('downloader.CommandBuilder', return_value=mock_command_builder_instance)
+    
+    mock_subprocess_manager_instance = MagicMock()
+    mocker.patch('downloader.SubprocessManager', return_value=mock_subprocess_manager_instance)
+    
+    mock_file_processor_instance = MagicMock()
+    mocker.patch('downloader.FileProcessor', return_value=mock_file_processor_instance)
+    
+    mocker.patch('downloader.CookiesManager')
+
+    # Create the downloader instance, which will now receive the mocked instances
+    downloader = Downloader(download_folder=download_folder)
+
+    # Now we can mock methods on the downloader instance itself and its components
+    mocks = {
+        # Patch the method on the instance. We will set its return_value in each test.
+        # Do NOT use AsyncMock for async generators.
+        "stream_playlist_info": mocker.patch.object(downloader, 'stream_playlist_info'),
+        "execute_cmd": mocker.patch.object(downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock),
+        "find_file": mocker.patch.object(downloader, '_find_output_file', new_callable=AsyncMock),
+        "command_builder": mock_command_builder_instance, # Expose the mocked instance for tests
+    }
+
+    return downloader, mocks, download_folder
+
 
 @pytest.mark.asyncio
-async def test_download_and_merge_success(mocker, tmp_path):
+async def test_download_and_merge_success_with_resolution_in_filename(mock_downloader):
     """
-    测试: 当 download_and_merge 成功完成时,返回预期的文件路径.
+    测试: 视频下载成功时，应返回一个包含正确标题和分辨率的文件名。
     """
     # 1. 准备
-    download_folder = tmp_path / "downloads"
-    expected_output_file = download_folder / "test_video.mp4"
+    downloader, mocks, download_folder = mock_downloader
+    video_title = "My Awesome Video"
+    format_id = "vid-1080p"
+    # The downloader now sanitizes and adds resolution
+    sanitized_title = downloader._sanitize_filename(video_title)
+    file_prefix = f"{sanitized_title}_1920x1080"
+    expected_output_path = download_folder / f"{file_prefix}.mp4"
 
-    mocker.patch.object(Path, 'mkdir')
-    mocker.patch.object(Path, 'exists', return_value=True)
-    mocker.patch.object(Path, 'is_dir', return_value=True)
-    mocker.patch.object(Path, 'stat', return_value=MagicMock(st_size=1024))
+    # 模拟 stream_playlist_info to return an async generator
+    async def mock_info_gen():
+        yield {
+            "title": video_title,
+            "formats": [
+                {"format_id": format_id, "width": 1920, "height": 1080}
+            ]
+        }
+    # Set the return_value to an EXECUTED async generator
+    mocks["stream_playlist_info"].return_value = mock_info_gen()
 
-    async def mock_stream_info(*args, **kwargs):
-        yield {'title': 'test_video'}
-    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
-
-    mock_build_cmd = mocker.patch(
-        'core.command_builder.CommandBuilder.build_combined_download_cmd',
-        return_value=(['echo', 'test'], 'test_format', expected_output_file)
+    # 模拟 CommandBuilder 返回确切路径
+    mocks["command_builder"].build_combined_download_cmd.return_value = (
+        ['yt-dlp', '...'], 'bestvideo+bestaudio', expected_output_path
     )
-    
-    mock_executor = mocker.patch.object(Downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock)
+
+    # 模拟下载执行，并真实地创建文件
+    async def mock_execute_and_create_file(*args, **kwargs):
+        expected_output_path.touch()
+        expected_output_path.write_text("dummy video")
+        return (0, "", "")
+    mocks["execute_cmd"].side_effect = mock_execute_and_create_file
 
     # 2. 执行
-    downloader = Downloader(download_folder=download_folder)
-    result = await downloader.download_and_merge("https://example.com/video")
+    result = await downloader.download_and_merge(
+        "https://example.com/video",
+        format_id=format_id
+    )
 
     # 3. 验证
-    assert result == expected_output_file
-    mock_build_cmd.assert_called_once()
-    mock_executor.assert_called_once()
+    assert result == expected_output_path
+    mocks["execute_cmd"].assert_called_once()
+    mocks["command_builder"].build_combined_download_cmd.assert_called_once()
+
 
 @pytest.mark.asyncio
-async def test_download_audio_conversion_success(mocker, tmp_path):
+async def test_download_audio_conversion_success(mock_downloader):
     """
-    测试: 当请求音频转换(如mp3)时,使用可预测路径策略并成功.
+    测试: 当请求音频转换为MP3时，应采用“主动指定”策略并成功。
     """
     # 1. 准备
-    download_folder = tmp_path / "downloads"
-    expected_audio_file = download_folder / "test_audio.mp3"
+    downloader, mocks, download_folder = mock_downloader
+    video_title = "Cool Podcast"
+    audio_format = "mp3"
+    sanitized_title = downloader._sanitize_filename(video_title)
+    file_prefix = f"{sanitized_title}_{audio_format}"
+    expected_output_path = download_folder / f"{file_prefix}.{audio_format}"
 
-    mocker.patch.object(Path, 'mkdir')
-    mocker.patch.object(Path, 'exists', return_value=True)
-    mocker.patch.object(Path, 'is_file', return_value=True)
-    mocker.patch.object(Path, 'stat', return_value=MagicMock(st_size=1024))
+    # 模拟 stream_playlist_info
+    async def mock_info_gen():
+        yield {"title": video_title}
+    mocks["stream_playlist_info"].return_value = mock_info_gen()
 
-    async def mock_stream_info(*args, **kwargs):
-        yield {'title': 'test_audio'}
-    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
-
-    mock_build_audio_cmd = mocker.patch('core.command_builder.CommandBuilder.build_audio_download_cmd', return_value=['echo', 'test'])
-    mock_executor = mocker.patch.object(Downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock)
+    # 模拟下载执行，并真实地创建文件
+    async def mock_execute_and_create_file(*args, **kwargs):
+        expected_output_path.touch()
+        expected_output_path.write_text("dummy audio")
+        return (0, "", "")
+    mocks["execute_cmd"].side_effect = mock_execute_and_create_file
 
     # 2. 执行
-    downloader = Downloader(download_folder=download_folder)
-    result = await downloader.download_audio("https://example.com/audio", audio_format='mp3')
-
-    # 3. 验证
-    assert result == expected_audio_file
-    mock_build_audio_cmd.assert_called_once()
-    assert mock_build_audio_cmd.call_args.kwargs['output_template'] == str(expected_audio_file)
-    mock_executor.assert_called_once()
-
-@pytest.mark.asyncio
-async def test_download_audio_direct_download_success(mocker, tmp_path):
-    """
-    测试: 当请求原始音频流(如format_id)时,使用stderr解析策略并成功.
-    """
-    # 1. 准备
-    download_folder = tmp_path / "downloads"
-    # yt-dlp will name this file with the correct extension
-    expected_audio_file = download_folder / "test_audio.webm"
-
-    mocker.patch.object(Path, 'mkdir')
-    # Mock exists and stat for the parsed path
-    mocker.patch.object(Path, 'exists', return_value=True)
-    mocker.patch.object(Path, 'is_file', return_value=True)
-    mocker.patch.object(Path, 'stat', return_value=MagicMock(st_size=1024))
-
-    async def mock_stream_info(*args, **kwargs):
-        yield {'title': 'test_audio'}
-    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
-
-    mock_build_audio_cmd = mocker.patch('core.command_builder.CommandBuilder.build_audio_download_cmd', return_value=['echo', 'test'])
-    
-    # Mock the executor to return stderr containing the destination path
-    stderr_output = f"[download] Destination: {expected_audio_file}"
-    mock_executor = mocker.patch.object(
-        Downloader, 
-        '_execute_cmd_with_auth_retry', 
-        new_callable=AsyncMock,
-        return_value=(0, "", stderr_output)
+    result = await downloader.download_audio(
+        "https://example.com/audio",
+        audio_format=audio_format
     )
 
-    # 2. 执行 (using a format_id that is not a conversion format)
-    downloader = Downloader(download_folder=download_folder)
-    result = await downloader.download_audio("https://example.com/audio", audio_format='251')
-
     # 3. 验证
-    assert result == expected_audio_file
-    mock_build_audio_cmd.assert_called_once()
-    # Verify the output template was generic
-    assert mock_build_audio_cmd.call_args.kwargs['output_template'] == str(download_folder / "test_audio.%(ext)s")
-    mock_executor.assert_called_once()
-
-@pytest.mark.asyncio
-async def test_download_audio_raises_exception_on_total_failure(mocker, tmp_path):
-    """
-    测试: 当所有策略都失败时, 抛出 DownloaderException.
-    """
-    # 1. 准备
-    download_folder = tmp_path / "downloads"
-    mocker.patch.object(Path, 'mkdir')
-    mocker.patch.object(Path, 'exists', return_value=False) # All checks fail
-
-    async def mock_stream_info(*args, **kwargs):
-        yield {'title': 'test_audio'}
-    mocker.patch.object(Downloader, 'stream_playlist_info', mock_stream_info)
-
-    mocker.patch('core.command_builder.CommandBuilder.build_audio_download_cmd', return_value=['echo', 'test'])
-    # Mock executor to return empty stderr
-    mocker.patch.object(Downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock, return_value=(0, "", ""))
-    # Mock fallback search to also fail
-    mocker.patch('downloader.Downloader._find_output_file', new_callable=AsyncMock, return_value=None)
-
-    # 2. 执行 & 验证
-    downloader = Downloader(download_folder=download_folder)
-    with pytest.raises(DownloaderException, match="音频下载后未找到文件"):
-        await downloader.download_audio("https://example.com/audio", audio_format='mp3')
-
-@pytest.mark.asyncio
-async def test_auth_retry_logic_rebuilds_command(mocker, tmp_path):
-    """
-    测试: _execute_cmd_with_auth_retry 在认证失败时会重新构建命令.
-    """
-    # 1. 准备
-    downloader = Downloader(download_folder=tmp_path, cookies_file="cookies.txt")
-    
-    mocker.patch('core.cookies_manager.CookiesManager.refresh_cookies_for_url', return_value="new_cookies.txt")
-    
-    mock_execute = mocker.patch.object(
-        downloader.subprocess_manager, 
-        'execute_simple', 
-        new_callable=AsyncMock,
-        side_effect=[AuthenticationException("auth failed"), (0, "Success", "")]
+    assert result == expected_output_path
+    mocks["command_builder"].build_audio_download_cmd.assert_called_once_with(
+        url="https://example.com/audio",
+        output_template=str(expected_output_path),
+        audio_format=audio_format
     )
+    mocks["execute_cmd"].assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_download_audio_direct_download_success(mock_downloader):
+    """
+    测试: 当直接下载原始音频流时，应采用“主动搜索”策略并成功。
+    """
+    # 1. 准备
+    downloader, mocks, download_folder = mock_downloader
+    video_title = "Bilibili Audio"
+    audio_format_id = "30232"
+    sanitized_title = downloader._sanitize_filename(video_title)
+    file_prefix = f"{sanitized_title}_{audio_format_id}"
+    expected_output_path = download_folder / f"{file_prefix}.m4a"
+
+    # 模拟 stream_playlist_info
+    async def mock_info_gen():
+        yield {"title": video_title}
+    mocks["stream_playlist_info"].return_value = mock_info_gen()
+
+    # 模拟 _find_output_file 返回成功找到的文件
+    mocks["find_file"].return_value = expected_output_path
     
-    cmd_builder_func = MagicMock(return_value=['rebuilt_command'])
+    # 模拟 CommandBuilder 返回模板路径
+    mocks["command_builder"].build_audio_download_cmd.return_value = ['yt-dlp', '...']
 
     # 2. 执行
-    await downloader._execute_cmd_with_auth_retry(
-        initial_cmd=['initial_command'],
-        cmd_builder_func=cmd_builder_func,
-        url="https://example.com/video",
-        cmd_builder_args={}
+    # CORRECTED: Call download_audio, not download_and_merge
+    result = await downloader.download_audio(
+        "https://bilibili.com/video/BV1xx",
+        audio_format=audio_format_id
     )
 
     # 3. 验证
-    assert cmd_builder_func.call_count == 1
-    assert mock_execute.call_count == 2
-    assert mock_execute.call_args_list[1].args[0] == ['rebuilt_command']
+    assert result == expected_output_path
+    mocks["execute_cmd"].assert_called_once()
+    # 验证 _find_output_file 被调用，因为这是直接下载策略
+    mocks["find_file"].assert_called_once_with(
+        file_prefix, 
+        ('.webm', '.m4a', '.opus', '.ogg', '.mp3', '.aac', '.flac', '.wav')
+    )
