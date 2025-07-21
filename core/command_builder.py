@@ -38,6 +38,25 @@ class CommandBuilder:
         
         # 添加进度模板
         cmd.extend(['--progress', '--progress-template', '%(progress)j'])
+
+        # 添加健壮性参数：片段重试
+        # 无限次重试片段，每次重试之间有指数退避延迟（1到30秒）
+        cmd.extend(['--fragment-retries', 'infinite', '--retry-sleep', 'fragment:exp=1:30'])
+        
+        return cmd
+
+    def build_yt_dlp_base_cmd_no_progress(self) -> List[str]:
+        """构建一个没有进度条的基础yt-dlp命令，用于捕获输出"""
+        cmd = ['yt-dlp', '--ignore-config', '--no-warnings', '--no-color', '--force-overwrites']
+        
+        if self.proxy:
+            cmd.extend(['--proxy', self.proxy])
+        
+        if self.cookies_file and Path(self.cookies_file).exists():
+            cmd.extend(['--cookies', str(Path(self.cookies_file).resolve())])
+        
+        # 添加健壮性参数
+        cmd.extend(['--fragment-retries', 'infinite', '--retry-sleep', 'fragment:exp=1:30'])
         
         return cmd
 
@@ -56,71 +75,100 @@ class CommandBuilder:
         
         return cmd
 
-    def build_audio_download_cmd(self, output_path: str, url: str, filename_prefix: str = None, format_id: Optional[str] = None, to_mp3: bool = False) -> List[str]:
+    def build_audio_download_cmd(self, output_path: str, url: str, filename_prefix: str = None, audio_format: str = 'mp3') -> List[str]:
         """构建音频下载命令"""
-        cmd = self.build_yt_dlp_base_cmd()
-        
+        cmd = self.build_yt_dlp_base_cmd_no_progress() # Use no-progress base
         output_template = f"{output_path}/{filename_prefix or '%(title)s'}.%(ext)s"
-        
-        if to_mp3:
-            # 如果需要转换为MP3，使用特定参数
-            cmd.extend([
-                '-f', 'bestaudio', # 选择最佳音质的源
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '0', # 0是最高质量
-            ])
+
+        # Always extract audio for any audio download request
+        cmd.extend(['--extract-audio'])
+
+        # If the format is a known conversion format, select best audio and then convert.
+        if audio_format in ['mp3', 'm4a', 'wav', 'opus', 'aac', 'flac']:
+            cmd.extend(['-f', 'bestaudio'])
+            cmd.extend(['--audio-format', audio_format])
+            cmd.extend(['--audio-quality', '0'])
+        # Otherwise, assume it's a specific format ID to be downloaded directly.
         else:
-            # 否则，使用指定的format_id或默认配置
-            audio_format = format_id or config.downloader.ytdlp_audio_format
             cmd.extend(['-f', audio_format])
 
-        cmd.extend([
-            '--newline',
-            '-o', output_template,
-            url
-        ])
-        
+        # Print the final filename to stdout
+        cmd.extend(['--print', 'filename'])
+
+        cmd.extend(['--newline', '-o', output_template, url])
         return cmd
 
-    def build_combined_download_cmd(self, output_path: str, url: str, format_id: str = None, resolution: str = None) -> Tuple[List[str], str]:
+    def build_separate_video_download_cmd(self, output_path: str, url: str, file_prefix: str, format_id: Optional[str] = None) -> List[str]:
+        """
+        构建独立的视频部分下载命令。
+        
+        Args:
+            output_path: 输出目录
+            url: 视频URL
+            file_prefix: 文件前缀
+            format_id: 要下载的特定视频格式ID (可选)
+            
+        Returns:
+            list: 命令列表
+        """
+        cmd = self.build_yt_dlp_base_cmd()
+        # 使用可预测的文件名模板
+        output_template = Path(output_path) / f"{file_prefix}.video.%(ext)s"
+        
+        video_format = format_id or "bestvideo[ext=mp4]/bestvideo"
+            
+        cmd.extend(['-f', video_format, '--newline', '-o', str(output_template), '--', url])
+        return cmd
+
+    def build_separate_audio_download_cmd(self, output_path: str, url: str, file_prefix: str) -> List[str]:
+        """
+        构建独立的音频部分下载命令。
+        
+        Args:
+            output_path: 输出目录
+            url: 视频URL
+            file_prefix: 文件前缀
+            
+        Returns:
+            list: 命令列表
+        """
+        cmd = self.build_yt_dlp_base_cmd()
+        # 使用可预测的文件名模板
+        output_template = Path(output_path) / f"{file_prefix}.audio.%(ext)s"
+        audio_format = "bestaudio[ext=m4a]/bestaudio"
+        cmd.extend(['-f', audio_format, '--newline', '-o', str(output_template), '--', url])
+        return cmd
+
+    def build_combined_download_cmd(self, output_path: str, url: str, file_prefix: str, format_id: str = None, resolution: str = None) -> Tuple[List[str], str, Path]:
         """
         构建合并视频+音频下载命令
         
         Args:
             output_path: 输出目录
             url: 视频URL
+            file_prefix: 文件前缀 (不含扩展名)
             format_id: 要下载的特定视频格式ID (可选)
             resolution: 视频分辨率 (可选，例如: '720p60')
             
         Returns:
-            tuple: (命令列表, 使用的格式)
+            tuple: (命令列表, 使用的格式, 确切的输出文件路径)
         """
         cmd = self.build_yt_dlp_base_cmd()
         
         # 确保下载目录存在
         output_dir = Path(output_path).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 使用前端提供的分辨率信息
-        if resolution and resolution != 'best':
-            # 清理分辨率字符串，移除空格和特殊字符
-            resolution = resolution.strip().replace(' ', '_')
-            # 确保分辨率以p或i结尾（如1080p或1080i）
-            if not any(resolution.lower().endswith(x) for x in ['p', 'i']):
-                resolution += 'p'  # 默认添加p作为后缀
-            resolution = f'_{resolution}'  # 添加下划线前缀
-        
-        # 构建输出模板，确保路径正确，并移除可能的多余空格
-        output_template = str(output_dir / f"%(title)s{resolution if resolution else ''}.%(ext)s").replace(' .', '.').replace(' ', '_')
-        log.info(f"Using output template: {output_template}")
+
+        # 构建确切的输出文件路径，强制使用 .mp4 扩展名
+        exact_output_path = output_dir / f"{file_prefix}.mp4"
+        log.info(f"确切的输出路径: {exact_output_path}")
         
         # 构建格式选择器 - 简化格式选择，优先使用mp4容器
         if format_id and format_id != 'best':
             # 使用指定的视频格式 + 最佳音频
             combined_format = f"{format_id}+bestaudio"
         else:
-            # 默认使用 mp4 容器格式
+            # 默认使用 mp4 容器格式, yt-dlp 会选择最佳的视频和音频流
             combined_format = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
             
             
@@ -129,31 +177,20 @@ class CommandBuilder:
         
         # 简化命令，移除可能导致问题的后处理步骤
         cmd.extend([
-            '--merge-output-format', 'mp4',  # 强制使用mp4作为输出格式
+            '--merge-output-format', 'mp4',  # 确保合并后的文件是mp4格式
             '--newline',
-            '--no-embed-subs',               # 暂时禁用字幕嵌入
-            '--no-embed-thumbnail',          # 暂时禁用缩略图嵌入
-            '--no-embed-metadata',           # 暂时禁用元数据嵌入
-            '--no-embed-chapters',           # 暂时禁用章节嵌入
-            '--audio-quality', '0',
-            '--audio-format', 'best',
-            '--no-check-formats',            # 不检查格式，直接下载
+            # 移除强制使用ffmpeg作为下载器，让yt-dlp使用其更优的内置下载器（特别是对HLS）
+            # 移除 --no-overwrites, 因为基础命令中已有 --force-overwrites，可以防止因旧文件残留导致的失败
             '--no-warnings',                 # 减少警告信息
             '--no-playlist',                 # 不下载播放列表
-            '--no-part',                     # 不生成部分下载文件
-            '--no-mtime',                    # 不设置文件修改时间
-            '--no-overwrites',               # 不覆盖已存在的文件
-            '--no-post-overwrites',          # 不覆盖后处理文件
             '--no-keep-fragments',           # 删除下载的片段
             '--hls-prefer-native',           # 优先使用原生HLS下载
-            '--downloader', 'ffmpeg',        # 使用ffmpeg下载器
-            '--downloader-args', 'ffmpeg:-c copy -movflags +faststart',  # 优化mp4输出
-            '-o', output_template,
+            '-o', str(exact_output_path),
             '--',  # 分隔符，防止URL被误解为参数
             url
         ])
         
-        return cmd, combined_format
+        return cmd, combined_format, exact_output_path
 
     def build_metadata_download_cmd(self, output_path: str, url: str) -> List[str]:
         """构建元数据下载命令"""

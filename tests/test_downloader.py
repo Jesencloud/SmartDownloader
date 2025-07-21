@@ -63,7 +63,7 @@ async def test_download_and_merge_shows_success_mark_on_completion(mocker, tmp_p
     # 模拟 CommandBuilder
     mock_build_cmd = mocker.patch(
         'core.command_builder.CommandBuilder.build_combined_download_cmd',
-        return_value=(['echo', 'test'], 'test_format')
+        return_value=(['echo', 'test'], 'test_format', mock_path)
     )
     
     # 模拟 subprocess_manager
@@ -83,7 +83,7 @@ async def test_download_and_merge_shows_success_mark_on_completion(mocker, tmp_p
     )
     
     # 模拟 _find_output_file 方法
-    def mock_find_output_file(self, *args, **kwargs):
+    async def mock_find_output_file(self, *args, **kwargs):
         return mock_path
     
     mocker.patch(

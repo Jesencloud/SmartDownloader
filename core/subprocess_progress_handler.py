@@ -280,7 +280,10 @@ class SubprocessProgressHandler:
                     break
                 
                 line = line_bytes.decode('utf-8', errors='ignore')
-                error_output += line
+                
+                # Only add error lines to error_output
+                if 'error' in line.lower() or 'failed' in line.lower() or 'exception' in line.lower():
+                    error_output += line
                 
                 # 处理这一行的进度数据
                 self._process_line(line, progress, task_id)

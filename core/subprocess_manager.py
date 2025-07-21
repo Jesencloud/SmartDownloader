@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Optional, List, Tuple, Any
 
@@ -135,11 +136,21 @@ class SubprocessManager:
         try:
             log.debug(f'执行带进度的命令: {" ".join(cmd)}')
             
-            # 创建子进程
+            # 创建子进程，添加环境变量来抑制输出
+            env = os.environ.copy()
+            env.update({
+                'PYTHONIOENCODING': 'utf-8',
+                'PYTHONUNBUFFERED': '1',
+                'NO_COLOR': '1',
+                'CLICOLOR_FORCE': '0',
+                'PYTHONLEGACYWINDOWSSTDIO': '1'  # For Windows compatibility
+            })
+            
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=env
             )
             
             # 添加到运行进程列表
@@ -152,6 +163,7 @@ class SubprocessManager:
             
             # 获取返回码和输出
             return_code = process.returncode
+            # 不返回实际下载内容，只返回空字符串
             stdout = b''
             stderr = error_output.encode('utf-8')
             
@@ -205,11 +217,20 @@ class SubprocessManager:
         try:
             log.debug(f'执行简单命令: {" ".join(cmd)}')
             
-            # 创建子进程
+            # 创建子进程，添加环境变量来抑制输出
+            env = os.environ.copy()
+            env.update({
+                'PYTHONIOENCODING': 'utf-8',
+                'PYTHONUNBUFFERED': '1',
+                'NO_COLOR': '1',
+                'CLICOLOR_FORCE': '0'
+            })
+            
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=env
             )
             
             # 添加到运行进程列表

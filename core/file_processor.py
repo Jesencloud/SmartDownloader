@@ -165,6 +165,61 @@ class FileProcessor:
         except Exception as e:
             raise FFmpegException(f'音频提取过程中发生错误: {e}') from e
     
+    async def convert_to_audio_format(
+        self,
+        input_file: Path,
+        audio_format: str = 'mp3',
+        audio_quality: str = '192k',
+        cleanup_original: bool = True
+    ) -> Optional[Path]:
+        """
+        将音频文件转换为指定格式。
+        
+        Args:
+            input_file: 输入文件路径
+            audio_format: 目标音频格式 (mp3, aac, etc.)
+            audio_quality: 音频质量 (192k, 320k, etc.)
+            cleanup_original: 是否清理原始文件
+            
+        Returns:
+            转换后的文件路径,失败返回None
+            
+        Raises:
+            FFmpegException: FFmpeg操作失败
+            DownloaderException: 文件不存在或其他错误
+        """
+        try:
+            if not input_file.exists():
+                raise DownloaderException(f'输入文件不存在: {input_file}')
+            
+            output_file = input_file.with_suffix(f'.{audio_format}')
+            log.info(f'开始转换音频格式: {input_file.name} -> {output_file.name}')
+            
+            # 构建FFmpeg转换命令
+            convert_cmd = self.command_builder.build_ffmpeg_extract_audio_cmd(
+                str(input_file), str(output_file)
+            )
+            
+            # 执行转换命令
+            return_code, stdout, stderr = await self.subprocess_manager.execute_simple(
+                convert_cmd, timeout=300  # 5分钟超时
+            )
+            
+            if not output_file.exists() or output_file.stat().st_size == 0:
+                raise FFmpegException(f'音频转换失败，输出文件未生成或为空: {output_file}')
+            
+            log.info(f'音频转换成功: {output_file.name}')
+            
+            if cleanup_original:
+                await self._cleanup_temp_files([input_file])
+            
+            return output_file
+            
+        except (FFmpegException, DownloaderException):
+            raise
+        except Exception as e:
+            raise FFmpegException(f'音频转换过程中发生错误: {e}') from e
+
     async def cleanup_temp_files(self, file_prefix: str, extensions: List[str] = None):
         """
         清理指定前缀的临时文件。

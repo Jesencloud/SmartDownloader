@@ -14,7 +14,7 @@ def test_build_combined_download_cmd_basic(tmp_path):
     video_url = "https://www.youtube.com/watch?v=some_video_id"
 
     # 2. 执行 (Act)
-    actual_command, format_used = builder.build_combined_download_cmd(download_folder, video_url)
+    actual_command, format_used, _ = builder.build_combined_download_cmd(download_folder, video_url, "test_prefix")
 
     # 3. 断言 (Assert)
     # 检查基本命令部分
@@ -31,7 +31,7 @@ def test_build_combined_download_cmd_basic(tmp_path):
     assert 'mp4' in actual_command  # 默认合并格式
     assert '--newline' in actual_command
     assert '-o' in actual_command
-    assert str(Path(download_folder).resolve() / "%(title)s.%(ext)s").replace(' ', '_') in ' '.join(actual_command)
+    assert str(Path(download_folder).resolve() / "test_prefix.mp4") in ' '.join(actual_command)
     assert '--' in actual_command
     assert video_url in actual_command
     
@@ -49,7 +49,7 @@ def test_build_combined_download_cmd_with_proxy(tmp_path):
     video_url = "https://www.youtube.com/watch?v=some_video_id"
 
     # 2. 执行 (Act)
-    actual_command, _ = builder.build_combined_download_cmd(download_folder, video_url)
+    actual_command, _, _ = builder.build_combined_download_cmd(download_folder, video_url, "test_prefix")
 
     # 3. 断言 (Assert)
     assert '--proxy' in actual_command
@@ -74,7 +74,7 @@ def test_build_combined_download_cmd_with_cookies(tmp_path):
     video_url = "https://www.youtube.com/watch?v=some_video_id"
 
     # 2. 执行 (Act)
-    actual_command, _ = builder.build_combined_download_cmd(download_folder, video_url)
+    actual_command, _, _ = builder.build_combined_download_cmd(download_folder, video_url, "test_prefix")
 
     # 3. 断言 (Assert)
     assert '--cookies' in actual_command
