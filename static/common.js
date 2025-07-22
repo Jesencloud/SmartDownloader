@@ -67,7 +67,11 @@ const translations = {
         errorBackButton: '返回主页',
         download: '下载',
         losslessAudio: '高比特率',
-        betterCompatibility: '兼容性佳'
+        betterCompatibility: '兼容性佳',
+        downloadComplete: '下载完成',
+        downloadFailed: '下载失败',
+        downloadTimeout: '检查超时',
+        downloadTimeoutMessage: '下载状态检查超时。'
     },
     en: {
         // From script.js
@@ -135,9 +139,27 @@ const translations = {
         errorBackButton: 'Back to Home',
         download: 'Download',
         losslessAudio: 'High Bitrate',
-        betterCompatibility: 'Better Compatibility'
-    }
+        betterCompatibility: 'Better Compatibility',
+        downloadComplete: 'Download Complete',
+        downloadFailed: 'Download Failed',
+        downloadTimeout: 'Check Timed Out',
+        downloadTimeoutMessage: 'Download status check timed out.'
+    },
 };
+
+function getTranslations() {
+    const lang = localStorage.getItem('language') || 'zh';
+    return translations[lang] || translations.zh;
+}
+
+function formatFileSize(bytes) {
+    // This function needs translations, so it's good it's here now.
+    const t = getTranslations();
+    if (!bytes || bytes < 0) return t.unknownSize;
+    if (bytes === 0) return '0 Bytes';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${['Bytes', 'KB', 'MB', 'GB', 'TB'][i]}`;
+}
 
 function switchLanguage(lang) {
     // Save language preference and set a global variable
@@ -176,6 +198,35 @@ function switchLanguage(lang) {
     // Update the document's language attribute
     document.documentElement.setAttribute('lang', lang === 'en' ? 'en-US' : 'zh-CN');
     
-    // Dispatch a custom event to let other scripts know the language has changed
-    document.dispatchEvent(new CustomEvent('languageChanged'));
+    // --- NEW: Centralized logic to update dynamic result items ---
+    document.querySelectorAll('.resolution-option').forEach(option => {
+        // CRITICAL: If the option is currently downloading, DO NOTHING.
+        if (option.classList.contains('is-downloading')) {
+            return;
+        }
+
+        const span = option.querySelector('[data-translate-dynamic]');
+        if (!span) return;
+
+        const type = span.dataset.translateDynamic;
+        let newText = '';
+
+        if (type === 'video') {
+            const displayText = option.dataset.displayText;
+            const ext = option.dataset.ext;
+            newText = `${t.download} ${displayText} ${ext}`;
+        } else if (type === 'audio_lossless') {
+            const audioFormat = option.dataset.audioFormat;
+            const filesize = option.dataset.filesize;
+            newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(filesize)}`;
+        } else if (type === 'audio_compatible') {
+            const originalFormat = option.dataset.audioFormatOriginal;
+            const filesize = option.dataset.filesize;
+            newText = `${t.betterCompatibility} (${originalFormat.toUpperCase()} → MP3) < ${formatFileSize(filesize)}`;
+        }
+        
+        if (newText) {
+            span.innerHTML = newText; // Use innerHTML to support potential HTML tags
+        }
+    });
 }

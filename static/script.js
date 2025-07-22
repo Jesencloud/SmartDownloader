@@ -1,12 +1,5 @@
 // static/script.js
 
-// Helper to get current translations
-function getTranslations() {
-    const lang = localStorage.getItem('language') || 'zh';
-    // 'translations' is defined in common.js, which is loaded before this script
-    return translations[lang] || translations.zh;
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     // --- Initialize Page Elements ---
     initializeDarkMode();
@@ -27,14 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentVideoData = null; // To store fetched video data
 
-    // Listen for the custom languageChanged event dispatched from common.js
-    document.addEventListener('languageChanged', () => {
-        // If video data exists, it means we are in the results view.
-        // Re-render the results to apply the new translations.
-        if (currentVideoData) {
-            renderResults(currentVideoData);
-        }
-    });
     // --- Main Event Listeners ---
     downloadVideoButton.addEventListener('click', () => startVideoAnalysis('video'));
     downloadAudioButton.addEventListener('click', () => startVideoAnalysis('audio'));
@@ -205,25 +190,36 @@ document.addEventListener('DOMContentLoaded', () => {
         const audioFormat = bestAudioFormat.ext || 'webm'; // Fallback to 'webm' if not specified
         const highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
-            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${bestAudioFormat.format_id}">
-                <div class="flex-grow text-center">
-                    <span class="font-semibold">${highBitrateText}</span>
+            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
+                 data-format-id="${bestAudioFormat.format_id}" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize}">
+                <div class="option-content w-full flex items-center">
+                    <div class="flex-grow text-center">
+                        <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}</span>
+                    </div>
+                    <div class="download-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
                 </div>
-                <div class="download-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div class="option-progress w-full hidden">
+                    <!-- Progress bar will be injected here -->
                 </div>
             </div>`;
 
         const mp3FormatId = `mp3-conversion-${bestAudioFormat.format_id}`;
-        // Show the original format in the compatibility option
         const compatibilityText = `${t.betterCompatibility} (${audioFormat.toUpperCase()} → MP3) < ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
-            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" data-format-id="${mp3FormatId}">
-                <div class="flex-grow text-center">
-                    <span class="font-semibold">${compatibilityText}</span>
+            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
+                 data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize}">
+                <div class="option-content w-full flex items-center">
+                    <div class="flex-grow text-center">
+                        <span class="font-semibold" data-translate-dynamic="audio_compatible">${compatibilityText}</span>
+                    </div>
+                    <div class="download-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
                 </div>
-                <div class="download-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div class="option-progress w-full hidden">
+                    <!-- Progress bar will be injected here -->
                 </div>
             </div>`;
 
@@ -272,13 +268,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             return `
                 <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
-                     data-format-id="${format.format_id}"
-                     data-resolution="${resolutionText}">
-                    <div class="flex-grow text-center">
-                        <span class="font-semibold">${t.download} ${displayText} ${format.ext}</span>
+                     data-format-id="${format.format_id}" data-resolution="${resolutionText}" data-display-text="${displayText}" data-ext="${format.ext}">
+                    <div class="option-content w-full flex items-center">
+                        <div class="flex-grow text-center">
+                            <span class="font-semibold" data-translate-dynamic="video">${t.download} ${displayText} ${format.ext}</span>
+                        </div>
+                        <div class="download-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
                     </div>
-                    <div class="download-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <div class="option-progress w-full hidden">
+                        <!-- Progress bar will be injected here -->
                     </div>
                 </div>`;
         }).join('');
@@ -299,14 +299,139 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('backButton').addEventListener('click', resetUI);
 }
     
+function pollTaskStatus(taskId, optionElement) {
+    const t = getTranslations();
+    const pollingInterval = 2000; // 每2秒轮询一次
+    const maxAttempts = 150; // 2秒 * 150次 = 300秒 = 5分钟超时
+    let attempts = 0;
+
+    const contentDiv = optionElement.querySelector('.option-content');
+    const progressDiv = optionElement.querySelector('.option-progress');
+
+    const restoreOriginalContent = () => {
+        progressDiv.classList.add('hidden');
+        progressDiv.innerHTML = '';
+        contentDiv.classList.remove('hidden');
+    };
+
+    const intervalId = setInterval(async () => {
+        // Handle immediate failure from handleDownload
+        if (taskId === null) {
+            clearInterval(intervalId);
+            optionElement.classList.remove('is-downloading');
+            restoreOriginalContent();
+            optionElement.style.pointerEvents = 'auto';
+            optionElement.style.opacity = '1';
+            // Optionally add a temporary failure indicator
+            optionElement.classList.add('border-red-500', 'border-2');
+            setTimeout(() => {
+                if (optionElement) { // Check if element still exists
+                    optionElement.classList.remove('border-red-500', 'border-2');
+                }
+            }, 2000);
+            return;
+        }
+
+        if (attempts++ > maxAttempts) {
+            clearInterval(intervalId);
+            optionElement.classList.remove('is-downloading');
+            progressDiv.innerHTML = `
+                <div class="flex-grow text-center">
+                    <span class="font-semibold text-yellow-400">${t.downloadTimeout}</span>
+                </div>
+                <div class="download-icon text-yellow-400">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            `;
+            optionElement.classList.remove('hover:bg-gray-700');
+            optionElement.classList.add('border', 'border-yellow-500');
+            alert(t.downloadTimeoutMessage);
+            return;
+        }
+
+        try {
+            const response = await fetch(`/downloads/${taskId}`);
+            if (!response.ok) {
+                console.warn(`轮询任务状态失败 ${taskId}: ${response.status}`);
+                return; // 暂时不处理，等待下一次轮询
+            }
+
+            const data = await response.json();
+
+            if (data.status === 'SUCCESS') {
+                clearInterval(intervalId);
+                optionElement.classList.remove('is-downloading');
+                progressDiv.classList.add('hidden');
+                progressDiv.innerHTML = '';
+                contentDiv.innerHTML = `
+                    <div class="flex-grow text-center">
+                        <span class="font-semibold text-green-400">${t.downloadComplete}</span>
+                    </div>
+                    <div class="download-icon text-green-400">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                `;
+                contentDiv.classList.remove('hidden');
+                optionElement.classList.remove('hover:bg-gray-700');
+                optionElement.classList.add('border', 'border-green-500');
+            } else if (data.status === 'FAILURE') {
+                clearInterval(intervalId);
+                optionElement.classList.remove('is-downloading');
+                progressDiv.innerHTML = `
+                    <div class="flex-grow text-center">
+                        <span class="font-semibold text-red-400">${t.downloadFailed}</span>
+                    </div>
+                    <div class="download-icon text-red-400">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                `;
+                // Keep progressDiv visible to show the failure message
+                optionElement.classList.remove('hover:bg-gray-700');
+                optionElement.classList.add('border', 'border-red-500');
+                const errorMessage = data.result || t.unknownError;
+                alert(`${t.errorTitle}: ${errorMessage}`);
+            }
+            // 如果状态是 PENDING 或 STARTED，则不执行任何操作，让加载动画继续
+
+        } catch (error) {
+            console.error('轮询过程中发生错误:', error);
+        }
+    }, pollingInterval);
+}
+
     function handleDownload(formatId) {
         if (!currentVideoData) return;
         const t = getTranslations();
         const optionElement = document.querySelector(`[data-format-id="${formatId}"]`);
-        const iconElement = optionElement.querySelector('.download-icon');
+        const contentDiv = optionElement.querySelector('.option-content');
+        const progressDiv = optionElement.querySelector('.option-progress');
+
+        optionElement.classList.add('is-downloading');
         const resolution = optionElement.dataset.resolution || '';
 
-        iconElement.innerHTML = `<div class="spinner border-2 border-t-2 border-gray-200 border-t-blue-400 rounded-full w-6 h-6 animate-spin"></div>`;
+        // 动态注入不确定进度条的CSS动画
+        if (!document.getElementById('indeterminate-progress-style')) {
+            const style = document.createElement('style');
+            style.id = 'indeterminate-progress-style';
+            style.innerHTML = `
+                .progress-bar-indeterminate {
+                    width: 40%;
+                    animation: indeterminate-progress 2s infinite ease-in-out;
+                }
+                @keyframes indeterminate-progress {
+                    0% { margin-left: -40%; }
+                    100% { margin-left: 100%; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // 将下载选项替换为不确定进度条
+        contentDiv.classList.add('hidden');
+        progressDiv.innerHTML = `
+            <div class="progress-bar-container w-full bg-gray-700 rounded-full h-2.5 overflow-hidden"><div class="progress-bar-indeterminate bg-blue-500 h-2.5 rounded-full"></div></div>
+        `;
+        progressDiv.classList.remove('hidden');
         optionElement.style.pointerEvents = 'none';
         optionElement.style.opacity = '0.7';
 
@@ -325,21 +450,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return response.json();
         })
         .then(data => {
-            iconElement.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; // Checkmark
-            optionElement.classList.add('bg-green-700', 'hover:bg-green-700');
-            console.log('Download started:', data.task_id);
+            // 开始轮询任务状态
+            pollTaskStatus(data.task_id, optionElement);
         })
         .catch(error => {
             const errorMessage = error.detail || error.message || t.unknownError;
-            iconElement.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; // X mark
-            optionElement.classList.add('bg-red-700', 'hover:bg-red-700');
-            alert(`${t.errorTitle}: ${errorMessage}`);
-            setTimeout(() => {
-                optionElement.style.pointerEvents = 'auto';
-                optionElement.style.opacity = '1';
-                optionElement.classList.remove('bg-red-700', 'hover:bg-red-700');
-                iconElement.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-            }, 2000);
+            alert(t.errorTitle + ': ' + errorMessage);
+            // 失败时也调用轮询函数来恢复UI
+            pollTaskStatus(null, optionElement);
         });
     }
 
@@ -377,14 +495,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const lang = localStorage.getItem('language') || 'zh';
     switchLanguage(lang);
 }
-
-    function formatFileSize(bytes) {
-        const t = getTranslations();
-        if (!bytes || bytes < 0) return t.unknownSize;
-        if (bytes === 0) return '0 Bytes';
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${['Bytes', 'KB', 'MB', 'GB', 'TB'][i]}`;
-    }
 
     // --- Clipboard and Input Handling ---
     function extractUrl(text) {

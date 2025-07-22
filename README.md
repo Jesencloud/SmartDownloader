@@ -256,8 +256,17 @@ INFO     2025-07-10 10:38:20,892 - [INFO] - __main__ - 📁 日志与所有文�
 <img src="./example.png" width="80%">
 
 
-- [贡献指南](#-贡献指南)
-- [许可证](#-许可证)
+
+### 📜 许可证 (License)
+
+本软件根据 **知识共享署名-非商业性使用-相同方式共享 4.0 国际许可协议 (Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License)** 进行许可。
+
+简单来说，这意味着：
+*   **✅ 自由分享与修改**：您可以自由地复制、分发和修改本软件。
+*   **✍️ 必须署名**：您必须给出适当的署名。
+*   **💼 禁止商用**：您不得将本软件用于商业目的。
+*   **🔄 相同方式共享**：如果您修改了本软件，您必须以相同的许可协议分发您的贡献。
+
+要查看完整的许可证文本，请访问 [Creative Commons 网站](http://creativecommons.org/licenses/by-nc-sa/4.0/)。
+
 - [致谢](#-致谢)
-
-

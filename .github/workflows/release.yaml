@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.8', '3.11'] # 在多个版本上运行测试
+        python-version: ['3.8', '3.9', '3.10', '3.11'] # 在多个版本上运行测试
 
     steps:
       - name: Checkout code

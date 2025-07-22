@@ -339,7 +339,7 @@ class Downloader:
         try:
             # 1. Get video title
             video_info_gen = self.stream_playlist_info(video_url)
-            video_info = await anext(video_info_gen)
+            video_info = await video_info_gen.__anext__()
             video_title = video_info.get('title', 'video')
 
             # 2. 根据 format_id 查找确切的分辨率
@@ -376,6 +376,7 @@ class Downloader:
 
             async with _progress_semaphore:
                 with Progress(
+                    SpinnerColumn(spinner_name="line"),
                     TextColumn("[progress.description]{task.description}"),
                     BarColumn(),
                     "[progress.percentage]{task.percentage:>3.0f}%",
@@ -383,7 +384,7 @@ class Downloader:
                     TransferSpeedColumn(),
                     console=console
                 ) as progress:
-                    download_task = progress.add_task("⬇️ 下载并合并", total=100)
+                    download_task = progress.add_task("Download/Merge", total=100)
                     await self._execute_cmd_with_auth_retry(
                         initial_cmd=download_cmd,
                         cmd_builder_func=self.command_builder.build_combined_download_cmd,
@@ -413,8 +414,16 @@ class Downloader:
         try:
             # 1. 下载视频部分
             async with _progress_semaphore:
-                with Progress(console=console) as progress:
-                    video_task = progress.add_task("⬇️ 下载视频部分", total=100)
+                with Progress(
+                    SpinnerColumn(spinner_name="line"),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    DownloadColumn(),
+                    "•",
+                    TransferSpeedColumn(),
+                    console=console
+                ) as progress:
+                    video_task = progress.add_task("Downloading Video", total=100)
                     video_cmd_args = {
                         "output_path": str(self.download_folder),
                         "url": video_url,
@@ -438,8 +447,16 @@ class Downloader:
 
             # 2. 下载音频部分
             async with _progress_semaphore:
-                with Progress(console=console) as progress:
-                    audio_task = progress.add_task("⬇️ 下载音频部分", total=100)
+                with Progress(
+                    SpinnerColumn(spinner_name="line"),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    DownloadColumn(),
+                    "•",
+                    TransferSpeedColumn(),
+                    console=console
+                ) as progress:
+                    audio_task = progress.add_task("Downloading Audio", total=100)
                     audio_cmd_args = {
                         "output_path": str(self.download_folder),
                         "url": video_url,
@@ -514,7 +531,7 @@ class Downloader:
             # 1. 获取视频标题
             try:
                 video_info_gen = self.stream_playlist_info(video_url)
-                video_info = await anext(video_info_gen)
+                video_info = await video_info_gen.__anext__()
                 video_title = video_info.get('title', 'audio')
             except (StopAsyncIteration, DownloaderException) as e:
                 log.warning(f"无法获取视频标题: {e}。将使用备用前缀。")
