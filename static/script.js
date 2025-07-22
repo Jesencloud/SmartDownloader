@@ -166,6 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderResults(data) {
     const t = getTranslations();
     mainHeading.textContent = data.title;
+    // By setting the title to dynamic data, it's no longer a translatable string.
+    // We must remove the attribute to prevent switchLanguage from overwriting it.
+    mainHeading.removeAttribute('data-translate');
     mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left';
 
     let optionsHTML = '';
@@ -337,7 +340,7 @@ function pollTaskStatus(taskId, optionElement) {
             optionElement.classList.remove('is-downloading');
             progressDiv.innerHTML = `
                 <div class="flex-grow text-center">
-                    <span class="font-semibold text-yellow-400">${t.downloadTimeout}</span>
+                    <span class="font-semibold text-yellow-400" data-translate="downloadTimeout">${t.downloadTimeout}</span>
                 </div>
                 <div class="download-icon text-yellow-400">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -365,7 +368,7 @@ function pollTaskStatus(taskId, optionElement) {
                 progressDiv.innerHTML = '';
                 contentDiv.innerHTML = `
                     <div class="flex-grow text-center">
-                        <span class="font-semibold text-green-400">${t.downloadComplete}</span>
+                        <span class="font-semibold text-green-400" data-translate="downloadComplete">${t.downloadComplete}</span>
                     </div>
                     <div class="download-icon text-green-400">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -379,7 +382,7 @@ function pollTaskStatus(taskId, optionElement) {
                 optionElement.classList.remove('is-downloading');
                 progressDiv.innerHTML = `
                     <div class="flex-grow text-center">
-                        <span class="font-semibold text-red-400">${t.downloadFailed}</span>
+                        <span class="font-semibold text-red-400" data-translate="downloadFailed">${t.downloadFailed}</span>
                     </div>
                     <div class="download-icon text-red-400">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
