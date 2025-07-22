@@ -432,7 +432,7 @@ function pollTaskStatus(taskId, optionElement) {
         // 将下载选项替换为不确定进度条
         contentDiv.classList.add('hidden');
         progressDiv.innerHTML = `
-            <div class="progress-bar-container w-full bg-gray-700 rounded-full h-2.5 overflow-hidden"><div class="progress-bar-indeterminate bg-blue-500 h-2.5 rounded-full"></div></div>
+            <div class="progress-bar-container w-full bg-gray-700 rounded-full h-2.5 overflow-hidden"><div class="progress-bar-indeterminate bg-purple-500 h-2.5 rounded-full" style="background-color: #8B5CF6 !important;"></div></div>
         `;
         progressDiv.classList.remove('hidden');
         optionElement.style.pointerEvents = 'none';
