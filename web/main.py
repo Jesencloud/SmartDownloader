@@ -18,6 +18,7 @@ import glob
 import signal
 import psutil
 import logging
+import platform
 
 from .celery_app import celery_app
 from .tasks import download_video_task
@@ -91,6 +92,27 @@ class VideoInfoRequest(BaseModel):
 
 # --- Helper Functions with Caching ---
 
+def get_ytdlp_binary_path() -> Path:
+    """
+    Get the correct yt-dlp binary path based on the operating system.
+    
+    Returns:
+        Path: The path to the appropriate yt-dlp binary
+    """
+    system = platform.system().lower()
+    
+    if system == 'darwin':  # macOS
+        binary_name = 'yt-dlp_macos'
+    elif system == 'linux':
+        binary_name = 'yt-dlp_linux'
+    elif system == 'windows':
+        binary_name = 'yt-dlp.exe'
+    else:
+        # Fallback to generic name for other systems
+        binary_name = 'yt-dlp'
+    
+    return BASE_DIR / "bin" / binary_name
+
 @cached(cache)
 def fetch_video_info_sync(url: str) -> dict:
     """
@@ -99,7 +121,7 @@ def fetch_video_info_sync(url: str) -> dict:
     """
     try:
         cmd = [
-            str(BASE_DIR / "bin" / "yt-dlp_macos"),
+            str(get_ytdlp_binary_path()),
             "--dump-json",
             "--no-download",
             "--no-playlist",
@@ -251,7 +273,7 @@ async def download_stream(request: Request, url: str, download_type: str, format
         async def stream_downloader():
             try:
                 process = await asyncio.create_subprocess_exec(
-                    str(BASE_DIR / "bin" / "yt-dlp_macos"),
+                    str(get_ytdlp_binary_path()),
                     "-f", format_id,
                     "--output", "-",  # Stream to stdout
                     url,
