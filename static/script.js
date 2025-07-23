@@ -20,9 +20,124 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentVideoData = null; // To store fetched video data
 
+    // --- Centralized handler for returning home and cancelling downloads ---
+    async function handleReturnHome(e) {
+        // Check for active downloads by looking for the .is-downloading class
+        const downloadingItems = document.querySelectorAll('.is-downloading');
+        
+        // Clear all active polling intervals first
+        const pollingElements = document.querySelectorAll('[data-polling-interval]');
+        console.log(`Found ${pollingElements.length} elements with active polling intervals`);
+        
+        pollingElements.forEach(element => {
+            const intervalId = element.dataset.pollingInterval;
+            if (intervalId) {
+                clearInterval(parseInt(intervalId));
+                element.removeAttribute('data-polling-interval');
+                console.log(`Cleared polling interval ${intervalId}`);
+            }
+        });
+        
+        if (downloadingItems.length > 0) {
+            if (e) e.preventDefault(); // Prevent default link navigation
+
+            // Show cleanup message
+            const t = getTranslations();
+            showCleanupMessage(t.cleaningUp || '正在取消下载并清理文件...');
+
+            // Collect all unique task IDs from the downloading items
+            const taskIds = [...new Set(Array.from(downloadingItems)
+                                 .map(item => item.dataset.taskId)
+                                 .filter(id => id))];
+
+            if (taskIds.length > 0) {
+                try {
+                    const response = await fetch('/downloads/cancel', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task_ids: taskIds }),
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log('Cancellation and cleanup completed:', result);
+                        
+                        // Show cleanup results briefly
+                        if (result.cleanup_result && result.cleanup_result.cleaned_files.length > 0) {
+                            showCleanupResults(result.cleanup_result);
+                            await new Promise(resolve => setTimeout(resolve, 2000)); // Show for 2 seconds
+                        }
+                    } else {
+                        console.error('Failed to cancel downloads:', response.status);
+                    }
+                } catch (error) {
+                    console.error('Failed to send cancellation request:', error);
+                }
+            }
+        }
+        // Always reset the UI, regardless of whether cancellation succeeded
+        resetUI();
+    }
+
+    function showCleanupMessage(message) {
+        const resultContainer = document.getElementById('resultContainer');
+        resultContainer.innerHTML = `
+            <div class="cleanup-message bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg text-center" role="alert">
+                <div class="flex items-center justify-center">
+                    <div class="spinner mr-3"></div>
+                    <span>${message}</span>
+                </div>
+            </div>
+        `;
+        resultContainer.style.display = 'block';
+        
+        // Add spinner CSS if not already present
+        if (!document.getElementById('cleanup-spinner-style')) {
+            const style = document.createElement('style');
+            style.id = 'cleanup-spinner-style';
+            style.innerHTML = `
+                .spinner {
+                    border: 2px solid #f3f3f3;
+                    border-top: 2px solid #3498db;
+                    border-radius: 50%;
+                    width: 20px;
+                    height: 20px;
+                    animation: spin 1s linear infinite;
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+
+    function showCleanupResults(cleanupResult) {
+        const resultContainer = document.getElementById('resultContainer');
+        const fileCount = cleanupResult.cleaned_files.length;
+        const sizeInfo = cleanupResult.total_size_mb > 0 ? ` (${cleanupResult.total_size_mb}MB)` : '';
+        
+        resultContainer.innerHTML = `
+            <div class="cleanup-results bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg text-center" role="alert">
+                <div class="flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>清理完成！删除了 ${fileCount} 个临时文件${sizeInfo}</span>
+                </div>
+            </div>
+        `;
+    }
+
     // --- Main Event Listeners ---
     downloadVideoButton.addEventListener('click', () => startVideoAnalysis('video'));
     downloadAudioButton.addEventListener('click', () => startVideoAnalysis('audio'));
+
+    // --- Attach cancellation handler to header links ---
+    // This needs to be done at a higher level since the header is always present.
+    document.querySelector('.logo a').addEventListener('click', handleReturnHome);
+    // Assuming there might be other home links in the header.
 
     // --- Core Functions ---
 
@@ -194,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
             <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
-                 data-format-id="${bestAudioFormat.format_id}" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize}">
+                 data-format-id="${bestAudioFormat.format_id}" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}</span>
@@ -212,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const compatibilityText = `${t.betterCompatibility} (${audioFormat.toUpperCase()} → MP3) < ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
             <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
-                 data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize}">
+                 data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_compatible">${compatibilityText}</span>
@@ -299,7 +414,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.resolution-option').forEach(el => {
         el.addEventListener('click', () => handleDownload(el.dataset.formatId));
     });
-    document.getElementById('backButton').addEventListener('click', resetUI);
+    // Use the new centralized handler for the back button
+    const backButton = document.getElementById('backButton');
+    if (backButton) {
+        backButton.addEventListener('click', handleReturnHome);
+    }
 }
     
 function pollTaskStatus(taskId, optionElement) {
@@ -321,6 +440,8 @@ function pollTaskStatus(taskId, optionElement) {
         // Handle immediate failure from handleDownload
         if (taskId === null) {
             clearInterval(intervalId);
+            // Remove from tracking
+            optionElement.removeAttribute('data-polling-interval');
             optionElement.classList.remove('is-downloading');
             restoreOriginalContent();
             optionElement.style.pointerEvents = 'auto';
@@ -337,6 +458,8 @@ function pollTaskStatus(taskId, optionElement) {
 
         if (attempts++ > maxAttempts) {
             clearInterval(intervalId);
+            // Remove from tracking
+            optionElement.removeAttribute('data-polling-interval');
             optionElement.classList.remove('is-downloading');
             progressDiv.innerHTML = `
                 <div class="flex-grow text-center">
@@ -353,7 +476,21 @@ function pollTaskStatus(taskId, optionElement) {
         }
 
         try {
+            // Check if polling has been externally cancelled before making the request
+            if (!optionElement.dataset.pollingInterval) {
+                console.log(`Polling for task ${taskId} was cancelled, stopping`);
+                clearInterval(intervalId);
+                return;
+            }
+            
             const response = await fetch(`/downloads/${taskId}`);
+            
+            // Check again after the async request in case it was cancelled during the fetch
+            if (!optionElement.dataset.pollingInterval) {
+                console.log(`Polling for task ${taskId} was cancelled during fetch, stopping`);
+                clearInterval(intervalId);
+                return;
+            }
             if (!response.ok) {
                 console.warn(`轮询任务状态失败 ${taskId}: ${response.status}`);
                 return; // 暂时不处理，等待下一次轮询
@@ -362,8 +499,60 @@ function pollTaskStatus(taskId, optionElement) {
             const data = await response.json();
 
             if (data.status === 'SUCCESS') {
+                console.log('Task completed successfully, triggering download...');
+                console.log('Full task data received:', data);
+                console.log('Task result:', data.result);
+                
                 clearInterval(intervalId);
+                // Remove from tracking
+                optionElement.removeAttribute('data-polling-interval');
                 optionElement.classList.remove('is-downloading');
+                
+                // Use the downloaded file from Celery task result
+                const result = data.result;
+                if (result && result.relative_path) {
+                    console.log('Using cached file with relative_path:', result.relative_path);
+                    console.log('Full result object:', result);
+                    
+                    // Use the complete relative_path from Celery result
+                    // This should be the actual filename that was saved
+                    const actualFileName = result.relative_path;
+                    const downloadUrl = `/files/${encodeURIComponent(actualFileName)}`;
+                    
+                    console.log('Actual filename from Celery:', actualFileName);
+                    console.log('Download URL:', downloadUrl);
+                    
+                    // For download attribute, use just the filename part (for browser save dialog)
+                    const displayFileName = actualFileName.split('/').pop().split('\\').pop();
+                    
+                    // Directly trigger download - if file doesn't exist, browser will show error
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = displayFileName;
+                    
+                    // Add error handling for download failures
+                    link.addEventListener('error', function(e) {
+                        console.error('Download failed:', e);
+                        alert('缓存文件下载失败，正在尝试流式下载...');
+                        // Fallback to stream download
+                        const formatId = optionElement.dataset.formatId;
+                        const resolution = optionElement.dataset.resolution || 'unknown';
+                        triggerFileDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
+                    });
+                    
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    console.log('Cached file download triggered with actual filename');
+                } else {
+                    console.warn('No cached file found in result. Result structure:', result);
+                    console.log('Falling back to stream download');
+                    // Fallback to stream download if no cached file
+                    const formatId = optionElement.dataset.formatId;
+                    const resolution = optionElement.dataset.resolution || 'unknown';
+                    triggerFileDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
+                }
+                
                 progressDiv.classList.add('hidden');
                 progressDiv.innerHTML = '';
                 contentDiv.innerHTML = `
@@ -379,6 +568,8 @@ function pollTaskStatus(taskId, optionElement) {
                 optionElement.classList.add('border', 'border-green-500');
             } else if (data.status === 'FAILURE') {
                 clearInterval(intervalId);
+                // Remove from tracking
+                optionElement.removeAttribute('data-polling-interval');
                 optionElement.classList.remove('is-downloading');
                 progressDiv.innerHTML = `
                     <div class="flex-grow text-center">
@@ -400,6 +591,10 @@ function pollTaskStatus(taskId, optionElement) {
             console.error('轮询过程中发生错误:', error);
         }
     }, pollingInterval);
+    
+    // Store interval ID for external cancellation after setInterval is created
+    optionElement.dataset.pollingInterval = intervalId;
+    console.log(`Started polling for task ${taskId} with interval ID ${intervalId}`);
 }
 
     function handleDownload(formatId) {
@@ -453,7 +648,8 @@ function pollTaskStatus(taskId, optionElement) {
             return response.json();
         })
         .then(data => {
-            // 开始轮询任务状态
+            // Store the task_id on the element for cancellation
+            optionElement.dataset.taskId = data.task_id;
             pollTaskStatus(data.task_id, optionElement);
         })
         .catch(error => {
@@ -635,4 +831,69 @@ function initializeLanguageSelector() {
             languageMenu.classList.add('hidden');
         });
     });
+}
+
+// Download functions (adapted from download.js)
+function generateSafeFilename(title, resolution, type) {
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const extension = type === 'video' ? 'mp4' : 'mp3';
+    const cleanTitle = sanitizeFilename(title);
+    const cleanResolution = sanitizeFilename(resolution);
+    
+    return `${cleanTitle}_${cleanResolution}_${timestamp}.${extension}`;
+}
+
+function sanitizeFilename(filename) {
+    if (!filename) return 'untitled';
+    
+    // Remove or replace dangerous characters
+    const cleaned = filename
+        .replace(/[<>:"/\\|?*\x00-\x1F\x7F-\x9F]/g, '_')  // Replace illegal characters
+        .replace(/^\./g, '_')                              // Cannot start with dot
+        .replace(/\s+/g, '_')                             // Replace spaces with underscores
+        .replace(/_{2,}/g, '_')                           // Merge multiple underscores
+        .replace(/^_+|_+$/g, '')                          // Remove leading and trailing underscores
+        .substring(0, 200);                               // Limit length
+    
+    // Ensure filename is not empty
+    return cleaned || 'untitled';
+}
+
+function get_query_params(url, type, formatId, resolution, title) {
+    return new URLSearchParams({
+        url,
+        download_type: type,
+        format_id: formatId,
+        resolution,
+        title
+    });
+}
+
+function triggerFileDownload(url, type, formatId, resolution, title) {
+    console.log('triggerFileDownload called with:', { url, type, formatId, resolution, title });
+    triggerTraditionalDownload(url, type, formatId, resolution, title);
+}
+
+function triggerTraditionalDownload(url, type, formatId, resolution, title) {
+    console.log('triggerTraditionalDownload called with:', { url, type, formatId, resolution, title });
+    const query_params = get_query_params(url, type, formatId, resolution, title);
+    const downloadUrl = `/download-stream?${query_params.toString()}`;
+    
+    console.log('Generated download URL:', downloadUrl);
+    
+    // Generate a proper filename with extension
+    const extension = type === 'video' ? '.mp4' : '.mp3';
+    const safeTitle = sanitizeFilename(title);
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const filename = `${safeTitle}_${resolution}_${timestamp}${extension}`;
+    
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    
+    console.log('Triggering download link click with filename:', filename);
+    link.click();
+    document.body.removeChild(link);
+    console.log('Download link clicked and removed');
 }

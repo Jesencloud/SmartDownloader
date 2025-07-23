@@ -85,6 +85,7 @@ function initializeLanguageSelector() {
 let selectedResolution = null;
 let selectedFormatId = null;
 let videoData = null;
+let abortController = null; // To control fetch requests
 
 // Safe filename sanitization function
 function sanitizeFilename(filename) {
@@ -116,16 +117,8 @@ function generateSafeFilename(title, resolution, type) {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded');
     
-    // Test direct element access
-    const toggle = document.getElementById('languageToggle');
-    const menu = document.getElementById('languageMenu');
-    console.log('Direct test - toggle:', toggle);
-    console.log('Direct test - menu:', menu);
-    
-    // Initialize dark mode
+    // Initialize dark mode and language selector
     initializeDarkMode();
-    
-    // Initialize language selector
     initializeLanguageSelector();
     
     // Get URL parameters
@@ -150,6 +143,40 @@ document.addEventListener('DOMContentLoaded', () => {
             startDownload();
         }
     });
+
+    // Back button event to cancel download
+    document.getElementById('backButton').addEventListener('click', async (e) => {
+        e.preventDefault(); // Prevent immediate navigation
+        
+        if (abortController) {
+            console.log('Back button clicked, canceling download...');
+            
+            // 1. Abort the fetch request
+            abortController.abort();
+            
+            // 2. Call backend cancel API to clean up server-side processes
+            try {
+                // Get any active task IDs from session storage or track them during download
+                const activeTaskIds = sessionStorage.getItem('active_task_ids');
+                if (activeTaskIds) {
+                    const taskIds = JSON.parse(activeTaskIds);
+                    await fetch('/downloads/cancel', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ task_ids: taskIds })
+                    });
+                }
+            } catch (error) {
+                console.warn('Failed to cancel server tasks:', error);
+                // Continue with navigation even if cancel fails
+            }
+        }
+        
+        // Navigate home after cleanup
+        window.location.href = '/';
+    });
 });
 
 async function fetchVideoInfo(url, type) {
@@ -163,14 +190,12 @@ async function fetchVideoInfo(url, type) {
         });
 
         if (!response.ok) {
-            // 检查响应是否是JSON格式
             const contentType = response.headers.get("content-type");
             let errorMessage;
             if (contentType && contentType.indexOf("application/json") !== -1) {
                 const errorData = await response.json();
                 errorMessage = errorData.detail || `API Error: ${response.status}`;
             } else {
-                // 如果不是JSON，很可能是服务器超时返回的HTML页面
                 errorMessage = `服务器错误: ${response.status} ${response.statusText}。服务器可能正忙或请求超时。`;
             }
             throw new Error(errorMessage);
@@ -178,20 +203,16 @@ async function fetchVideoInfo(url, type) {
 
         const videoInfo = await response.json();
         
-        // Store videoInfo and original URL in sessionStorage
         sessionStorage.setItem('video_info', JSON.stringify(videoInfo));
         sessionStorage.setItem('original_url', url);
         sessionStorage.setItem('download_type', type);
 
-        // Redirect to the new page
         window.location.href = '/result_normal';
         
-        //--- NEW: update language on content load
         switchLanguage(window.currentLanguage);
 
     } catch (error) {
         console.error('获取视频信息失败:', error);
-        console.error('Error details:', error.message, error.name, error.stack); // Added detailed error logging
         showError('获取视频信息失败: ' + error.message);
     }
 }
@@ -216,14 +237,9 @@ function generateResolutionOptions(formats, type) {
         optionElement.dataset.formatId = format.format_id;
         optionElement.dataset.resolution = format.resolution;
         
-        // Format file size
         const sizeText = formatFileSize(format.filesize);
-        
-        // Build format description
         const codecInfo = format.vcodec ? ` (${format.vcodec})` : '';
         const fpsInfo = format.fps ? ` ${format.fps}fps` : '';
-        
-        // Display format label (now only MP4 format)
         const formatLabel = format.ext.toUpperCase();
         
         optionElement.innerHTML = `
@@ -246,12 +262,10 @@ function formatFileSize(bytes) {
 }
 
 function selectResolution(formatId, resolution) {
-    // Remove previous selection
     document.querySelectorAll('.resolution-option').forEach(option => {
         option.classList.remove('selected');
     });
     
-    // Select current option
     const selectedOption = document.querySelector(`[data-format-id="${formatId}"]`);
     if (selectedOption) {
         selectedOption.classList.add('selected');
@@ -269,92 +283,94 @@ function startDownload() {
         正在准备下载...
     `;
     
-    // Get URL parameters
+    abortController = new AbortController(); // Create a new controller for this download
+
     const urlParams = new URLSearchParams(window.location.search);
     const videoUrl = urlParams.get('url');
     const downloadType = urlParams.get('type') || 'video';
     
-    // Trigger file save dialog
     setTimeout(() => {
         triggerFileDownload(videoUrl, downloadType, selectedFormatId, selectedResolution);
     }, 1000);
 }
 
 function triggerFileDownload(url, type, formatId, resolution) {
-    // Check if showSaveFilePicker API is supported (modern browsers)
     if ('showSaveFilePicker' in window) {
         triggerModernFileSave(url, type, formatId, resolution);
     } else {
-        // Fallback to traditional download method
         triggerTraditionalDownload(url, type, formatId, resolution);
     }
 }
 
+function get_query_params(url, type, formatId, resolution, title) {
+    return new URLSearchParams({
+        url,
+        download_type: type,
+        format_id: formatId,
+        resolution,
+        title
+    });
+}
+
 async function triggerModernFileSave(url, type, formatId, resolution) {
     try {
-        const filename = generateSafeFilename(videoData.title, resolution, type);
-        
-        // Use modern file system access API to show save dialog
-        const fileHandle = await window.showSaveFilePicker({
-            suggestedName: filename,
-            types: [{
-                description: type === 'video' ? 'Video files' : 'Audio files',
-                accept: type === 'video' ? { 'video/mp4': ['.mp4'] } : { 'audio/mp3': ['.mp3'] }
-            }]
+        const query_params = get_query_params(url, type, formatId, resolution, videoData.title);
+        const response = await fetch(`/download-stream?${query_params.toString()}`, {
+            signal: abortController.signal // Pass the signal to fetch
         });
 
-        // This should call the actual download API
-        // Simulate file data (in real applications this would be actual file content)
-        const blob = new Blob([`模拟下载内容 - Format ID: ${formatId}`], { 
-            type: type === 'video' ? 'video/mp4' : 'audio/mp3' 
-        });
-        
-        const writable = await fileHandle.createWritable();
-        await writable.write(blob);
-        await writable.close();
+        if (!response.ok) {
+            throw new Error(`Download failed: ${response.statusText}`);
+        }
+
+        const filename = generateSafeFilename(videoData.title, resolution, type);
+        const fileStream = streamSaver.createWriteStream(filename);
+        const readableStream = response.body;
+
+        if (window.WritableStream && readableStream.pipeTo) {
+            await readableStream.pipeTo(fileStream, { signal: abortController.signal });
+        } else {
+            const writer = fileStream.getWriter();
+            const reader = readableStream.getReader();
+            const pump = () => reader.read()
+                .then(res => res.done ? writer.close() : writer.write(res.value).then(pump));
+            await pump();
+        }
         
         alert('文件保存成功！');
     } catch (error) {
         if (error.name !== 'AbortError') {
             console.error('保存文件时出错:', error);
             alert('保存文件失败: ' + error.message);
+        } else {
+            console.log('Download was aborted by the user.');
         }
-        // If user cancelled the dialog, fallback to traditional download
-        triggerTraditionalDownload(url, type, formatId, resolution);
     } finally {
         resetDownloadButton();
+        abortController = null; // Clean up controller
     }
 }
 
 function triggerTraditionalDownload(url, type, formatId, resolution) {
-    // Create a temporary a tag to trigger file download
+    const query_params = get_query_params(url, type, formatId, resolution, videoData.title);
+    const downloadUrl = `/download-stream?${query_params.toString()}`;
+    
     const link = document.createElement('a');
-    
-    const filename = generateSafeFilename(videoData.title, resolution, type);
-    
-    // This should call the actual download API
-    // Simulate file data (in real applications this would be actual file content)
-    const blob = new Blob([`模拟下载内容 - Format ID: ${formatId}`], { 
-        type: type === 'video' ? 'video/mp4' : 'audio/mp3' 
-    });
-    const objectUrl = URL.createObjectURL(blob);
-    
-    link.href = objectUrl;
-    link.download = filename;
-    link.style.display = 'none';
-    
+    link.href = downloadUrl;
+    link.download = generateSafeFilename(videoData.title, resolution, type);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    // Clean up URL object
-    URL.revokeObjectURL(objectUrl);
-    
+
     resetDownloadButton();
     alert('文件下载已开始！请检查您的下载文件夹。');
 }
 
 function resetDownloadButton() {
+    if (abortController) {
+        abortController.abort(); // Abort any ongoing download
+        abortController = null;
+    }
     const downloadButton = document.getElementById('downloadButton');
     downloadButton.disabled = false;
     downloadButton.innerHTML = `

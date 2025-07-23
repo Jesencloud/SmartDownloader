@@ -5,6 +5,83 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
 ## [2.3.0] - 2025-07-22
+⏺ ✅ Celery 工作进程优化完成！
+
+  现在你可以使用以下几种方式启动和监控 Celery：
+
+  🚀 快速测试 Flower
+
+  现在 Flower 已经正确安装，你可以这样启动：
+
+  # 方法1：使用管理脚本启动 Flower
+  python celery_manager.py flower --port 5555
+
+  # 方法2：直接启动 Flower  
+  python -m flower -A web.celery_app --port=5555 --basic_auth=admin:admin123
+
+  🛠️ 推荐的启动顺序：
+
+  1. 一键启动所有服务
+
+  python start_all_services.py
+
+  2. 或者分步启动
+
+  # 启动 Worker
+  python celery_manager.py start --concurrency 2
+
+  # 启动监控 (二选一)
+  python celery_manager.py flower --port 5555           # Flower (功能全)
+  python celery_manager.py builtin-monitor --port 8001  # 内置监控 (轻量)
+
+  # 启动 Web 服务
+  python -m uvicorn web.main:app --host 0.0.0.0 --port 8000 --reload
+
+  📊 监控界面访问：
+
+  - Web 服务: http://localhost:8000
+  - Flower 监控: http://localhost:5555 (用户名: admin, 密码: admin123)
+  - 内置监控: http://localhost:8001
+  - 命令行监控: python celery_manager.py monitor
+
+  🎯 核心优化改进：
+
+  1. 智能超时控制 - 防止任务无限挂起
+  2. 资源监控 - 实时检查内存、CPU、磁盘
+  3. 自动重试 - 网络错误时自动恢复
+  4. 队列分离 - 下载和维护任务分离
+  5. 进程管理 - 定期重启防止内存泄漏
+  6. 双监控方案 - Flower + 内置监控备选
+
+  这套优化方案将显著提升 Celery 的性能、稳定性和可监控性！🎉
+
+
+😄
+
+
+  修复的问题
+
+  用户点击"返回主页"取消下载后，uvicorn后台仍然会打印对/downloads/{task_id}的轮询请求。
+
+  根本原因
+
+  前端的pollTaskStatus函数中的setInterval定时器没有在用户取消下载时被正确清除，导致轮询持续进行。
+
+  解决方案
+
+  1. 正确存储intervalId: 在setInterval创建后立即将ID存储到DOM元素的data-polling-interval属性中
+  2. 增强取消机制: 在handleReturnHome函数中清除所有活跃的轮询定时器
+  3. 双重检查机制: 在轮询函数内部添加取消状态检查，防止已取消的轮询继续执行fetch请求
+  4. 完整的资源清理: 确保Celery任务取消、进程终止和文件清理都正常工作
+
+  现在系统的取消机制是完整和可靠的：
+  - ✅ 前端轮询立即停止
+  - ✅ 后端任务正确取消
+  - ✅ 子进程被强制终止
+  - ✅ 临时文件得到清理
+  - ✅ 不再有残留的HTTP请求
+
+---
 
 问题核心
 这个问题的核心是一个经典的前端难题：如何在动态更新页面部分内容的同时，不破坏或中断页面上其他部分的状态，尤其是正在进行的CSS动画。
