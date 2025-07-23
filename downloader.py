@@ -294,13 +294,13 @@ class Downloader:
         Returns:
             找到的文件路径,如果未找到则返回None
         """
-        log.info(f'主动验证文件: 前缀={prefix}, 首选扩展名={preferred_extensions}')
+        log.debug(f'主动验证文件: 前缀={prefix}, 首选扩展名={preferred_extensions}')
         
         # 策略1: 主动验证首选扩展名
         for ext in preferred_extensions:
             potential_file = self.download_folder / f"{prefix}{ext}"
             if potential_file.exists() and potential_file.stat().st_size > 0:
-                log.info(f"✅ 主动验证成功: 找到文件 '{potential_file.name}'")
+                log.debug(f"✅ 主动验证成功: 找到文件 '{potential_file.name}'")
                 return potential_file
         
         log.warning(f"主动验证失败，未找到任何首选扩展名的文件。将回退到搜索模式...")
@@ -321,7 +321,7 @@ class Downloader:
 
         # 返回最新修改的文件，以处理可能的重试或覆盖情况
         latest_file = max(valid_files, key=lambda f: f.stat().st_mtime)
-        log.info(f'✅ 搜索模式成功: 找到最新的匹配文件: {latest_file.name}')
+        log.debug(f'✅ 搜索模式成功: 找到最新的匹配文件: {latest_file.name}')
         return latest_file
 
     async def download_and_merge(self, video_url: str, format_id: str = None, resolution: str = '', fallback_prefix: Optional[str] = None) -> Optional[Path]:

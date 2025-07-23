@@ -1,79 +1,32 @@
 #!/usr/bin/env python3
 """
-Web服务器启动脚本
-支持自动重启功能
+Web服务器启动脚本 (简化版)
 """
-import os
-import sys
-import time
-import signal
-import subprocess
+import uvicorn
 from pathlib import Path
+import os
 
-def start_server():
-    """启动Web服务器"""
-    print("🚀 启动SmartDownloader Web服务器...")
-    
-    # 确保在项目根目录
+if __name__ == "__main__":
+    # 确保在项目根目录运行，以便Uvicorn能找到 'web.main:app'
     project_root = Path(__file__).parent
     os.chdir(project_root)
     
-    # 启动命令
-    cmd = [
-        sys.executable, "-m", "uvicorn", 
+    print("🚀 启动SmartDownloader Web服务器 (开发模式)...")
+    print("   - 访问地址: http://0.0.0.0:8000")
+    print("   - 按 Ctrl+C 停止服务器")
+    
+    # 直接调用 uvicorn.run()
+    # 这使得 Ctrl+C 行为更可预测，由 uvicorn 内部处理
+    # 通过 reload_dirs 精确指定要监控的目录
+    # 通过 reload_excludes 排除日志、缓存和下载文件，防止不必要的重启
+    uvicorn.run(
         "web.main:app",
-        "--host", "0.0.0.0",
-        "--port", "8000",
-        "--reload"  # 开发模式，支持自动重载
-    ]
-    
-    return subprocess.Popen(cmd)
-
-def main():
-    """主启动循环，支持自动重启"""
-    restart_count = 0
-    max_restarts = 10
-    
-    while restart_count < max_restarts:
-        try:
-            print(f"📡 启动服务器 (重启次数: {restart_count})")
-            
-            # 启动服务器进程
-            server_process = start_server()
-            
-            # 等待进程结束
-            return_code = server_process.wait()
-            
-            print(f"⚠️ 服务器进程结束，返回码: {return_code}")
-            
-            if return_code == 0:
-                print("✅ 服务器正常退出")
-                break
-            elif return_code == -signal.SIGTERM:
-                print("🔄 收到重启信号，准备重启...")
-                restart_count += 1
-                time.sleep(2)  # 等待2秒后重启
-                continue
-            else:
-                print(f"❌ 服务器异常退出，返回码: {return_code}")
-                restart_count += 1
-                time.sleep(5)  # 等待5秒后重启
-                
-        except KeyboardInterrupt:
-            print("\n🛑 收到中断信号，正在关闭服务器...")
-            if 'server_process' in locals():
-                server_process.terminate()
-                server_process.wait()
-            break
-        except Exception as e:
-            print(f"❌ 启动服务器时出错: {e}")
-            restart_count += 1
-            time.sleep(5)
-    
-    if restart_count >= max_restarts:
-        print(f"❌ 达到最大重启次数 ({max_restarts})，停止重启")
-    
-    print("🏁 服务器启动脚本结束")
-
-if __name__ == "__main__":
-    main()
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info",
+        reload_dirs=["web", "core"],  # 只监控这两个核心代码目录
+        reload_excludes=[
+            "*.log", "*.cache", "downloads/*", "tests/*"
+        ]
+    )

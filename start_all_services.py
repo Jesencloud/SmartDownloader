@@ -68,13 +68,18 @@ def main():
         time.sleep(2)
         
         print("\n3️⃣ 启动 Web 服务器...")
+        preexec_fn = os.setsid if sys.platform != "win32" else None
         web_process = subprocess.Popen([
             sys.executable, "-m", "uvicorn", 
             "web.main:app",
             "--host", "0.0.0.0",
             "--port", "8000",
-            "--reload"
-        ])
+            "--reload",
+            "--reload-dir", "web",
+            "--reload-dir", "core",
+            "--reload-exclude", "*.log",
+            "--reload-exclude", "downloads/*"
+        ], preexec_fn=preexec_fn)
         processes.append(("Web 服务器", web_process))
         time.sleep(2)
         
@@ -97,11 +102,20 @@ def main():
         for name, process in processes:
             try:
                 print(f"停止 {name}...")
-                process.terminate()
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                print(f"强制停止 {name}...")
-                process.kill()
+                # 对 uvicorn --reload 使用进程组终止
+                if name == "Web 服务器" and sys.platform != "win32":
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                else:
+                    process.terminate()
+                
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f"强制停止 {name}...")
+                    if name == "Web 服务器" and sys.platform != "win32":
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    else:
+                        process.kill()
             except:
                 pass
         

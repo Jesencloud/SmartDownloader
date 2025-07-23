@@ -640,16 +640,10 @@ async def get_downloaded_file(request: Request, file_name: str):
         # Decode URL-encoded filename
         from urllib.parse import unquote
         decoded_file_name = unquote(file_name)
-        
-        log.info(f"Requested file: {decoded_file_name}")
-        print(f"[DEBUG] Requested file: {decoded_file_name}")  # 强制输出到stdout
+        log.info(f"Serving file request: '{decoded_file_name}'")
         
         # First try direct path (could be just filename or relative path)
         file_path = Path(config.downloader.save_path) / decoded_file_name
-        
-        log.info(f"Trying direct path: {file_path}")
-        log.info(f"Download directory: {config.downloader.save_path}")
-        log.info(f"File exists: {file_path.exists()}")
         
         if file_path.exists() and file_path.is_file():
             log.info(f"Found file directly: {file_path}, size: {file_path.stat().st_size} bytes")
@@ -690,16 +684,7 @@ async def get_downloaded_file(request: Request, file_name: str):
         # Generate proper filename for download
         clean_filename = file_path.name
         
-        # Final file validation
         final_size = file_path.stat().st_size
-        log.info(f"Final file path: {file_path}")
-        log.info(f"Final file size: {final_size} bytes")
-        log.info(f"File is readable: {os.access(file_path, os.R_OK)}")
-        
-        # 强制输出到stdout以便调试
-        print(f"[DEBUG] Final file path: {file_path}")
-        print(f"[DEBUG] Final file size: {final_size} bytes")
-        print(f"[DEBUG] File is readable: {os.access(file_path, os.R_OK)}")
         
         if final_size == 0:
             log.error(f"File has zero size: {file_path}")
@@ -710,11 +695,24 @@ async def get_downloaded_file(request: Request, file_name: str):
             raise HTTPException(status_code=500, detail="File permission denied")
         
         # Detect media type based on extension
-        media_type = 'application/octet-stream'
-        if file_path.suffix.lower() == '.mp4':
-            media_type = 'video/mp4'
-        elif file_path.suffix.lower() == '.mp3':
-            media_type = 'audio/mpeg'
+        MIME_TYPES = {
+            # 视频
+            '.mp4': 'video/mp4',
+            '.mkv': 'video/x-matroska',
+            '.webm': 'video/webm',
+            '.mov': 'video/quicktime',
+            '.avi': 'video/x-msvideo',
+            # 音频
+            '.mp3': 'audio/mpeg',
+            '.m4a': 'audio/mp4',
+            '.opus': 'audio/opus',
+            '.wav': 'audio/wav',
+            '.flac': 'audio/flac',
+            '.aac': 'audio/aac',
+        }
+        file_extension = file_path.suffix.lower()
+        # 如果找不到，则回退到通用的二进制流类型
+        media_type = MIME_TYPES.get(file_extension, 'application/octet-stream')
         
         headers = {
             "Content-Disposition": f"attachment; filename=\"{clean_filename}\"",
@@ -725,12 +723,9 @@ async def get_downloaded_file(request: Request, file_name: str):
             "Content-Length": str(final_size)
         }
         
-        log.info(f"Response headers: {headers}")
-        log.info(f"Media type: {media_type}")
-        
         # Handle HEAD request - return headers only
         if request.method == "HEAD":
-            log.info("Handling HEAD request")
+            log.debug("Handling HEAD request for file: %s", clean_filename)
             from fastapi import Response
             return Response(
                 headers=headers,
@@ -738,7 +733,7 @@ async def get_downloaded_file(request: Request, file_name: str):
             )
         
         # Handle GET request - return file
-        log.info("Handling GET request - serving file")
+        log.info("Serving file '%s' (%s) to client.", clean_filename, media_type)
         
         # Use a more explicit FileResponse configuration
         try:
@@ -756,7 +751,7 @@ async def get_downloaded_file(request: Request, file_name: str):
             
             # Explicitly set content length
             response.headers["Content-Length"] = str(final_size)
-            log.info(f"FileResponse created successfully with size: {final_size}")
+            log.debug(f"FileResponse created successfully for {clean_filename} with size: {final_size}")
             return response
             
         except Exception as e:

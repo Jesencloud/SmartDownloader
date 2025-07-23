@@ -35,7 +35,7 @@ def mock_downloader(mocker, tmp_path):
         # Do NOT use AsyncMock for async generators.
         "stream_playlist_info": mocker.patch.object(downloader, 'stream_playlist_info'),
         "execute_cmd": mocker.patch.object(downloader, '_execute_cmd_with_auth_retry', new_callable=AsyncMock),
-        "find_file": mocker.patch.object(downloader, '_find_output_file', new_callable=AsyncMock),
+        "find_file": mocker.patch.object(downloader, '_find_and_verify_output_file', new_callable=AsyncMock),
         "command_builder": mock_command_builder_instance, # Expose the mocked instance for tests
     }
 
@@ -101,8 +101,8 @@ async def test_download_audio_conversion_success(mock_downloader):
     video_title = "Cool Podcast"
     audio_format = "mp3"
     sanitized_title = downloader._sanitize_filename(video_title)
-    file_prefix = f"{sanitized_title}_{audio_format}"
-    expected_output_path = download_folder / f"{file_prefix}.{audio_format}"
+    # 修正：输出文件名不应包含 audio_format 作为前缀的一部分，以匹配 downloader.py 的逻辑
+    expected_output_path = download_folder / f"{sanitized_title}.{audio_format}"
 
     # 模拟 stream_playlist_info
     async def mock_info_gen():
@@ -142,8 +142,8 @@ async def test_download_audio_direct_download_success(mock_downloader):
     video_title = "Bilibili Audio"
     audio_format_id = "30232"
     sanitized_title = downloader._sanitize_filename(video_title)
-    file_prefix = f"{sanitized_title}_{audio_format_id}"
-    expected_output_path = download_folder / f"{file_prefix}.m4a"
+    # The expected output path is based on the sanitized title, not the complex prefix.
+    expected_output_path = download_folder / f"{sanitized_title}.m4a"
 
     # 模拟 stream_playlist_info
     async def mock_info_gen():
@@ -166,8 +166,8 @@ async def test_download_audio_direct_download_success(mock_downloader):
     # 3. 验证
     assert result == expected_output_path
     mocks["execute_cmd"].assert_called_once()
-    # 验证 _find_output_file 被调用，因为这是直接下载策略
+    # 验证 _find_and_verify_output_file 被调用，因为这是直接下载策略
     mocks["find_file"].assert_called_once_with(
-        file_prefix, 
-        ('.webm', '.m4a', '.opus', '.ogg', '.mp3', '.aac', '.flac', '.wav')
+        sanitized_title, # The call uses the sanitized title directly
+        ('.m4a', '.mp4', '.webm', '.opus', '.ogg', '.mp3') # The correct list of extensions
     )
