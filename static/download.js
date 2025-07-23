@@ -177,6 +177,52 @@ document.addEventListener('DOMContentLoaded', () => {
         // Navigate home after cleanup
         window.location.href = '/';
     });
+
+    // Create a shared function for home navigation with download cancellation
+    async function handleHomeNavigation(e) {
+        e.preventDefault(); // Prevent immediate navigation
+        
+        if (abortController) {
+            console.log('Home navigation clicked, canceling download...');
+            
+            // 1. Abort the fetch request
+            abortController.abort();
+            
+            // 2. Call backend cancel API to clean up server-side processes
+            try {
+                // Get any active task IDs from session storage or track them during download
+                const activeTaskIds = sessionStorage.getItem('active_task_ids');
+                if (activeTaskIds) {
+                    const taskIds = JSON.parse(activeTaskIds);
+                    await fetch('/downloads/cancel', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ task_ids: taskIds })
+                    });
+                }
+            } catch (error) {
+                console.warn('Failed to cancel server tasks:', error);
+                // Continue with navigation even if cancel fails
+            }
+        }
+        
+        // Navigate home after cleanup
+        window.location.href = '/';
+    }
+
+    // Attach home navigation handler to header home links
+    const logoHomeLink = document.querySelector('.logo a');
+    if (logoHomeLink) {
+        logoHomeLink.addEventListener('click', handleHomeNavigation);
+    }
+
+    // Attach home navigation handler to return home links
+    const returnHomeLinks = document.querySelectorAll('.return-home-link');
+    returnHomeLinks.forEach(link => {
+        link.addEventListener('click', handleHomeNavigation);
+    });
 });
 
 async function fetchVideoInfo(url, type) {

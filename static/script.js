@@ -137,7 +137,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Attach cancellation handler to header links ---
     // This needs to be done at a higher level since the header is always present.
     document.querySelector('.logo a').addEventListener('click', handleReturnHome);
-    // Assuming there might be other home links in the header.
+    
+    // Attach cancellation handler to the Home button in header
+    const homeButton = document.querySelector('a[data-translate="homeButton"]');
+    if (homeButton) {
+        homeButton.addEventListener('click', handleReturnHome);
+    }
 
     // --- Core Functions ---
 
