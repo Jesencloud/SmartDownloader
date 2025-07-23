@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from celery.result import AsyncResult
-from typing import Literal, Dict, Any, List
+from typing import Literal, Dict, Any, List, Union, Optional
 from pathlib import Path
 from urllib.parse import urlparse
 import subprocess
@@ -64,7 +64,7 @@ class DownloadResponse(BaseModel):
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: str
-    result: Dict[str, Any] | str | None = Field(None, description="Task result or error message.")
+    result: Optional[Union[Dict[str, Any], str]] = Field(None, description="Task result or error message.")
 
 class VideoFormat(BaseModel):
     format_id: str

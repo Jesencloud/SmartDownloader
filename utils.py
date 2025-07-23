@@ -2,6 +2,7 @@ import os
 import argparse
 import asyncio
 import logging
+import sys
 import re
 from pathlib import Path
 from typing import Optional, List
@@ -12,7 +13,7 @@ from rich.logging import RichHandler
 
 from config_manager import config
 
-console = Console()
+console = Console(file=sys.stdout)
 log = logging.getLogger(__name__)
 
 class CustomConsoleHandler(RichHandler):

@@ -10,6 +10,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Optional, List, Dict, Any, AsyncGenerator
+import sys
 import os
 import shutil
 from rich.console import Console
@@ -28,7 +29,9 @@ from core import (
 from core.cookies_manager import CookiesManager
 
 log = logging.getLogger(__name__)
-console = Console()
+# 明确创建写入 stdout 的控制台，以避免 rich 将进度条自动发送到 stderr，
+# 从而导致 Celery 将其记录为 WARNING。
+console = Console(file=sys.stdout)
 
 # 全局进度条信号量,确保同时只有一个进度条活动
 _progress_semaphore = asyncio.Semaphore(1)

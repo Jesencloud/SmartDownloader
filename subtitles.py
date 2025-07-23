@@ -2,6 +2,7 @@
 import asyncio
 import re
 import logging
+import sys
 from pathlib import Path
 from typing import Optional, List
 from concurrent.futures import ThreadPoolExecutor
@@ -12,7 +13,7 @@ from rich.console import Console
 from config_manager import config
 
 log = logging.getLogger(__name__)
-console = Console()
+console = Console(file=sys.stdout)
 
 try:
     from deep_translator import GoogleTranslator, MyMemoryTranslator, BaiduTranslator

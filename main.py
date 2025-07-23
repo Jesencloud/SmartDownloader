@@ -6,6 +6,7 @@ SmartDownloader主程序
 
 import argparse
 import asyncio
+import sys
 import logging
 from pathlib import Path
 from typing import Optional, List
@@ -19,7 +20,7 @@ from utils import setup_logging, get_inputs, sanitize
 from handlers import process_local_file, process_metadata_phase, process_download_phase
 
 
-console = Console()
+console = Console(file=sys.stdout)
 log = logging.getLogger(__name__)
 
 
