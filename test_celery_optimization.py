@@ -8,11 +8,13 @@ import time
 import concurrent.futures
 import statistics
 from datetime import datetime
+import pytest
 
+@pytest.mark.e2e
 class CeleryPerformanceTest:
     """Celery 性能测试器"""
     
-    def __init__(self, base_url="http://localhost:8000"):
+    def __init__(self, base_url="http://127.0.0.1:8000"):
         self.base_url = base_url
         self.results = []
     

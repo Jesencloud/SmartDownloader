@@ -479,16 +479,8 @@ async def cleanup_incomplete_downloads():
         if not download_folder.exists():
             return cleanup_stats
         
-        # Common patterns for incomplete download files
-        incomplete_patterns = [
-            "*.part",           # yt-dlp partial downloads
-            "*.temp",           # temporary files
-            "*.ytdl",           # yt-dlp temporary files
-            "*.tmp",            # general temp files
-            "*.download",       # partial downloads
-            "*.partial",        # partial files
-            "*.f*",             # format-specific temp files (f140, f137, etc.)
-        ]
+        # 从配置中读取清理模式
+        incomplete_patterns = config.downloader.cleanup_patterns
         
         total_size = 0
         for pattern in incomplete_patterns:

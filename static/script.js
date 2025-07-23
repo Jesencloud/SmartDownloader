@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Show cleanup message
             const t = getTranslations();
-            showCleanupMessage(t.cleaningUp || '正在取消下载并清理文件...');
+            showCleanupMessage(t.cleaningUp);
 
             // Collect all unique task IDs from the downloading items
             const taskIds = [...new Set(Array.from(downloadingItems)
@@ -117,14 +117,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const resultContainer = document.getElementById('resultContainer');
         const fileCount = cleanupResult.cleaned_files.length;
         const sizeInfo = cleanupResult.total_size_mb > 0 ? ` (${cleanupResult.total_size_mb}MB)` : '';
-        
+        const t = getTranslations();
+        const message = t.cleanupComplete
+            .replace('{fileCount}', fileCount)
+            .replace('{sizeInfo}', sizeInfo);
+
         resultContainer.innerHTML = `
             <div class="cleanup-results bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg text-center" role="alert">
                 <div class="flex items-center justify-center">
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                     </svg>
-                    <span>清理完成！删除了 ${fileCount} 个临时文件${sizeInfo}</span>
+                    <span>${message}</span>
                 </div>
             </div>
         `;

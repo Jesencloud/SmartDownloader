@@ -2,14 +2,18 @@
 from celery import Celery
 import os
 
+# 从环境变量中获取Redis URL，并为本地开发提供默认值
+broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+backend_url = os.environ.get("CELERY_RESULT_BACKEND_URL", "redis://localhost:6379/0")
+
 # 第一个参数是当前模块的名称，这是Celery自动发现任务所必需的。
 # `broker` 指向消息代理（我们使用Redis）。
 # `backend` 指向结果存储（我们也使用Redis）。
 # `include` 是一个模块列表，当worker启动时会自动导入它们，以注册任务。
 celery_app = Celery(
     "smartdownloader",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker=broker_url,
+    backend=backend_url,
     include=["web.tasks"]
 )
 
@@ -37,11 +41,9 @@ celery_app.conf.update(
     # === 结果存储配置 ===
     result_expires=3600,                       # 结果1小时后过期
     result_backend_transport_options={         # Redis连接池优化
-        'master_name': 'mymaster',
-        'visibility_timeout': 3600,
-        'retry_policy': {
-            'timeout': 5.0
-        },
+    # 'master_name': 'mymaster', # 这是一个为Redis Sentinel准备的选项，当前未使用
+    # 'visibility_timeout': 3600, # 这是Broker的设置，不应放在这里
+    # 'retry_policy': {}, # 这也是Broker的设置
         'connection_pool_kwargs': {
             'max_connections': 20,             # 最大连接数
             'retry_on_timeout': True,

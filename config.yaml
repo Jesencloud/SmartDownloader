@@ -125,6 +125,15 @@ downloader:
     - "Proxy error"
     - "NewConnectionError"
     - "Failed to establish a new connection"
+  
+  cleanup_patterns:             # 清理不完整下载文件的模式
+    - "*.part"
+    - "*.temp"
+    - "*.ytdl"
+    - "*.tmp"
+    - "*.download"
+    - "*.partial"
+    - "*.f*"                    # yt-dlp 格式特定临时文件 (例如 f137, f140)
 
 # 文件处理设置
 file_processing:

@@ -1,35 +1,142 @@
 # .github/workflows/tests.yml
 
-name: Run Python Tests
+name: Python Application CI
 
 # 触发器：在推送到主分支或创建拉取请求时运行
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest  # 在最新的 Ubuntu 服务器上运行
+  # Job 1: 运行快速的单元测试和不依赖外部服务的集成测试
+  unit-tests:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"] # 在多个 Python 版本上测试
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3 # 将您的代码下载到服务器
+      uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4 # 安装 Python
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt # 安装项目依赖
+        pip install -r requirements.txt
 
-    - name: Run tests with pytest
+    - name: Run unit and integration tests
       run: |
-        pytest # 运行测试！
+        # 运行所有未标记为 e2e 的测试
+        pytest -m "not e2e" -v
+
+  # Job 2: 运行需要实时服务的端到端测试
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    # 仅在 unit-tests 成功后运行
+    needs: unit-tests
+    # 为节省时间，仅在一个 Python 版本上运行 E2E 测试
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    # 定义此作业所需的服务容器
+    services:
+      # 'redis' 是服务的主机名
+      redis:
+        image: redis:6
+        # 添加健康检查以确保 Redis 完全启动后再继续
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Prepare yt-dlp for Linux
+      run: |
+        # The application code hardcodes 'yt-dlp_macos'. We will download the
+        # Linux binary and place it where the app expects it to be.
+        echo "Downloading yt-dlp for Linux..."
+        mkdir -p bin
+        curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp_macos
+        chmod +x bin/yt-dlp_macos
+        echo "✅ yt-dlp for Linux is ready."
+
+    - name: Start Celery worker in background
+      env:
+        # 将 Celery 指向在 services 中定义的 Redis 容器
+        CELERY_BROKER_URL: redis://redis:6379/0
+        CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
+      run: |
+        celery -A web.celery_app worker --loglevel=info &
+
+    - name: Start FastAPI server in background
+      env:
+        CELERY_BROKER_URL: redis://redis:6379/0
+        CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
+      run: |
+        uvicorn web.main:app --host 0.0.0.0 --port 8000 &
+
+    - name: Wait for server to be ready
+      run: |
+        echo "Waiting for server to be ready..."
+        # 等待最多30秒，直到服务器的根端点返回成功的HTTP状态码
+        # 使用 curl -sSf:
+        # -s: silent mode
+        # -S: show error even with -s
+        # -f: fail silently (no output) on HTTP errors (returns non-zero exit code)
+        for i in {1..30}; do
+          if curl -sSf http://127.0.0.1:8000/ > /dev/null; then
+            echo "✅ Server is up and running!"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "❌ Server did not become ready in 30 seconds."
+        exit 1
+
+    - name: Wait for Celery worker to be ready
+      env:
+        # Point to the Redis service container
+        CELERY_BROKER_URL: redis://redis:6379/0
+        CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
+      run: |
+        echo "Waiting for Celery worker to be responsive..."
+        for i in {1..15}; do
+          # The 'celery status' command will return a non-zero exit code if no workers respond.
+          if celery -A web.celery_app status > /dev/null 2>&1; then
+            echo "✅ Celery worker is responsive."
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "❌ Celery worker did not become ready in 30 seconds."
+        celery -A web.celery_app status # Run one last time to show error output and fail the job
+        exit 1
+
+    - name: Run end-to-end tests
+      run: |
+        # 仅运行标记为 e2e 的测试
+        pytest -m e2e -v

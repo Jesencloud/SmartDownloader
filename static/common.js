@@ -71,7 +71,9 @@ const translations = {
         downloadComplete: '下载完成',
         downloadFailed: '下载失败',
         downloadTimeout: '检查超时',
-        downloadTimeoutMessage: '下载状态检查超时。'
+        downloadTimeoutMessage: '下载状态检查超时。',
+        cleaningUp: '正在取消下载并清理文件...',
+        cleanupComplete: '清理完成！删除了 {fileCount} 个临时文件{sizeInfo}'
     },
     en: {
         // From script.js
@@ -143,7 +145,9 @@ const translations = {
         downloadComplete: 'Download Complete',
         downloadFailed: 'Download Failed',
         downloadTimeout: 'Check Timed Out',
-        downloadTimeoutMessage: 'Download status check timed out.'
+        downloadTimeoutMessage: 'Download status check timed out.',
+        cleaningUp: 'Cancelling downloads and cleaning up files...',
+        cleanupComplete: 'Cleanup complete! Deleted {fileCount} temporary files{sizeInfo}'
     },
 };
 

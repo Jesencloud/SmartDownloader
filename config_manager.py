@@ -99,6 +99,14 @@ class DownloaderConfig(BaseConfig):
         ],
         description="代理错误模式列表"
     )
+    
+    cleanup_patterns: List[str] = Field(
+        default=[
+            "*.part", "*.temp", "*.ytdl", "*.tmp",
+            "*.download", "*.partial", "*.f*"
+        ],
+        description="清理不完整下载文件的模式"
+    )
 
     @field_validator('max_delay')
     def validate_max_delay(cls, v: float, info: ValidationInfo) -> float:
