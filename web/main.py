@@ -575,21 +575,47 @@ async def purge_old_celery_tasks():
 
 
 @app.get("/config")
-async def get_config():
-    return {
-        "downloader": config.downloader.dict(),
-        "subtitles": config.subtitles.dict(),
-        "security": config.security.dict(),
-        "performance": config.performance.dict()
-    }
+async def get_config() -> Dict[str, Any]:
+    """
+    获取当前应用的主要配置项。
+    返回一个可序列化为JSON的字典。
+    """
+    # 返回整个配置，或选择性返回关键部分
+    # 这里我们返回整个配置，因为前端或客户端可能需要访问任何部分
+    return config.model_dump()
 
 @app.post("/config")
-async def update_config(new_config: Dict[str, Any]):
+async def update_config(update_request: Dict[str, Any]):
+    """
+    更新并保存应用配置。
+    支持部分更新，例如只更新 downloader.max_retries。
+    """
+    from config_manager import config_manager, AppConfig, ValidationError
+
     try:
-        config.update_config(new_config)
-        config.save()
+        # 1. 获取当前配置的字典表示
+        current_config_dict = config_manager.config.model_dump()
+
+        # 2. 深度合并传入的更新
+        def deep_update(source: dict, updates: dict) -> dict:
+            for key, value in updates.items():
+                if isinstance(value, dict) and key in source and isinstance(source[key], dict):
+                    source[key] = deep_update(source[key], value)
+                else:
+                    source[key] = value
+            return source
+
+        updated_data = deep_update(current_config_dict, update_request)
+
+        # 3. 使用Pydantic重新验证整个配置对象
+        validated_config = AppConfig.model_validate(updated_data)
+
+        # 4. 如果验证通过，则更新全局配置并保存到文件
+        config_manager.config = validated_config
+        config_manager.save_config(validated_config)
+
         return {"message": "Configuration updated successfully."}
-    except Exception as e:
+    except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/downloads/list", response_class=JSONResponse)

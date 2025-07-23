@@ -293,8 +293,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // By setting the title to dynamic data, it's no longer a translatable string.
     // We must remove the attribute to prevent switchLanguage from overwriting it.
     mainHeading.removeAttribute('data-translate');
-    mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left';
-
+    mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left';// --- 定义颜色主题 ---
+    // 为不同选项设置不同的基色，但悬停时都统一变为紫色
+    const hoverColor = 'hover:bg-purple-500 hover:bg-opacity-50';
+    const defaultColorClass = `bg-gray-800 ${hoverColor}`;
+    const videoColorClasses = [
+        `bg-blue-800 ${hoverColor}`,   // 最高分辨率
+        `bg-teal-800 ${hoverColor}`,  // 次高分辨率
+        `bg-indigo-800 ${hoverColor}`  // 第三种分辨率
+    ];
+    const audioColorClasses = [
+        `bg-teal-800 ${hoverColor}`,   // 高比特率音频
+        `bg-cyan-800 ${hoverColor}`    // 兼容性音频
+    ];    // --- 颜色主题结束 ---
     let optionsHTML = '';
     const headerKey = data.download_type === 'video' ? 'selectResolution' : 'selectAudioQuality';
 
@@ -317,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const audioFormat = bestAudioFormat.ext || 'webm'; // Fallback to 'webm' if not specified
         const highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
-            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
+            <div class="resolution-option ${audioColorClasses[0] || defaultColorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
                  data-format-id="${bestAudioFormat.format_id}" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
@@ -335,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mp3FormatId = `mp3-conversion-${bestAudioFormat.format_id}`;
         const compatibilityText = `${t.betterCompatibility} (${audioFormat.toUpperCase()} → MP3) < ${formatFileSize(bestAudioFormat.filesize)}`;
         optionsHTML += `
-            <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
+            <div class="resolution-option ${audioColorClasses[1] || defaultColorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
                  data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
@@ -381,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Take the top 3 distinct resolutions
         const topFormats = uniqueBestFormats.slice(0, 3);
 
-        optionsHTML = topFormats.map(format => {
+        optionsHTML = topFormats.map((format, index) => {
             let displayText = format.resolution;
             let resolutionText = format.resolution;
             if (format.fps) {
@@ -393,8 +404,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             
+            // 从颜色数组中选择颜色，如果选项超过数组长度，则使用默认灰色
+            const colorClass = videoColorClasses[index] || defaultColorClass;
+
             return `
-                <div class="resolution-option bg-gray-800 bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer hover:bg-gray-700 transition-colors" 
+                <div class="resolution-option ${colorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
                      data-format-id="${format.format_id}" data-resolution="${resolutionText}" data-display-text="${displayText}" data-ext="${format.ext}">
                     <div class="option-content w-full flex items-center">
                         <div class="flex-grow text-center">
@@ -636,7 +650,7 @@ function pollTaskStatus(taskId, optionElement) {
         // 将下载选项替换为不确定进度条
         contentDiv.classList.add('hidden');
         progressDiv.innerHTML = `
-            <div class="progress-bar-container w-full bg-gray-700 rounded-full h-2.5 overflow-hidden"><div class="progress-bar-indeterminate bg-purple-500 h-2.5 rounded-full" style="background-color: #8B5CF6 !important;"></div></div>
+            <div class="progress-bar-container w-full bg-gray-700 rounded-full h-2.5 overflow-hidden"><div class="progress-bar-indeterminate bg-purple-500 h-2.5 rounded-full"></div></div>
         `;
         progressDiv.classList.remove('hidden');
         optionElement.style.pointerEvents = 'none';

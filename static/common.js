@@ -157,12 +157,25 @@ function getTranslations() {
 }
 
 function formatFileSize(bytes) {
-    // This function needs translations, so it's good it's here now.
     const t = getTranslations();
-    if (!bytes || bytes < 0) return t.unknownSize;
-    if (bytes === 0) return '0 Bytes';
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${['Bytes', 'KB', 'MB', 'GB', 'TB'][i]}`;
+
+    // Explicitly check for non-truthy values or string representations of them
+    // This handles null, undefined, "null", "undefined" from data attributes.
+    if (!bytes || bytes === 'null' || bytes === 'undefined') {
+        return t.unknownSize;
+    }
+
+    const numericBytes = Number(bytes);
+
+    // Check if the result is not a number (NaN) or if it's negative.
+    if (isNaN(numericBytes) || numericBytes < 0) {
+        return t.unknownSize;
+    }
+
+    if (numericBytes === 0) return '0 Bytes';
+
+    const i = Math.floor(Math.log(numericBytes) / Math.log(1024));
+    return `${parseFloat((numericBytes / Math.pow(1024, i)).toFixed(2))} ${['Bytes', 'KB', 'MB', 'GB', 'TB'][i]}`;
 }
 
 function switchLanguage(lang) {
