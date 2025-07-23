@@ -282,38 +282,46 @@ class Downloader:
                     return Path(found_path)
         return None
 
-    async def _find_output_file(self, prefix: str, extensions: tuple) -> Optional[Path]:
+    async def _find_and_verify_output_file(self, prefix: str, preferred_extensions: tuple) -> Optional[Path]:
         """
-        在下载目录中查找具有指定前缀和扩展名的文件
+        主动验证并查找输出文件。
+        优先检查首选扩展名，然后回退到glob搜索。
         
         Args:
             prefix: 文件名前缀
-            extensions: 可能的文件扩展名元组
+            preferred_extensions: 按优先顺序列出的文件扩展名元组
 
         Returns:
             找到的文件路径,如果未找到则返回None
         """
-        log.info(f'查找文件: 前缀={prefix}, 扩展名={extensions}')
-        log.info(f'搜索目录: {self.download_folder}')
+        log.info(f'主动验证文件: 前缀={prefix}, 首选扩展名={preferred_extensions}')
+        
+        # 策略1: 主动验证首选扩展名
+        for ext in preferred_extensions:
+            potential_file = self.download_folder / f"{prefix}{ext}"
+            if potential_file.exists() and potential_file.stat().st_size > 0:
+                log.info(f"✅ 主动验证成功: 找到文件 '{potential_file.name}'")
+                return potential_file
+        
+        log.warning(f"主动验证失败，未找到任何首选扩展名的文件。将回退到搜索模式...")
 
-        # 使用glob查找所有以该前缀开头的文件，这是最可靠的方法
+        # 策略2: 回退到glob搜索 (以处理未知扩展名)
         matching_files = list(self.download_folder.glob(f"{prefix}*"))
-
+        
         if not matching_files:
-            log.warning(f'未找到任何以 "{prefix}" 开头的文件。')
-            log.warning(f'目录内容: {list(self.download_folder.glob("*"))}')
+            log.error(f'搜索模式失败: 未找到任何以 "{prefix}" 开头的文件。')
             return None
 
-        # 过滤出扩展名在允许列表中的文件
-        valid_files = [f for f in matching_files if f.suffix.lower() in extensions]
+        # 过滤掉目录和空文件
+        valid_files = [f for f in matching_files if f.is_file() and f.stat().st_size > 0]
 
         if not valid_files:
-            log.warning(f'找到以 "{prefix}" 开头的文件，但扩展名不匹配: {[f.name for f in matching_files]}')
+            log.error(f'搜索模式失败: 找到的文件均无效 (是目录或大小为0)。')
             return None
 
         # 返回最新修改的文件，以处理可能的重试或覆盖情况
         latest_file = max(valid_files, key=lambda f: f.stat().st_mtime)
-        log.info(f'找到最新的匹配文件: {latest_file.name}')
+        log.info(f'✅ 搜索模式成功: 找到最新的匹配文件: {latest_file.name}')
         return latest_file
 
     async def download_and_merge(self, video_url: str, format_id: str = None, resolution: str = '', fallback_prefix: Optional[str] = None) -> Optional[Path]:
@@ -441,6 +449,7 @@ class Downloader:
                     )
 
             video_file = await self._find_output_file(f"{file_prefix}.video", ('.mp4', '.webm', '.mkv'))
+            video_file = await self._find_and_verify_output_file(f"{file_prefix}.video", ('.mp4', '.webm', '.mkv'))
             if not video_file:
                 raise DownloaderException("备用策略：视频部分下载后未找到文件。")
             log.info(f"✅ 视频部分下载成功: {video_file.name}")
@@ -472,7 +481,7 @@ class Downloader:
                         task_id=audio_task
                     )
 
-            audio_file = await self._find_output_file(f"{file_prefix}.audio", ('.m4a', '.mp3', '.opus', '.aac'))
+            audio_file = await self._find_and_verify_output_file(f"{file_prefix}.audio", ('.m4a', '.mp3', '.opus', '.aac'))
             if not audio_file:
                 log.warning("备用策略：音频部分下载后未找到文件。将尝试无音频合并。")
 
@@ -500,7 +509,7 @@ class Downloader:
         except Exception as e:
             log.error(f"备用策略执行失败: {e}", exc_info=True)
             # 如果备用策略也失败，但主策略可能已经下载了部分文件，最后再检查一次
-            final_check = await self._find_output_file(file_prefix, ('.mp4',))
+            final_check = await self._find_and_verify_output_file(file_prefix, ('.mp4',))
             if final_check:
                 log.info(f"在所有策略失败后，找到了一个最终文件: {final_check.name}")
                 return final_check
@@ -524,11 +533,10 @@ class Downloader:
         Raises:
             DownloaderException: 下载失败
         """
-        log.info(f'开始下载音频: {video_url} (请求格式: {audio_format})')
+        log.info(f'开始下载音频: {video_url} (请求的格式/策略: {audio_format})')
         self.download_folder.mkdir(parents=True, exist_ok=True)
 
         try:
-            # 1. 获取视频标题
             try:
                 video_info_gen = self.stream_playlist_info(video_url)
                 video_info = await video_info_gen.__anext__()
@@ -537,44 +545,42 @@ class Downloader:
                 log.warning(f"无法获取视频标题: {e}。将使用备用前缀。")
                 video_title = fallback_prefix or "audio"
 
-            # 2. 准备文件名和格式信息
             sanitized_title = self._sanitize_filename(video_title)
             file_prefix = f"{sanitized_title}_{audio_format}"
             log.info(f'使用文件前缀: {file_prefix}')
 
             known_conversion_formats = ['mp3', 'm4a', 'wav', 'opus', 'aac', 'flac']
-            is_conversion_request = audio_format in known_conversion_formats
 
-            if is_conversion_request:
+            if audio_format in known_conversion_formats:
                 # --- 策略1: 转换格式 (路径可预测) ---
-                exact_output_path = self.download_folder / f"{file_prefix}.{audio_format}"
+                exact_output_path = self.download_folder / f"{sanitized_title}.{audio_format}"
                 log.info(f"音频转换请求。确切的输出路径为: {exact_output_path}")
                 cmd_args = {"url": video_url, "output_template": str(exact_output_path), "audio_format": audio_format}
                 cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
                 await self._execute_cmd_with_auth_retry(initial_cmd=cmd, cmd_builder_func=self.command_builder.build_audio_download_cmd, url=video_url, cmd_builder_args=cmd_args)
 
                 if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
-                    output_file = exact_output_path
+                    return exact_output_path
                 else:
                     raise DownloaderException(f"音频转换失败，预期的输出文件 '{exact_output_path}' 未找到或为空。")
             else:
-                # --- 策略2: 直接下载原始流 (路径需要搜索) ---
-                log.info(f"直接音频流下载请求。输出路径需要搜索。")
+                # --- 策略2: 直接下载原始流 (主动验证) ---
+                log.info(f"直接音频流下载请求。将采用主动验证策略。")
                 # 使用模板让yt-dlp能自动添加正确的扩展名
-                output_template = self.download_folder / f"{file_prefix}.%(ext)s"
+                output_template = self.download_folder / f"{sanitized_title}.%(ext)s"
                 cmd_args = {"url": video_url, "output_template": str(output_template), "audio_format": audio_format}
                 cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
                 await self._execute_cmd_with_auth_retry(initial_cmd=cmd, cmd_builder_func=self.command_builder.build_audio_download_cmd, url=video_url, cmd_builder_args=cmd_args)
 
-                # 主动查找输出文件
-                extensions_to_check = ('.webm', '.m4a', '.opus', '.ogg', '.mp3', '.aac', '.flac', '.wav')
-                output_file = await self._find_output_file(file_prefix, extensions_to_check)
+                # 主动验证并查找输出文件
+                preferred_extensions = ('.m4a', '.mp4', '.webm', '.opus', '.ogg', '.mp3')
+                output_file = await self._find_and_verify_output_file(sanitized_title, preferred_extensions)
 
-            if output_file:
-                log.info(f'✅ 音频下载成功: {output_file.name}')
-                return output_file
-            else:
-                raise DownloaderException('音频下载后未找到文件，所有策略均失败。')
+                if output_file:
+                    log.info(f'✅ 音频下载成功: {output_file.name}')
+                    return output_file
+                else:
+                    raise DownloaderException('音频下载后未找到文件，所有策略均失败。')
 
         except asyncio.CancelledError:
             log.warning("音频下载任务被取消")

@@ -234,12 +234,17 @@ function switchLanguage(lang) {
             newText = `${t.download} ${displayText} ${ext}`;
         } else if (type === 'audio_lossless') {
             const audioFormat = option.dataset.audioFormat;
-            const filesize = option.dataset.filesize;
-            newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(filesize)}`;
+            const abr = option.dataset.abr;
+            if (abr && abr !== 'null' && abr !== 'undefined' && abr !== '') {
+                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${abr}kbps`;
+            } else {
+                // Fallback to old logic if abr is not available
+                const filesize = option.dataset.filesize;
+                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(filesize)}`;
+            }
         } else if (type === 'audio_compatible') {
             const originalFormat = option.dataset.audioFormatOriginal;
-            const filesize = option.dataset.filesize;
-            newText = `${t.betterCompatibility} (${originalFormat.toUpperCase()} → MP3) < ${formatFileSize(filesize)}`;
+            newText = `${t.betterCompatibility} (${originalFormat.toUpperCase()} → MP3)`;
         }
         
         if (newText) {

@@ -67,15 +67,6 @@ class DownloaderConfig(BaseConfig):
     circuit_breaker_failure_threshold: int = Field(default=5, ge=1, le=20, description="熔断器失败阈值")
     circuit_breaker_timeout: int = Field(default=300, ge=60, le=3600, description="熔断器超时时间(秒)")
     
-    # 视频质量设置
-    video_quality: str = Field(default="auto_best", description="视频质量选择")
-    video_format_preference: str = Field(default="any", description="视频格式偏好")
-    audio_quality: str = Field(default="auto_best", description="音频质量选择")
-    audio_format_preference: str = Field(default="any", description="音频格式偏好")
-    
-    # 音频提取设置
-    audio_extraction_mode: str = Field(default="direct_download", description="音频获取方式")
-    
     # yt-dlp 下载命令配置
     ytdlp_video_format: str = Field(default="bestvideo", description="yt-dlp视频格式选择")
     ytdlp_audio_format: str = Field(default="bestaudio", description="yt-dlp音频格式选择")
@@ -112,41 +103,6 @@ class DownloaderConfig(BaseConfig):
     def validate_max_delay(cls, v: float, info: ValidationInfo) -> float:
         if 'base_delay' in info.data and v < info.data['base_delay']:
             raise ValueError("最大延迟时间不能小于基础延迟时间")
-        return v
-
-    @field_validator('video_quality')
-    def validate_video_quality(cls, v: str) -> str:
-        valid_qualities = ['auto_best', 'best', '4k', '1080p', '720p', '480p', '360p', 'worst']
-        if v not in valid_qualities:
-            raise ValueError(f"视频质量必须是以下之一: {valid_qualities}")
-        return v
-
-    @field_validator('video_format_preference')
-    def validate_video_format(cls, v: str) -> str:
-        valid_formats = ['mp4', 'webm', 'mkv', 'any']
-        if v not in valid_formats:
-            raise ValueError(f"视频格式必须是以下之一: {valid_formats}")
-        return v
-
-    @field_validator('audio_quality')
-    def validate_audio_quality(cls, v: str) -> str:
-        valid_qualities = ['auto_best', 'best', '320k', '256k', '192k', '128k', '96k', 'worst']
-        if v not in valid_qualities:
-            raise ValueError(f"音频质量必须是以下之一: {valid_qualities}")
-        return v
-
-    @field_validator('audio_format_preference')
-    def validate_audio_format(cls, v: str) -> str:
-        valid_formats = ['m4a', 'mp3', 'opus', 'aac', 'any']
-        if v not in valid_formats:
-            raise ValueError(f"音频格式必须是以下之一: {valid_formats}")
-        return v
-
-    @field_validator('audio_extraction_mode')
-    def validate_audio_extraction_mode(cls, v: str) -> str:
-        valid_modes = ['direct_download', 'extract_from_video']
-        if v not in valid_modes:
-            raise ValueError(f"音频提取模式必须是以下之一: {valid_modes}")
         return v
 
 

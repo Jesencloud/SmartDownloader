@@ -41,36 +41,6 @@ downloader:
   circuit_breaker_failure_threshold: 5   # 熔断器失败阈值
   circuit_breaker_timeout: 300          # 熔断器超时时间（秒）
   
-  # ===== 旧系统配置（已废弃，保留供参考，当前不生效） =====
-  video_quality: "auto_best"            # [废弃] 视频质量选择模式（新系统使用ytdlp_*_format配置）
-  # 可选值:
-  #   - auto_best: 自动选择最佳格式
-  #   - best:      最高质量（传统模式）
-  #   - 4k:        4K分辨率 (2160p)
-  #   - 1080p:     1080p分辨率
-  #   - 720p:      720p分辨率
-  #   - 480p:      480p分辨率
-  #   - 360p:      360p分辨率
-  #   - worst:     最低质量
-  
-  video_format_preference: "any"         # [废弃] 视频格式偏好（新系统使用ytdlp_*_format配置）
-  # 可选值: mp4, webm, mkv, any
-  
-  audio_quality: "auto_best"             # [废弃] 音频质量选择模式（新系统使用ytdlp_*_format配置）
-  # 可选值:
-  #   - auto_best: 自动选择最佳格式（解析后）
-  #   - best:      最高质量（传统模式）
-  #   - 320k:      320kbps比特率
-  #   - 256k:      256kbps比特率
-  #   - 192k:      192kbps比特率
-  #   - 128k:      128kbps比特率
-  #   - 96k:       96kbps比特率
-  #   - worst:     最低质量
-  
-  audio_format_preference: "any"         # [废弃] 音频格式偏好（新系统使用ytdlp_*_format配置）
-  # 可选值: m4a, mp3, opus, aac, any
-  # ===== 旧系统配置结束 =====
-
   # ===== 新系统 yt-dlp 下载命令配置 =====
   ytdlp_video_format: "bestvideo"           # 视频格式选择
   # 支持的视频格式：
@@ -97,12 +67,6 @@ downloader:
   
   ytdlp_merge_output_format: "mp4"          # 合并输出格式
   # 支持的输出格式：mp4, mkv, webm, avi, mov
-  
-  # 音频提取设置
-  audio_extraction_mode: "direct_download"  # 音频获取方式
-  # 可选值:
-  #   - direct_download: 统一采用在线下载音频（推荐，auto_best模式）
-  #   - extract_from_video: 从下载的视频文件中提取音频（传统模式）
   
   # 错误模式匹配
   retry_patterns:               # 可重试的错误模式

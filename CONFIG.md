@@ -73,6 +73,16 @@ downloader:
   proxy_retry_base_delay: 30    # 代理重试基础延迟（秒）
   proxy_retry_increment: 10     # 代理重试递增延迟（秒）
   proxy_retry_max_delay: 120    # 代理重试最大延迟（秒）
+  
+  # 临时文件清理模式
+  cleanup_patterns:
+    - "*.part"
+    - "*.temp"
+    - "*.ytdl"
+    - "*.tmp"
+    - "*.download"
+    - "*.partial"
+    - "*.f*"
 ```
 
 ### 2. 文件处理设置 (file_processing)

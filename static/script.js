@@ -320,16 +320,26 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const bestAudioFormat = audioFormats.reduce((best, current) => {
-            return (current.filesize || 0) > (best.filesize || 0) ? current : best;
-        }, audioFormats[0]);
+        // 后端已经发送了最佳的音频格式，所以我们直接使用第一个
+        const bestAudioFormat = audioFormats[0];
 
         // Get the actual audio format from the format info
-        const audioFormat = bestAudioFormat.ext || 'webm'; // Fallback to 'webm' if not specified
-        const highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize)}`;
+        // 使用 'm4a' 作为备用格式，因为它在下载策略中具有高优先级，比 'webm' 更具代表性
+        const audioFormat = bestAudioFormat.ext || 'm4a';
+        const audioBitrate = bestAudioFormat.abr;
+
+        // --- "高比特率" 选项文本 ---
+        // 优先使用比特率，如果不存在则回退到文件大小
+        let highBitrateText;
+        if (audioBitrate) {
+            highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${audioBitrate}kbps`;
+        } else {
+            highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize)}`;
+        }
+
         optionsHTML += `
-            <div class="resolution-option ${audioColorClasses[0] || defaultColorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
-                 data-format-id="${bestAudioFormat.format_id}" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize}" data-resolution="audio">
+            <div class="resolution-option ${audioColorClasses[0] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors"
+                 data-format-id="best_original_audio" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-abr="${audioBitrate || ''}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}</span>
@@ -343,11 +353,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>`;
 
-        const mp3FormatId = `mp3-conversion-${bestAudioFormat.format_id}`;
-        const compatibilityText = `${t.betterCompatibility} (${audioFormat.toUpperCase()} → MP3) < ${formatFileSize(bestAudioFormat.filesize)}`;
+        // --- "兼容性佳" 选项文本 ---
+        const mp3FormatId = `mp3-conversion-${bestAudioFormat.format_id || 'best'}`;
+        const compatibilityText = `${t.betterCompatibility} (${audioFormat.toUpperCase()} → MP3)`;
         optionsHTML += `
-            <div class="resolution-option ${audioColorClasses[1] || defaultColorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
-                 data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize}" data-resolution="audio">
+            <div class="resolution-option ${audioColorClasses[1] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
+                 data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_compatible">${compatibilityText}</span>

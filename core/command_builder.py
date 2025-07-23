@@ -92,13 +92,16 @@ class CommandBuilder:
         # 始终为任何音频下载请求提取音频
         cmd.extend(['--extract-audio'])
 
-        # 如果格式是已知的转换格式，则选择最佳音频然后进行转换。
-        if audio_format in ['mp3', 'm4a', 'wav', 'opus', 'aac', 'flac']:
+        if audio_format == 'best_original_audio':
+            # 策略1: 下载最佳原始音频流 (智能适配m4a/mp4)
+            cmd.extend(['-f', 'bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best'])
+        elif audio_format in ['mp3', 'm4a', 'wav', 'opus', 'aac', 'flac']:
+            # 策略2: 下载最佳音频并转换为指定格式
             cmd.extend(['-f', 'bestaudio/best'])
             cmd.extend(['--audio-format', audio_format])
             cmd.extend(['--audio-quality', '0'])
-        # 否则，假定它是要直接下载的特定格式ID。
         else:
+            # 策略3: 假定它是要直接下载的特定格式ID
             cmd.extend(['-f', audio_format])
 
         cmd.extend(['--newline', '-o', output_template, url])
