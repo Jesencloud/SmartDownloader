@@ -18,7 +18,7 @@
 set -e
 
 # --- Configuration ---
-BASE_URL="https://github.com/yt-dlp/yt-dlp/releases"
+BASE_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
 BIN_DIR="bin"
 
 # Define platform-specific binaries in a single string for better compatibility.

@@ -76,12 +76,12 @@ jobs:
 
     - name: Prepare yt-dlp for Linux
       run: |
-        # The application code hardcodes 'yt-dlp_macos'. We will download the
-        # Linux binary and place it where the app expects it to be.
+        # Download the Linux binary and place it where the platform-aware
+        # application code expects it.
         echo "Downloading yt-dlp for Linux..."
         mkdir -p bin
-        curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp_macos
-        chmod +x bin/yt-dlp_macos
+        curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp_linux
+        chmod +x bin/yt-dlp_linux
         echo "✅ yt-dlp for Linux is ready."
 
     - name: Start Celery worker in background

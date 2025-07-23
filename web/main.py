@@ -574,38 +574,6 @@ async def purge_old_celery_tasks():
 # Remove the old restart_server function since we're not using it anymore
 
 
-@app.get("/result_normal", response_class=FileResponse)
-async def result_normal():
-    return FileResponse(BASE_DIR / "static" / "download.html")
-
-@app.get("/result_bilibili", response_class=FileResponse)
-async def result_bilibili():
-    return FileResponse(BASE_DIR / "static" / "download_bilibili.html")
-
-@app.get("/result_youtube", response_class=FileResponse)
-async def result_youtube():
-    return FileResponse(BASE_DIR / "static" / "download_youtube.html")
-
-@app.get("/result_twitter", response_class=FileResponse)
-async def result_twitter():
-    return FileResponse(BASE_DIR / "static" / "download_twitter.html")
-
-@app.get("/result_instagram", response_class=FileResponse)
-async def result_instagram():
-    return FileResponse(BASE_DIR / "static" / "download_instagram.html")
-
-@app.get("/result_facebook", response_class=FileResponse)
-async def result_facebook():
-    return FileResponse(BASE_DIR / "static" / "download_facebook.html")
-
-@app.get("/result_tiktok", response_class=FileResponse)
-async def result_tiktok():
-    return FileResponse(BASE_DIR / "static" / "download_tiktok.html")
-
-@app.get("/result_other", response_class=FileResponse)
-async def result_other():
-    return FileResponse(BASE_DIR / "static" / "download_other.html")
-
 @app.get("/config")
 async def get_config():
     return {

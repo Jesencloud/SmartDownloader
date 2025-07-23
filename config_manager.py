@@ -156,11 +156,6 @@ class FileProcessingConfig(BaseConfig):
     filename_truncate_suffix: str = Field(default="...", description="文件名截断后缀")
     polite_wait_time: float = Field(default=3.0, ge=0, description="礼貌等待时间(秒)")
     
-    cleanup_patterns: List[str] = Field(
-        default=["*.part", "*.part-*", "*.ytdl", "*.tmp.*", "*.f*"],
-        description="清理文件模式"
-    )
-    
     media_extensions: List[str] = Field(
         default=['.mp4', '.avi', '.mkv', '.mov', '.mp3', '.wav', '.flac', '.m4a'],
         description="支持的媒体文件扩展名"
