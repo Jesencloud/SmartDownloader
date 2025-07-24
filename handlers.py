@@ -99,7 +99,7 @@ async def save_info(folder: Path, prefix: str, url: str, dlr) -> None:
                 await f.write(f'UP主: {info.get("uploader", "N/A")}\n')
                 file_size_mb = 'N/A'
                 if isinstance(info.get("filesize_approx"), (int, float)):
-                    file_size_mb = f'{info["filesize_approx"] / (1024 * 1024):.2f} MB'
+                    file_size_mb = f'{info["filesize_approx"] / (1000 * 1000):.2f} MB'
                 await f.write(f'视频大小: {file_size_mb}\n')
                 await f.write(f'视频分辨率: {info.get("resolution", "N/A")}\n')
                 await f.write(f'视频时长: {info.get("duration_string", "N/A")}\n')

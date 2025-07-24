@@ -156,7 +156,7 @@ function getTranslations() {
     return translations[lang] || translations.zh;
 }
 
-function formatFileSize(bytes) {
+function formatFileSize(bytes, is_approx = false) {
     const t = getTranslations();
 
     // Explicitly check for non-truthy values or string representations of them
@@ -174,8 +174,13 @@ function formatFileSize(bytes) {
 
     if (numericBytes === 0) return '0 Bytes';
 
-    const i = Math.floor(Math.log(numericBytes) / Math.log(1024));
-    return `${parseFloat((numericBytes / Math.pow(1024, i)).toFixed(2))} ${['Bytes', 'KB', 'MB', 'GB', 'TB'][i]}`;
+    const k = 1000; // 使用1000作为基数来计算KB, MB, GB
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(numericBytes) / Math.log(k));
+
+    const formattedString = `${parseFloat((numericBytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+    
+    return is_approx ? `≈ ${formattedString}` : formattedString;
 }
 
 function switchLanguage(lang) {
@@ -240,7 +245,8 @@ function switchLanguage(lang) {
             } else {
                 // Fallback to old logic if abr is not available
                 const filesize = option.dataset.filesize;
-                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(filesize)}`;
+                const isApprox = option.dataset.filesizeIsApprox === 'true';
+                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(filesize, isApprox)}`;
             }
         } else if (type === 'audio_compatible') {
             const originalFormat = option.dataset.audioFormatOriginal;

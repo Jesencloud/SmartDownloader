@@ -64,11 +64,11 @@ class CeleryMonitor:
             
             return {
                 'cpu_percent': cpu_percent,
-                'memory_total': memory.total // (1024**3),  # GB
-                'memory_used': memory.used // (1024**3),    # GB
+                'memory_total': memory.total // (1000**3),  # GB
+                'memory_used': memory.used // (1000**3),    # GB
                 'memory_percent': memory.percent,
-                'disk_total': disk.total // (1024**3),      # GB
-                'disk_used': disk.used // (1024**3),        # GB
+                'disk_total': disk.total // (1000**3),      # GB
+                'disk_used': disk.used // (1000**3),        # GB
                 'disk_percent': (disk.used / disk.total) * 100,
                 'load_avg': os.getloadavg() if hasattr(os, 'getloadavg') else [0, 0, 0]
             }

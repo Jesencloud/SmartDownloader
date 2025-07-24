@@ -334,12 +334,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (audioBitrate) {
             highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${audioBitrate}kbps`;
         } else {
-            highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize)}`;
+            highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize, bestAudioFormat.filesize_is_approx)}`;
         }
 
         optionsHTML += `
             <div class="resolution-option ${audioColorClasses[0] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors"
-                 data-format-id="best_original_audio" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-abr="${audioBitrate || ''}" data-resolution="audio">
+                 data-format-id="best_original_audio" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-abr="${audioBitrate || ''}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}</span>
@@ -358,7 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const compatibilityText = `${t.betterCompatibility} (${audioFormat.toUpperCase()} → MP3)`;
         optionsHTML += `
             <div class="resolution-option ${audioColorClasses[1] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
-                 data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-resolution="audio">
+                 data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-resolution="audio">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_compatible">${compatibilityText}</span>
@@ -373,56 +373,33 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
 
     } else { // Video logic
-        // Filter for video formats that have video codec and are in MP4 format
-        const videoFormats = data.formats.filter(f => f.vcodec !== 'none' && f.vcodec != null && f.ext === 'mp4');
+        // The backend now sends a pre-filtered, pre-sorted list of the best format for each resolution.
+        // We just need to render them.
+        const videoFormats = data.formats;
 
         if (videoFormats.length === 0) {
             showErrorState(t.noFormats);
             return;
         }
 
-        // Group formats by resolution and select the best quality (highest FPS) for each.
-        const bestFormatsByResolution = new Map();
-        for (const format of videoFormats) {
-            if (!format.resolution) continue;
-
-            const existing = bestFormatsByResolution.get(format.resolution);
-            if (!existing || (format.fps || 0) > (existing.fps || 0)) {
-                bestFormatsByResolution.set(format.resolution, format);
-            }
-        }
-
-        // Convert map back to an array and sort by resolution height
-        const uniqueBestFormats = Array.from(bestFormatsByResolution.values());
-        uniqueBestFormats.sort((a, b) => {
-            const aHeight = parseInt(a.resolution.split('x')[1], 10);
-            const bHeight = parseInt(b.resolution.split('x')[1], 10);
-            return bHeight - aHeight;
-        });
-
-        // Take the top 3 distinct resolutions
-        const topFormats = uniqueBestFormats.slice(0, 3);
+        // 只显示前3个不同分辨率的视频
+        const topFormats = videoFormats.slice(0, 3);
 
         optionsHTML = topFormats.map((format, index) => {
-            let displayText = format.resolution;
-            let resolutionText = format.resolution;
-            if (format.fps) {
-                displayText += ` ${Math.round(format.fps)}fps`;
-                // Convert resolution to 1080p60 format if it's in 1920x1080 format
-                if (resolutionText.includes('x')) {
-                    const [width, height] = resolutionText.split('x').map(Number);
-                    resolutionText = `${height}p${Math.round(format.fps) > 30 ? Math.round(format.fps) : ''}`;
-                }
-            }
+            const resolutionText = format.resolution;
+            const formattedSize = formatFileSize(format.filesize, format.filesize_is_approx);
+            // 格式化显示文本为: {resolution} {filesize}
+            const displayText = `${resolutionText} ${formattedSize}`;
             
             // 从颜色数组中选择颜色，如果选项超过数组长度，则使用默认灰色
             const colorClass = videoColorClasses[index] || defaultColorClass;
 
             return `
                 <div class="resolution-option ${colorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
-                     data-format-id="${format.format_id}" data-resolution="${resolutionText}" data-display-text="${displayText}" data-ext="${format.ext}">
+                     data-format-id="${format.format_id}" data-resolution="${resolutionText}" data-display-text="${displayText}" data-ext="${format.ext}" data-filesize="${format.filesize || ''}" data-filesize-is-approx="${format.filesize_is_approx || false}">
                     <div class="option-content w-full flex items-center">
                         <div class="flex-grow text-center">
+                            <!-- 显示格式: 下载 {resolution} {filesize} {ext} -->
                             <span class="font-semibold" data-translate-dynamic="video">${t.download} ${displayText} ${format.ext}</span>
                         </div>
                         <div class="download-icon">

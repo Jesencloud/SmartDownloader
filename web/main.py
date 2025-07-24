@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from celery.result import AsyncResult
-from typing import Literal, Dict, Any, List, Union, Optional
+from typing import Literal, Dict, Any, List, Optional, Union
 from pathlib import Path
 from urllib.parse import urlparse
 import subprocess
@@ -70,18 +70,19 @@ class VideoFormat(BaseModel):
     format_id: str
     resolution: str
     ext: str
-    filesize: float | None
+    filesize: Optional[float]
+    filesize_is_approx: bool = False
     quality: str
-    fps: float | None
-    vcodec: str | None
-    acodec: str | None
-    abr: int | None = None
+    vcodec: Optional[str]
+    acodec: Optional[str]
+    abr: Optional[int] = None
+    needs_merge: bool = Field(default=False, description="Indicates if this format requires merging.")
 
 class VideoInfo(BaseModel):
     title: str
-    duration: float | None
-    uploader: str | None
-    thumbnail: str | None
+    duration: Optional[float]
+    uploader: Optional[str]
+    thumbnail: Optional[str]
     formats: List[VideoFormat]
     original_url: str
     download_type: Literal['video', 'audio']
@@ -196,20 +197,73 @@ async def get_video_info(request: VideoInfoRequest):
     raw_formats = video_data_raw.get('formats', [])
     
     if request.download_type == 'video':
-        for fmt in raw_formats:
-            has_resolution = fmt.get('width') and fmt.get('height')
-            is_special_audio = fmt.get('vcodec') == 'audio only'
-            if has_resolution and not is_special_audio and fmt.get('ext') == 'mp4':
-                formats.append(VideoFormat(
-                    format_id=fmt.get('format_id', ''),
-                    resolution=f"{fmt.get('width')}x{fmt.get('height')}",
-                    ext='mp4',
-                    filesize=fmt.get('filesize') or fmt.get('filesize_approx'),
-                    quality=fmt.get('format_note', f"{fmt.get('height')}p"),
-                    fps=fmt.get('fps'),
-                    vcodec=fmt.get('vcodec'),
-                    acodec=fmt.get('acodec')
+        # --- NEW: Unified video format processing logic ---
+        all_possible_formats = []
+
+        # Part 1: Process pre-merged (complete) MP4 formats
+        complete_formats_raw = [
+            f for f in raw_formats 
+            if f.get('ext') == 'mp4' and f.get('vcodec') not in ('none', None) and f.get('acodec') not in ('none', None) and f.get('width') and f.get('height')
+        ]
+        for c_fmt in complete_formats_raw:
+            filesize = c_fmt.get('filesize') or c_fmt.get('filesize_approx')
+            is_approx = not c_fmt.get('filesize') and c_fmt.get('filesize_approx')
+            all_possible_formats.append(VideoFormat(
+                format_id=c_fmt.get('format_id', ''),
+                resolution=f"{c_fmt.get('width')}x{c_fmt.get('height')}",
+                ext='mp4',
+                filesize=filesize,
+                filesize_is_approx=bool(is_approx),
+                quality=f"{c_fmt.get('height')}p",
+                vcodec=c_fmt.get('vcodec'),
+                acodec=c_fmt.get('acodec'),
+                needs_merge=False
+            ))
+
+        # Part 2: Process formats that need merging into MP4
+        video_only_formats = [f for f in raw_formats if f.get('vcodec') not in ('none', None) and f.get('acodec') in ('none', None) and f.get('width') and f.get('height')]
+        audio_only_formats = [f for f in raw_formats if f.get('acodec') not in ('none', None) and f.get('vcodec') in ('none', None)]
+
+        if video_only_formats and audio_only_formats:
+            best_audio_to_merge = max(audio_only_formats, key=lambda f: f.get('abr', 0))
+            
+            for v_fmt in video_only_formats:
+                video_size = v_fmt.get('filesize') or v_fmt.get('filesize_approx') or 0
+                audio_size = best_audio_to_merge.get('filesize') or best_audio_to_merge.get('filesize_approx') or 0
+                total_size = video_size + audio_size
+
+                video_is_approx = not v_fmt.get('filesize') and v_fmt.get('filesize_approx')
+                audio_is_approx = not best_audio_to_merge.get('filesize') and best_audio_to_merge.get('filesize_approx')
+                total_is_approx = bool(video_is_approx or audio_is_approx)
+
+                all_possible_formats.append(VideoFormat(
+                    format_id=f"{v_fmt['format_id']}+{best_audio_to_merge['format_id']}",
+                    resolution=f"{v_fmt.get('width')}x{v_fmt.get('height')}",
+                    ext='mp4', # Merged format will be mp4
+                    filesize=total_size if total_size > 0 else None,
+                    filesize_is_approx=total_is_approx,
+                    quality=f"{v_fmt.get('height')}p (需合并)",
+                    vcodec=v_fmt.get('vcodec'),
+                    acodec=best_audio_to_merge.get('acodec'),
+                    needs_merge=True
                 ))
+
+        # Part 3: Group by resolution and select the best by filesize
+        formats_by_resolution = {}
+        for fmt in all_possible_formats:
+            if fmt.resolution not in formats_by_resolution:
+                formats_by_resolution[fmt.resolution] = []
+            formats_by_resolution[fmt.resolution].append(fmt)
+
+        final_formats = []
+        for resolution, fmt_group in formats_by_resolution.items():
+            best_in_group = max(fmt_group, key=lambda f: f.filesize or 0)
+            final_formats.append(best_in_group)
+
+        # Part 4: Sort the final list by resolution height (descending)
+        final_formats.sort(key=lambda f: int(f.resolution.split('x')[1]) if 'x' in f.resolution else 0, reverse=True)
+        
+        formats = final_formats
     
     elif request.download_type == 'audio':
         # For audio requests, find all valid audio streams and select the single best one.
@@ -231,14 +285,17 @@ async def get_video_info(request: VideoInfoRequest):
             
             # Create a single, standardized VideoFormat object for the frontend
             abr = best_audio_format_raw.get('abr')
+            filesize = best_audio_format_raw.get('filesize') or best_audio_format_raw.get('filesize_approx')
+            is_approx = not best_audio_format_raw.get('filesize') and best_audio_format_raw.get('filesize_approx')
             quality_desc = f"{int(abr)}k" if abr else best_audio_format_raw.get('format_note', 'Unknown')
+
             formats.append(VideoFormat(
                 format_id=best_audio_format_raw.get('format_id', ''),
                 resolution=quality_desc,
                 ext=best_audio_format_raw.get('ext'),
-                filesize=best_audio_format_raw.get('filesize') or best_audio_format_raw.get('filesize_approx'),
+                filesize=filesize,
+                filesize_is_approx=bool(is_approx),
                 quality=quality_desc,
-                fps=None,
                 vcodec=None,  # CRITICAL: Standardize to None for the frontend
                 acodec=best_audio_format_raw.get('acodec'),
                 abr=int(abr) if abr else None
@@ -516,8 +573,8 @@ async def cleanup_incomplete_downloads():
                 except Exception as e:
                     cleanup_stats["errors"].append(f"Failed to delete {file_path.name}: {str(e)}")
                     log.warning(f"Failed to delete {file_path}: {e}")
-        
-        cleanup_stats["total_size_mb"] = round(total_size / (1024 * 1024), 2)
+
+        cleanup_stats["total_size_mb"] = round(total_size / (1000 * 1000), 2)
         
         if cleanup_stats["cleaned_files"]:
             log.info(f"Cleaned up {len(cleanup_stats['cleaned_files'])} files ({cleanup_stats['total_size_mb']}MB)")
@@ -640,16 +697,14 @@ async def get_downloaded_file(request: Request, file_name: str):
         # Decode URL-encoded filename
         from urllib.parse import unquote
         decoded_file_name = unquote(file_name)
-        log.info(f"Serving file request: '{decoded_file_name}'")
         
         # First try direct path (could be just filename or relative path)
         file_path = Path(config.downloader.save_path) / decoded_file_name
         
         if file_path.exists() and file_path.is_file():
-            log.info(f"Found file directly: {file_path}, size: {file_path.stat().st_size} bytes")
+            pass # File found directly
         else:
             # If not found directly, search for the filename in the download directory and subdirectories
-            log.info(f"File not found directly, searching in download folder...")
             download_folder = Path(config.downloader.save_path)
             found_file = None
             
@@ -658,7 +713,6 @@ async def get_downloaded_file(request: Request, file_name: str):
                 for file_candidate in download_folder.rglob("*"):
                     if file_candidate.is_file() and file_candidate.name == decoded_file_name:
                         found_file = file_candidate
-                        log.info(f"Found file by name: {found_file}")
                         break
                 
                 # If still not found, try case-insensitive search
@@ -666,16 +720,12 @@ async def get_downloaded_file(request: Request, file_name: str):
                     for file_candidate in download_folder.rglob("*"):
                         if file_candidate.is_file() and file_candidate.name.lower() == decoded_file_name.lower():
                             found_file = file_candidate
-                            log.info(f"Found file by case-insensitive search: {found_file}")
                             break
                 
                 if found_file:
                     file_path = found_file
                 else:
                     log.error(f"File '{decoded_file_name}' not found in {download_folder}")
-                    # List all files for debugging
-                    all_files = [str(f) for f in download_folder.rglob("*") if f.is_file()]
-                    log.info(f"Available files: {all_files[:10]}...")  # Show first 10 files
                     raise HTTPException(status_code=404, detail=f"File '{decoded_file_name}' not found.")
             else:
                 log.error(f"Download directory does not exist: {download_folder}")
@@ -684,8 +734,8 @@ async def get_downloaded_file(request: Request, file_name: str):
         # Generate proper filename for download
         clean_filename = file_path.name
         
+        # Final file validation
         final_size = file_path.stat().st_size
-        
         if final_size == 0:
             log.error(f"File has zero size: {file_path}")
             raise HTTPException(status_code=500, detail="File is empty or corrupted")
@@ -695,24 +745,11 @@ async def get_downloaded_file(request: Request, file_name: str):
             raise HTTPException(status_code=500, detail="File permission denied")
         
         # Detect media type based on extension
-        MIME_TYPES = {
-            # 视频
-            '.mp4': 'video/mp4',
-            '.mkv': 'video/x-matroska',
-            '.webm': 'video/webm',
-            '.mov': 'video/quicktime',
-            '.avi': 'video/x-msvideo',
-            # 音频
-            '.mp3': 'audio/mpeg',
-            '.m4a': 'audio/mp4',
-            '.opus': 'audio/opus',
-            '.wav': 'audio/wav',
-            '.flac': 'audio/flac',
-            '.aac': 'audio/aac',
-        }
-        file_extension = file_path.suffix.lower()
-        # 如果找不到，则回退到通用的二进制流类型
-        media_type = MIME_TYPES.get(file_extension, 'application/octet-stream')
+        media_type = 'application/octet-stream'
+        if file_path.suffix.lower() == '.mp4':
+            media_type = 'video/mp4'
+        elif file_path.suffix.lower() == '.mp3':
+            media_type = 'audio/mpeg'
         
         headers = {
             "Content-Disposition": f"attachment; filename=\"{clean_filename}\"",
@@ -725,15 +762,11 @@ async def get_downloaded_file(request: Request, file_name: str):
         
         # Handle HEAD request - return headers only
         if request.method == "HEAD":
-            log.debug("Handling HEAD request for file: %s", clean_filename)
             from fastapi import Response
             return Response(
                 headers=headers,
                 media_type=media_type
             )
-        
-        # Handle GET request - return file
-        log.info("Serving file '%s' (%s) to client.", clean_filename, media_type)
         
         # Use a more explicit FileResponse configuration
         try:
@@ -751,7 +784,6 @@ async def get_downloaded_file(request: Request, file_name: str):
             
             # Explicitly set content length
             response.headers["Content-Length"] = str(final_size)
-            log.debug(f"FileResponse created successfully for {clean_filename} with size: {final_size}")
             return response
             
         except Exception as e:

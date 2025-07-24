@@ -32,7 +32,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests with pytest
-        run: pytest
+        # 运行所有未标记为 e2e 的测试，与 tests.yml 保持一致
+        run: pytest -m "not e2e" -v
 
   build-release:
     name: Build and Release

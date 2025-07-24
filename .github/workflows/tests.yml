@@ -34,8 +34,15 @@ jobs:
 
     - name: Run unit and integration tests
       run: |
-        # 运行所有未标记为 e2e 的测试
-        pytest -m "not e2e" -v
+        # 运行测试并为核心模块生成覆盖率报告
+        pytest --cov=core --cov=web --cov-report=xml -m "not e2e" -v
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }} # 需要在GitHub仓库设置中添加这个secret
+        file: ./coverage.xml
+        flags: unittests
 
   # Job 2: 运行需要实时服务的端到端测试
   e2e-tests:
