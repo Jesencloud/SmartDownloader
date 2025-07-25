@@ -65,11 +65,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log(`Found ${pollingElements.length} elements with active polling intervals`);
         
         pollingElements.forEach(element => {
-            const intervalId = element.dataset.pollingInterval;
-            if (intervalId) {
-                clearInterval(parseInt(intervalId));
+            const timeoutId = element.dataset.pollingInterval;
+            if (timeoutId) {
+                clearTimeout(parseInt(timeoutId));
                 element.removeAttribute('data-polling-interval');
-                console.log(`Cleared polling interval ${intervalId}`);
+                console.log(`Cleared polling timeout ${timeoutId}`);
             }
         });
         
@@ -520,16 +520,104 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // 通用的任务清理函数
-    function cleanupTaskTracking(intervalId, optionElement) {
-        clearInterval(intervalId);
+    function cleanupTaskTracking(timeoutId, optionElement) {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
         optionElement.removeAttribute('data-polling-interval');
         optionElement.classList.remove('is-downloading');
     }
+    // 动态轮询间隔管理器
+    class DynamicPollingManager {
+        constructor() {
+            // 轮询阶段配置
+            this.phases = [
+                { name: 'initial', duration: 30000, interval: 1000 },    // 初始30秒，检查很频繁
+                { name: 'active', duration: 120000, interval: 2000 },    // 活跃最2分钟，正常检查
+                { name: 'slow', duration: 180000, interval: 4000 },      // 缓慢最3分钟，减少检查
+                { name: 'final', duration: Infinity, interval: 8000 }    // 最终阶段，很少检查
+            ];
+            
+            this.reset();
+        }
+        
+        reset() {
+            this.startTime = Date.now();
+            this.currentPhaseIndex = 0;
+            this.phaseStartTime = this.startTime;
+            this.attemptCount = 0;
+            this.consecutiveFailures = 0;
+        }
+        
+        getCurrentInterval() {
+            const now = Date.now();
+            const totalElapsed = now - this.startTime;
+            const phaseElapsed = now - this.phaseStartTime;
+            const currentPhase = this.phases[this.currentPhaseIndex];
+            
+            // 检查是否需要进入下一阶段
+            if (phaseElapsed >= currentPhase.duration && this.currentPhaseIndex < this.phases.length - 1) {
+                this.currentPhaseIndex++;
+                this.phaseStartTime = now;
+                console.log(`轮询进入下一阶段: ${this.phases[this.currentPhaseIndex].name}`);
+            }
+            
+            let interval = this.phases[this.currentPhaseIndex].interval;
+            
+            // 错误自适应：连续失败时逐渐增加间隔
+            if (this.consecutiveFailures > 0) {
+                const backoffMultiplier = Math.min(2 * this.consecutiveFailures, 8); // 最多8倍
+                interval *= backoffMultiplier;
+                console.log(`由于连续${this.consecutiveFailures}次失败，轮询间隔增加到${interval}ms`);
+            }
+            
+            // 设置最大间隔限制（防止过长）
+            interval = Math.min(interval, 30000); // 最多30秒
+            
+            return interval;
+        }
+        
+        recordAttempt(success = true) {
+            this.attemptCount++;
+            
+            if (success) {
+                this.consecutiveFailures = 0;
+            } else {
+                this.consecutiveFailures++;
+            }
+        }
+        
+        getMaxAttempts() {
+            // 动态计算最大尝试次数，基于总超时时间(10分钟)
+            const totalTimeoutMs = 10 * 60 * 1000; // 10分钟
+            const averageInterval = this.phases.reduce((sum, phase, index) => {
+                if (index === this.phases.length - 1) return sum; // 最后一个阶段不计入平均值
+                return sum + (phase.duration / phase.interval);
+            }, 0) / (this.phases.length - 1);
+            
+            return Math.ceil(totalTimeoutMs / averageInterval);
+        }
+        
+        getPhaseInfo() {
+            const currentPhase = this.phases[this.currentPhaseIndex];
+            const elapsed = Date.now() - this.startTime;
+            return {
+                phase: currentPhase.name,
+                elapsed: Math.round(elapsed / 1000),
+                attempts: this.attemptCount,
+                consecutiveFailures: this.consecutiveFailures
+            };
+        }
+    }
 function pollTaskStatus(taskId, optionElement) {
     const t = getTranslations();
-    const pollingInterval = 2000; // 每2秒轮询一次
-    const maxAttempts = 150; // 2秒 * 150次 = 300秒 = 5分钟超时
+    
+    // 创建动态轮询管理器
+    const pollingManager = new DynamicPollingManager();
+    const maxAttempts = pollingManager.getMaxAttempts();
     let attempts = 0;
+    let timeoutId = null; // 使用setTimeout而不是setInterval
+    let isPollingActive = true; // 轮询状态标记
 
     const contentDiv = optionElement.querySelector('.option-content');
     const progressDiv = optionElement.querySelector('.option-progress');
@@ -539,11 +627,28 @@ function pollTaskStatus(taskId, optionElement) {
         progressDiv.innerHTML = '';
         contentDiv.classList.remove('hidden');
     };
-
-    const intervalId = setInterval(async () => {
+    
+    const stopPolling = () => {
+        isPollingActive = false;
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+        }
+        optionElement.removeAttribute('data-polling-interval');
+        optionElement.classList.remove('is-downloading');
+    };
+    
+    // 递归轮询函数
+    const performPoll = async () => {
+        // 检查轮询是否应该停止
+        if (!isPollingActive) {
+            console.log(`Polling for task ${taskId} was stopped`);
+            return;
+        }
+        
         // Handle immediate failure from handleDownload
         if (taskId === null) {
-            cleanupTaskTracking(intervalId, optionElement);
+            stopPolling();
             restoreOriginalContent();
             optionElement.style.pointerEvents = 'auto';
             optionElement.style.opacity = '1';
@@ -558,77 +663,123 @@ function pollTaskStatus(taskId, optionElement) {
         }
 
         if (attempts++ > maxAttempts) {
-            cleanupTaskTracking(intervalId, optionElement);
+            stopPolling();
             const timeoutIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
             showTaskStatus(optionElement, 'timeout', t.downloadTimeout, timeoutIcon, 'text-yellow-400', 'border-yellow-500');
-            alert(t.downloadTimeoutMessage);
+            
+            // 显示轮询统计信息
+            const phaseInfo = pollingManager.getPhaseInfo();
+            console.log(`轮询超时 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
+            alert(`${t.downloadTimeoutMessage}\n\n轮询统计信息:\n- 阶段: ${phaseInfo.phase}\n- 耗时: ${phaseInfo.elapsed}秒\n- 尝试: ${phaseInfo.attempts}次`);
             return;
         }
 
         try {
             // Check if polling has been externally cancelled before making the request
-            if (!optionElement.dataset.pollingInterval) {
+            if (!optionElement.dataset.pollingInterval || !isPollingActive) {
                 console.log(`Polling for task ${taskId} was cancelled, stopping`);
-                clearInterval(intervalId);
+                stopPolling();
                 return;
             }
             
             const response = await fetch(`/downloads/${taskId}`);
             
             // Check again after the async request in case it was cancelled during the fetch
-            if (!optionElement.dataset.pollingInterval) {
+            if (!optionElement.dataset.pollingInterval || !isPollingActive) {
                 console.log(`Polling for task ${taskId} was cancelled during fetch, stopping`);
-                clearInterval(intervalId);
+                stopPolling();
                 return;
             }
+            
+            let requestSuccess = true;
             if (!response.ok) {
                 console.warn(`轮询任务状态失败 ${taskId}: ${response.status}`);
-                return; // 暂时不处理，等待下一次轮询
-            }
-
-            const data = await response.json();
-
-            if (data.status === 'SUCCESS') {
-                cleanupTaskTracking(intervalId, optionElement);
-                
-                // Use the downloaded file from Celery task result
-                const result = data.result;
-                if (result && result.relative_path) {
-                    // Use the complete relative_path from Celery result
-                    const actualFileName = result.relative_path;
-                    const downloadUrl = `/files/${encodeURIComponent(actualFileName)}`;
-                    const displayFileName = actualFileName.split('/').pop().split('\\').pop();
+                requestSuccess = false;
+                pollingManager.recordAttempt(false);
+                // 继续下一次轮询而不是直接返回
+            } else {
+                pollingManager.recordAttempt(true);
+                const data = await response.json();
+    
+                if (data.status === 'SUCCESS') {
+                    stopPolling();
                     
-                    // 触发浏览器下载
-                    triggerBrowserDownload(downloadUrl, displayFileName);
-                } else {
-                    // Fallback to stream download if no cached file
-                    const formatId = optionElement.dataset.formatId;
-                    const resolution = optionElement.dataset.resolution || 'unknown';
-                    triggerStreamDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
+                    // 显示成功统计信息
+                    const phaseInfo = pollingManager.getPhaseInfo();
+                    console.log(`下载完成 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
+                    
+                    // Use the downloaded file from Celery task result
+                    const result = data.result;
+                    if (result && result.relative_path) {
+                        // Use the complete relative_path from Celery result
+                        const actualFileName = result.relative_path;
+                        const downloadUrl = `/files/${encodeURIComponent(actualFileName)}`;
+                        const displayFileName = actualFileName.split('/').pop().split('\\').pop();
+                        
+                        // 触发浏览器下载
+                        triggerBrowserDownload(downloadUrl, displayFileName);
+                    } else {
+                        // Fallback to stream download if no cached file
+                        const formatId = optionElement.dataset.formatId;
+                        const resolution = optionElement.dataset.resolution || 'unknown';
+                        triggerStreamDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
+                    }
+                    
+                    // 显示下载完成状态
+                    const successIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    showTaskStatus(optionElement, 'success', t.downloadComplete, successIcon, 'text-green-400', 'border-green-500');
+                    return;
+                    
+                } else if (data.status === 'FAILURE') {
+                    stopPolling();
+                    const errorIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    showTaskStatus(optionElement, 'failure', t.downloadFailed, errorIcon, 'text-red-400', 'border-red-500');
+                    const errorMessage = data.result || t.unknownError;
+                    
+                    // 显示失败统计信息
+                    const phaseInfo = pollingManager.getPhaseInfo();
+                    console.log(`下载失败 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
+                    alert(`${t.errorTitle}: ${errorMessage}\n\n轮询统计信息:\n- 阶段: ${phaseInfo.phase}\n- 耗时: ${phaseInfo.elapsed}秒\n- 尝试: ${phaseInfo.attempts}次`);
+                    return;
                 }
-                
-                // 显示下载完成状态
-                const successIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-                showTaskStatus(optionElement, 'success', t.downloadComplete, successIcon, 'text-green-400', 'border-green-500');
-                
-            } else if (data.status === 'FAILURE') {
-                cleanupTaskTracking(intervalId, optionElement);
-                const errorIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-                showTaskStatus(optionElement, 'failure', t.downloadFailed, errorIcon, 'text-red-400', 'border-red-500');
-                const errorMessage = data.result || t.unknownError;
-                alert(`${t.errorTitle}: ${errorMessage}`);
+                // 如果状态是 PENDING 或 STARTED，则不执行任何操作，让加载动画继续
             }
-            // 如果状态是 PENDING 或 STARTED，则不执行任何操作，让加载动画继续
 
         } catch (error) {
             console.error('轮询过程中发生错误:', error);
+            pollingManager.recordAttempt(false);
         }
-    }, pollingInterval);
+        
+        // 检查是否应该继续轮询
+        if (!isPollingActive) {
+            console.log(`Polling stopped for task ${taskId}`);
+            return;
+        }
+        
+        // 获取下一次轮询的动态间隔
+        const nextInterval = pollingManager.getCurrentInterval();
+        const phaseInfo = pollingManager.getPhaseInfo();
+        
+        // 记录轮询信息用于调试
+        if (attempts % 10 === 0) { // 每10次轮询记录一次
+            console.log(`轮询进度 - 阶段: ${phaseInfo.phase}, 下次间隔: ${nextInterval}ms, 尝试: ${phaseInfo.attempts}次`);
+        }
+        
+        // 设置下一次轮询
+        timeoutId = setTimeout(performPoll, nextInterval);
+        
+        // 更新元素的跟踪数据
+        optionElement.dataset.pollingInterval = timeoutId;
+    };
     
-    // Store interval ID for external cancellation after setInterval is created
-    optionElement.dataset.pollingInterval = intervalId;
-    console.log(`Started polling for task ${taskId} with interval ID ${intervalId}`);
+    // 开始第一次轮询
+    const initialInterval = pollingManager.getCurrentInterval();
+    console.log(`开始动态轮询 - 任务ID: ${taskId}, 初始间隔: ${initialInterval}ms`);
+    
+    timeoutId = setTimeout(performPoll, initialInterval);
+    optionElement.dataset.pollingInterval = timeoutId;
+    
+    console.log(`Started dynamic polling for task ${taskId} with timeout ID ${timeoutId}`);
 }
 
     // URL安全验证函数
