@@ -1,0 +1,108 @@
+folders:
+  base_download_folder: downloads
+  use_timestamp_folder: true
+  timestamp_format: '%Y%m%d-%H%M%S'
+  relative_to_script: true
+downloader:
+  save_path: downloads
+  max_retries: 3
+  base_delay: 10.0
+  max_delay: 300.0
+  backoff_factor: 2.0
+  network_timeout: 60
+  stall_detection_time: 30
+  stall_check_interval: 5
+  stall_threshold_count: 6
+  proxy_retry_base_delay: 30
+  proxy_retry_increment: 10
+  proxy_retry_max_delay: 120
+  circuit_breaker_failure_threshold: 5
+  circuit_breaker_timeout: 300
+  ytdlp_video_format: bestvideo
+  ytdlp_audio_format: bestaudio
+  ytdlp_combined_format: bestvideo+bestaudio/best
+  ytdlp_merge_output_format: mp4
+  retry_patterns:
+  - 'HTTP Error 403: Forbidden'
+  - HTTP Error 429
+  - HTTP Error 502
+  - HTTP Error 503
+  - HTTP Error 504
+  - Connection reset
+  - Connection timed out
+  - Network is unreachable
+  - Temporary failure
+  - fragment.*not found
+  - Unable to download.*fragment
+  - HTTP Error 5
+  proxy_patterns:
+  - Unable to connect to proxy
+  - Connection refused
+  - Proxy error
+  - NewConnectionError
+  - Failed to establish a new connection
+  cleanup_patterns:
+  - '*.part'
+  - '*.temp'
+  - '*.ytdl'
+  - '*.tmp'
+  - '*.download'
+  - '*.partial'
+  - '*.f*'
+file_processing:
+  filename_max_length: 50
+  filename_truncate_suffix: '...'
+  polite_wait_time: 3.0
+  media_extensions:
+  - .mp4
+  - .avi
+  - .mkv
+  - .mov
+  - .mp3
+  - .wav
+  - .flac
+  - .m4a
+ai_subtitles:
+  whisper_model: base.en
+  whisper_device: auto
+  source_language: auto
+  translate_to_chinese: true
+  translator_service: google
+  translation_batch_size: 50
+  translation_delay: 0.5
+  translation_max_retries: 3
+  translation_timeout: 30
+  subtitle_formats:
+  - srt
+  - vtt
+logging:
+  level: INFO
+  log_filename: downloader.log
+  console_keywords:
+  - 🚀 智能媒体下载
+  - 🎉 全部任务完成
+  - 📁 日志与所有文件保存在
+ui:
+  show_transfer_speed: true
+  show_time_remaining: true
+  show_detailed_errors: true
+  show_network_status: true
+cookies:
+  mode: auto
+  browser_type: auto
+  manual_cookies_file: cookies.txt
+  auto_extract_enabled: true
+  force_refresh: false
+  cache_enabled: true
+  cache_file: cookies.cache.txt
+  cache_duration_hours: 24
+  cache_check_interval: 1
+advanced:
+  ytdlp_extra_args: []
+  connectivity_test_host: 8.8.8.8
+  connectivity_test_port: 53
+  connectivity_timeout: 5
+  proxy_test_url: http://httpbin.org/ip
+  proxy_test_timeout: 10
+security:
+  allowed_domains: []
