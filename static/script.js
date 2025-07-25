@@ -488,12 +488,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
         
+        // 确定状态消息的翻译键
+        let translateKey = '';
+        if (message === '下载完成' || message === 'Download Complete') {
+            translateKey = 'download_complete';
+        } else if (message === '下载失败' || message === 'Download Failed') {
+            translateKey = 'download_failed';
+        } else if (message === '检查超时' || message === 'Check Timeout') {
+            translateKey = 'download_timeout';
+        }
+        
         if (status === 'success') {
             progressDiv.classList.add('hidden');
             progressDiv.innerHTML = '';
             contentDiv.innerHTML = `
                 <div class="flex-grow text-center">
-                    <span class="font-semibold ${colorClass}">${message}</span>
+                    <span class="font-semibold ${colorClass}" ${translateKey ? `data-translate-dynamic="${translateKey}"` : ''}>${message}</span>
                 </div>
                 <div class="download-icon ${colorClass}">
                     ${icon}
@@ -504,7 +514,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 对于其他状态，显示在progressDiv中
             progressDiv.innerHTML = `
                 <div class="flex-grow text-center">
-                    <span class="font-semibold ${colorClass}">${message}</span>
+                    <span class="font-semibold ${colorClass}" ${translateKey ? `data-translate-dynamic="${translateKey}"` : ''}>${message}</span>
                 </div>
                 <div class="download-icon ${colorClass}">
                     ${icon}
@@ -665,7 +675,8 @@ function pollTaskStatus(taskId, optionElement) {
         if (attempts++ > maxAttempts) {
             stopPolling();
             const timeoutIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-            showTaskStatus(optionElement, 'timeout', t.downloadTimeout, timeoutIcon, 'text-yellow-400', 'border-yellow-500');
+            const timeoutMessage = translateProgressMessage('检查超时', t);
+            showTaskStatus(optionElement, 'timeout', timeoutMessage, timeoutIcon, 'text-yellow-400', 'border-yellow-500');
             
             // 显示轮询统计信息
             const phaseInfo = pollingManager.getPhaseInfo();
@@ -708,6 +719,10 @@ function pollTaskStatus(taskId, optionElement) {
                     const phaseInfo = pollingManager.getPhaseInfo();
                     console.log(`下载完成 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
                     
+                    // 添加完成动画效果
+                    optionElement.style.animation = '';
+                    optionElement.classList.add('progress-complete-animation');
+                    
                     // Use the downloaded file from Celery task result
                     const result = data.result;
                     if (result && result.relative_path) {
@@ -725,15 +740,25 @@ function pollTaskStatus(taskId, optionElement) {
                         triggerStreamDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
                     }
                     
-                    // 显示下载完成状态
-                    const successIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-                    showTaskStatus(optionElement, 'success', t.downloadComplete, successIcon, 'text-green-400', 'border-green-500');
+                    // 延迟显示下载完成状态，让动画播放完毕
+                    setTimeout(() => {
+                        const successIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                        const completedMessage = translateProgressMessage('下载完成', t);
+                        showTaskStatus(optionElement, 'success', completedMessage, successIcon, 'text-green-400', 'border-green-500');
+                        
+                        // 清理动画类
+                        optionElement.classList.remove('progress-complete-animation');
+                        optionElement.style.animation = '';
+                        optionElement.style.opacity = '1';
+                        optionElement.style.pointerEvents = 'auto';
+                    }, 600);
                     return;
                     
                 } else if (data.status === 'FAILURE') {
                     stopPolling();
                     const errorIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-                    showTaskStatus(optionElement, 'failure', t.downloadFailed, errorIcon, 'text-red-400', 'border-red-500');
+                    const failedMessage = translateProgressMessage('下载失败', t);
+                    showTaskStatus(optionElement, 'failure', failedMessage, errorIcon, 'text-red-400', 'border-red-500');
                     const errorMessage = data.result || t.unknownError;
                     
                     // 显示失败统计信息
@@ -741,6 +766,18 @@ function pollTaskStatus(taskId, optionElement) {
                     console.log(`下载失败 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
                     alert(`${t.errorTitle}: ${errorMessage}\n\n轮询统计信息:\n- 阶段: ${phaseInfo.phase}\n- 耗时: ${phaseInfo.elapsed}秒\n- 尝试: ${phaseInfo.attempts}次`);
                     return;
+                } else if (data.status === 'PROGRESS') {
+                    // 处理进度更新
+                    const meta = data.result || data.meta || {};
+                    const progress = meta.progress || 0;
+                    let statusMessage = meta.status || t.downloading || '下载中...';
+                    
+                    // 多语言处理：将后端的中文消息翻译为当前语言
+                    statusMessage = translateProgressMessage(statusMessage, t);
+                    
+                    // 更新进度条
+                    showProgressBar(optionElement, progress, statusMessage);
+                    console.log(`下载进度更新: ${progress}% - ${statusMessage}`);
                 }
                 // 如果状态是 PENDING 或 STARTED，则不执行任何操作，让加载动画继续
             }
@@ -1179,6 +1216,26 @@ function pollTaskStatus(taskId, optionElement) {
                     0% { margin-left: -40%; }
                     100% { margin-left: 100%; }
                 }
+                /* 添加轻微的脉冲动画 */
+                @keyframes subtle-pulse {
+                    0%, 100% { 
+                        transform: scale(1);
+                        box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4);
+                    }
+                    50% { 
+                        transform: scale(1.02);
+                        box-shadow: 0 0 0 8px rgba(168, 85, 247, 0.1);
+                    }
+                }
+                /* 进度条完成时的庆祝动画 */
+                @keyframes progress-complete {
+                    0% { transform: scale(1); }
+                    50% { transform: scale(1.05); }
+                    100% { transform: scale(1); }
+                }
+                .progress-complete-animation {
+                    animation: progress-complete 0.6s ease-out;
+                }
             `;
             document.head.appendChild(style);
         }
@@ -1202,6 +1259,172 @@ function pollTaskStatus(taskId, optionElement) {
         optionElement.style.opacity = '0.7';
     }
 
+    // 显示具体进度的进度条函数
+    function showProgressBar(optionElement, progress, message) {
+        const contentDiv = optionElement.querySelector('.option-content');
+        const progressDiv = optionElement.querySelector('.option-progress');
+        
+        contentDiv.classList.add('hidden');
+        
+        // 确保progress在0-100范围内
+        const clampedProgress = Math.max(0, Math.min(100, progress));
+        
+        // 确定进度消息的翻译键
+        let translateKey = '';
+        if (message === '开始获取视频信息...' || message === 'Starting to fetch video info...') {
+            translateKey = 'progress_fetching_info';
+        } else if (message === '开始下载视频...' || message === 'Starting video download...') {
+            translateKey = 'progress_starting_download';
+        } else if (message === '正在下载视频文件...' || message === 'Downloading video file...') {
+            translateKey = 'progress_downloading_file';
+        } else if (message === '下载中...' || message === 'Downloading...') {
+            translateKey = 'progress_downloading';
+        } else if (message === '准备下载...' || message === 'Preparing download...') {
+            translateKey = 'progress_preparing';
+        } else if (message === '正在合并文件...' || message === 'Merging files...') {
+            translateKey = 'progress_merging';
+        } else if (message === '处理音频...' || message === 'Processing audio...') {
+            translateKey = 'progress_processing_audio';
+        }
+        
+        progressDiv.innerHTML = `
+            <div class="flex flex-col w-full space-y-3">
+                <!-- 进度条容器，包含居中文本 -->
+                <div class="progress-bar-container w-full bg-gray-600 rounded-full h-8 overflow-hidden shadow-inner relative">
+                    <!-- 进度条背景 -->
+                    <div class="progress-bar bg-gradient-to-r from-purple-500 via-blue-500 to-purple-600 h-8 rounded-full transition-all duration-500 ease-out relative overflow-hidden" 
+                         style="width: ${clampedProgress}%">
+                        <!-- 添加闪烁效果 -->
+                        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-20 animate-pulse"></div>
+                    </div>
+                    <!-- 居中的状态文本和百分比 -->
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-medium text-white drop-shadow-lg" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);" ${translateKey ? `data-translate-dynamic="${translateKey}"` : ''}>${message}</span>
+                            <span class="text-sm font-bold text-purple-200 drop-shadow-lg" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">${clampedProgress}%</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 小的状态指示器 -->
+                <div class="flex items-center justify-center">
+                    <div class="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                </div>
+            </div>
+        `;
+        progressDiv.classList.remove('hidden');
+        optionElement.style.pointerEvents = 'none';
+        optionElement.style.opacity = '0.9';
+        
+        // 添加轻微的脉冲动画效果
+        optionElement.style.animation = 'subtle-pulse 2s ease-in-out infinite';
+    }
+    
+    // 翻译后端进度消息的辅助函数
+    function translateProgressMessage(message, translations) {
+        const progressTranslations = {
+            // 中文到多语言的映射
+            '开始获取视频信息...': {
+                zh: '开始获取视频信息...',
+                en: 'Starting to fetch video info...'
+            },
+            '开始下载视频...': {
+                zh: '开始下载视频...',
+                en: 'Starting video download...'
+            },
+            '正在下载视频文件...': {
+                zh: '正在下载视频文件...',
+                en: 'Downloading video file...'
+            },
+            '下载中...': {
+                zh: '下载中...',
+                en: 'Downloading...'
+            },
+            '准备下载...': {
+                zh: '准备下载...',
+                en: 'Preparing download...'
+            },
+            '正在合并文件...': {
+                zh: '正在合并文件...',
+                en: 'Merging files...'
+            },
+            '处理音频...': {
+                zh: '处理音频...',
+                en: 'Processing audio...'
+            },
+            '下载完成': {
+                zh: '下载完成',
+                en: 'Download Complete'
+            },
+            '下载失败': {
+                zh: '下载失败',
+                en: 'Download Failed'
+            },
+            '检查超时': {
+                zh: '检查超时',
+                en: 'Check Timeout'
+            },
+            // 英文到多语言的映射（逆向翻译）
+            'Starting to fetch video info...': {
+                zh: '开始获取视频信息...',
+                en: 'Starting to fetch video info...'
+            },
+            'Starting video download...': {
+                zh: '开始下载视频...',
+                en: 'Starting video download...'
+            },
+            'Downloading video file...': {
+                zh: '正在下载视频文件...',
+                en: 'Downloading video file...'
+            },
+            'Downloading...': {
+                zh: '下载中...',
+                en: 'Downloading...'
+            },
+            'Preparing download...': {
+                zh: '准备下载...',
+                en: 'Preparing download...'
+            },
+            'Merging files...': {
+                zh: '正在合并文件...',
+                en: 'Merging files...'
+            },
+            'Processing audio...': {
+                zh: '处理音频...',
+                en: 'Processing audio...'
+            },
+            'Download Complete': {
+                zh: '下载完成',
+                en: 'Download Complete'
+            },
+            'Download Failed': {
+                zh: '下载失败',
+                en: 'Download Failed'
+            },
+            'Check Timeout': {
+                zh: '检查超时',
+                en: 'Check Timeout'
+            }
+        };
+        
+        // 获取当前语言设置
+        const currentLang = localStorage.getItem('language') || 'zh';
+        
+        // 查找并翻译消息
+        const translation = progressTranslations[message];
+        if (translation && translation[currentLang]) {
+            return translation[currentLang];
+        }
+        
+        // 如果没有找到翻译，返回原消息
+        return message;
+    }
+    
+    // 更新进行中下载的进度条消息语言显示
+    function updateProgressLanguage() {
+        // 进度消息现在使用data-translate-dynamic系统，不需要特殊处理
+        // 该函数保留以防将来需要处理其他进度相关的语言更新
+    }
+
     function handleBackgroundDownload(formatId, optionElement) {
         // 验证格式ID
         const validation = validateFormatId(formatId, currentVideoData);
@@ -1214,8 +1437,12 @@ function pollTaskStatus(taskId, optionElement) {
         const t = getTranslations();
         const resolution = optionElement.dataset.resolution || '';
 
-        // 显示不确定进度条
-        showIndeterminateProgress(optionElement);
+        // 显示初始进度条（0%）
+        const initialMessage = translateProgressMessage(t.startingDownload || '准备下载...', t);
+        showProgressBar(optionElement, 0, initialMessage);
+        
+        // 确保进度条样式已初始化
+        initializeIndeterminateProgressStyle();
         fetch('/downloads', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

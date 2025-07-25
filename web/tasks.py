@@ -234,8 +234,19 @@ def download_video_task(
                     f"Insufficient disk space: {free_space / 1024 / 1024:.2f} MB available"
                 )
 
-            # 初始化下载器
-            self.downloader = Downloader(download_folder=download_folder)
+            # 定义进度回调函数
+            def progress_callback(message: str, progress: int):
+                """进度回调函数，更新Celery任务状态"""
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"status": message, "progress": progress}
+                )
+
+            # 初始化下载器，传入进度回调
+            self.downloader = Downloader(
+                download_folder=download_folder,
+                progress_callback=progress_callback
+            )
 
             # 更新进度
             self.update_state(

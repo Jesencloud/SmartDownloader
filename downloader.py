@@ -73,6 +73,7 @@ class Downloader:
         download_folder: Path,
         cookies_file: Optional[str] = None,
         proxy: Optional[str] = None,
+        progress_callback: Optional[callable] = None,
     ):
         """
         初始化下载器.
@@ -81,10 +82,12 @@ class Downloader:
             download_folder: 下载文件夹路径
             cookies_file: cookies文件路径(可选)
             proxy: 代理服务器地址(可选)
+            progress_callback: 进度回调函数(可选)
         """
         self.download_folder = Path(download_folder)
         self.cookies_file = cookies_file
         self.proxy = proxy
+        self.progress_callback = progress_callback
 
         # 组合各种专门的处理器
         self.command_builder = CommandBuilder(proxy, cookies_file)
@@ -125,6 +128,14 @@ class Downloader:
             return sanitized[:max_len] + suffix
 
         return sanitized
+
+    def _update_progress(self, message: str, progress: int):
+        """更新下载进度"""
+        if self.progress_callback:
+            try:
+                self.progress_callback(message, progress)
+            except Exception as e:
+                log.warning(f"进度回调函数执行失败: {e}")
 
     async def _execute_info_cmd_with_auth_retry(
         self, url: str, info_cmd: list, timeout: int = 60
@@ -383,12 +394,17 @@ class Downloader:
         Raises:
             DownloaderException: 下载或合并失败, 请检查日志获取详细信息
         """
+        # 开始下载
+        self._update_progress("开始获取视频信息...", 5)
+        
         # --- 获取标题和分辨率，并生成最终文件名 ---
         try:
             # 1. Get video title
             video_info_gen = self.stream_playlist_info(video_url)
             video_info = await video_info_gen.__anext__()
             video_title = video_info.get("title", "video")
+
+            self._update_progress(f"获取到视频信息: {video_title}", 15)
 
             # 2. 根据 format_id 查找确切的分辨率
             resolution_suffix = ""
@@ -425,6 +441,8 @@ class Downloader:
 
         # --- 主策略：尝试一体化下载和合并 ---
         log.info("尝试主策略：一体化下载和合并...")
+        self._update_progress("开始下载视频...", 25)
+        
         try:
             cmd_builder_args = {
                 "output_path": str(self.download_folder),
@@ -436,6 +454,8 @@ class Downloader:
             download_cmd, _, exact_output_path = (
                 self.command_builder.build_combined_download_cmd(**cmd_builder_args)
             )
+
+            self._update_progress("正在下载视频文件...", 50)
 
             async with _progress_semaphore:
                 with Progress(
