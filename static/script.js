@@ -494,6 +494,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 }
     
+    // 通用的任务状态显示函数
+    function showTaskStatus(optionElement, status, message, icon, colorClass, borderClass) {
+        const contentDiv = optionElement.querySelector('.option-content');
+        const progressDiv = optionElement.querySelector('.option-progress');
+        
+        if (status === 'success') {
+            progressDiv.classList.add('hidden');
+            progressDiv.innerHTML = '';
+            contentDiv.innerHTML = `
+                <div class="flex-grow text-center">
+                    <span class="font-semibold ${colorClass}">${message}</span>
+                </div>
+                <div class="download-icon ${colorClass}">
+                    ${icon}
+                </div>
+            `;
+            contentDiv.classList.remove('hidden');
+        } else {
+            // 对于其他状态，显示在progressDiv中
+            progressDiv.innerHTML = `
+                <div class="flex-grow text-center">
+                    <span class="font-semibold ${colorClass}">${message}</span>
+                </div>
+                <div class="download-icon ${colorClass}">
+                    ${icon}
+                </div>
+            `;
+            // Keep progressDiv visible to show the message
+        }
+        
+        optionElement.classList.remove('hover:bg-gray-700');
+        if (borderClass) {
+            optionElement.classList.add('border', borderClass);
+        }
+    }
+    
+    // 通用的任务清理函数
+    function cleanupTaskTracking(intervalId, optionElement) {
+        clearInterval(intervalId);
+        optionElement.removeAttribute('data-polling-interval');
+        optionElement.classList.remove('is-downloading');
+    }
 function pollTaskStatus(taskId, optionElement) {
     const t = getTranslations();
     const pollingInterval = 2000; // 每2秒轮询一次
@@ -512,10 +554,7 @@ function pollTaskStatus(taskId, optionElement) {
     const intervalId = setInterval(async () => {
         // Handle immediate failure from handleDownload
         if (taskId === null) {
-            clearInterval(intervalId);
-            // Remove from tracking
-            optionElement.removeAttribute('data-polling-interval');
-            optionElement.classList.remove('is-downloading');
+            cleanupTaskTracking(intervalId, optionElement);
             restoreOriginalContent();
             optionElement.style.pointerEvents = 'auto';
             optionElement.style.opacity = '1';
@@ -530,20 +569,9 @@ function pollTaskStatus(taskId, optionElement) {
         }
 
         if (attempts++ > maxAttempts) {
-            clearInterval(intervalId);
-            // Remove from tracking
-            optionElement.removeAttribute('data-polling-interval');
-            optionElement.classList.remove('is-downloading');
-            progressDiv.innerHTML = `
-                <div class="flex-grow text-center">
-                    <span class="font-semibold text-yellow-400" data-translate="downloadTimeout">${t.downloadTimeout}</span>
-                </div>
-                <div class="download-icon text-yellow-400">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </div>
-            `;
-            optionElement.classList.remove('hover:bg-gray-700');
-            optionElement.classList.add('border', 'border-yellow-500');
+            cleanupTaskTracking(intervalId, optionElement);
+            const timeoutIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            showTaskStatus(optionElement, 'timeout', t.downloadTimeout, timeoutIcon, 'text-yellow-400', 'border-yellow-500');
             alert(t.downloadTimeoutMessage);
             return;
         }
@@ -572,89 +600,33 @@ function pollTaskStatus(taskId, optionElement) {
             const data = await response.json();
 
             if (data.status === 'SUCCESS') {
-                console.log('Task completed successfully, triggering download...');
-                console.log('Full task data received:', data);
-                console.log('Task result:', data.result);
-                
-                clearInterval(intervalId);
-                // Remove from tracking
-                optionElement.removeAttribute('data-polling-interval');
-                optionElement.classList.remove('is-downloading');
+                cleanupTaskTracking(intervalId, optionElement);
                 
                 // Use the downloaded file from Celery task result
                 const result = data.result;
                 if (result && result.relative_path) {
-                    console.log('Using cached file with relative_path:', result.relative_path);
-                    console.log('Full result object:', result);
-                    
                     // Use the complete relative_path from Celery result
-                    // This should be the actual filename that was saved
                     const actualFileName = result.relative_path;
                     const downloadUrl = `/files/${encodeURIComponent(actualFileName)}`;
-                    
-                    console.log('Actual filename from Celery:', actualFileName);
-                    console.log('Download URL:', downloadUrl);
-                    
-                    // For download attribute, use just the filename part (for browser save dialog)
                     const displayFileName = actualFileName.split('/').pop().split('\\').pop();
                     
-                    // Directly trigger download - if file doesn't exist, browser will show error
-                    const link = document.createElement('a');
-                    link.href = downloadUrl;
-                    link.download = displayFileName;
-                    
-                    // Add error handling for download failures
-                    link.addEventListener('error', function(e) {
-                        console.error('Download failed:', e);
-                        alert('缓存文件下载失败，正在尝试流式下载...');
-                        // Fallback to stream download
-                        const formatId = optionElement.dataset.formatId;
-                        const resolution = optionElement.dataset.resolution || 'unknown';
-                        triggerFileDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
-                    });
-                    
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    console.log('Cached file download triggered with actual filename');
+                    // 触发浏览器下载
+                    triggerBrowserDownload(downloadUrl, displayFileName);
                 } else {
-                    console.warn('No cached file found in result. Result structure:', result);
-                    console.log('Falling back to stream download');
                     // Fallback to stream download if no cached file
                     const formatId = optionElement.dataset.formatId;
                     const resolution = optionElement.dataset.resolution || 'unknown';
-                    triggerFileDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
+                    triggerStreamDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
                 }
                 
-                progressDiv.classList.add('hidden');
-                progressDiv.innerHTML = '';
-                contentDiv.innerHTML = `
-                    <div class="flex-grow text-center">
-                        <span class="font-semibold text-green-400" data-translate="downloadComplete">${t.downloadComplete}</span>
-                    </div>
-                    <div class="download-icon text-green-400">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </div>
-                `;
-                contentDiv.classList.remove('hidden');
-                optionElement.classList.remove('hover:bg-gray-700');
-                optionElement.classList.add('border', 'border-green-500');
+                // 显示下载完成状态
+                const successIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                showTaskStatus(optionElement, 'success', t.downloadComplete, successIcon, 'text-green-400', 'border-green-500');
+                
             } else if (data.status === 'FAILURE') {
-                clearInterval(intervalId);
-                // Remove from tracking
-                optionElement.removeAttribute('data-polling-interval');
-                optionElement.classList.remove('is-downloading');
-                progressDiv.innerHTML = `
-                    <div class="flex-grow text-center">
-                        <span class="font-semibold text-red-400" data-translate="downloadFailed">${t.downloadFailed}</span>
-                    </div>
-                    <div class="download-icon text-red-400">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </div>
-                `;
-                // Keep progressDiv visible to show the failure message
-                optionElement.classList.remove('hover:bg-gray-700');
-                optionElement.classList.add('border', 'border-red-500');
+                cleanupTaskTracking(intervalId, optionElement);
+                const errorIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                showTaskStatus(optionElement, 'failure', t.downloadFailed, errorIcon, 'text-red-400', 'border-red-500');
                 const errorMessage = data.result || t.unknownError;
                 alert(`${t.errorTitle}: ${errorMessage}`);
             }
@@ -670,9 +642,112 @@ function pollTaskStatus(taskId, optionElement) {
     console.log(`Started polling for task ${taskId} with interval ID ${intervalId}`);
 }
 
+    // 格式ID验证函数
+    function validateFormatId(formatId, currentVideoData) {
+        const errors = [];
+        
+        // 基础验证
+        if (!formatId || formatId === 'undefined' || formatId === 'null' || formatId.trim() === '') {
+            errors.push('Format ID cannot be empty');
+            return { valid: false, errors };
+        }
+        
+        // 安全性验证：防止路径遍历和注入攻击
+        const dangerousPatterns = [
+            /\.\.\//,  // 路径遍历
+            /\\\.\.\\/, // Windows路径遍历
+            /[<>"'\\]/,  // HTML/JS注入字符
+            /\x00/,      // 空字节
+            /[\r\n]/,    // 换行符
+            /[;&|`$]/    // 命令注入字符
+        ];
+        
+        for (const pattern of dangerousPatterns) {
+            if (pattern.test(formatId)) {
+                errors.push('Format ID contains dangerous characters');
+                break;
+            }
+        }
+        
+        // 长度验证
+        if (formatId.length > 100) {
+            errors.push('Format ID too long');
+        }
+        
+        // 格式验证：只允许字母、数字、连字符、下划线和加号
+        if (!/^[a-zA-Z0-9_+-]+$/.test(formatId)) {
+            errors.push('Format ID contains invalid characters');
+        }
+        
+        // 视频数据可用性验证
+        if (!currentVideoData || !currentVideoData.formats) {
+            errors.push('No video data available');
+            return { valid: false, errors };
+        }
+        
+        // 检查formatId是否存在于可用格式列表中
+        const formatExists = currentVideoData.formats.some(f => f.format_id === formatId);
+        if (!formatExists) {
+            // 特殊情况：MP3转换格式
+            if (formatId.startsWith('mp3-conversion-')) {
+                const baseFormatId = formatId.replace('mp3-conversion-', '');
+                const baseExists = currentVideoData.formats.some(f => f.format_id === baseFormatId);
+                if (!baseExists) {
+                    errors.push(`Base format for MP3 conversion not found: ${baseFormatId}`);
+                }
+            } else {
+                errors.push(`Format ${formatId} not found in available formats`);
+            }
+        }
+        
+        return {
+            valid: errors.length === 0,
+            errors
+        };
+    }
+    
+    // 下载请求验证函数
+    function validateDownloadRequest(formatId, downloadType, currentVideoData) {
+        const errors = [];
+        
+        // 验证格式ID
+        const formatValidation = validateFormatId(formatId, currentVideoData);
+        if (!formatValidation.valid) {
+            errors.push(...formatValidation.errors);
+        }
+        
+        // 验证下载类型
+        if (!downloadType || !['video', 'audio'].includes(downloadType)) {
+            errors.push('Invalid download type');
+        }
+        
+        // 验证URL
+        if (!currentVideoData || !currentVideoData.original_url) {
+            errors.push('No video URL available');
+        }
+        
+        return {
+            valid: errors.length === 0,
+            errors
+        };
+    }
     function handleDownload(formatId) {
-        if (!currentVideoData) return;
+        if (!currentVideoData) {
+            console.error('No video data available');
+            alert('错误：没有可用的视频数据');
+            return;
+        }
+        
         const t = getTranslations();
+        
+        // 验证下载请求
+        const validation = validateDownloadRequest(formatId, currentVideoData.download_type, currentVideoData);
+        if (!validation.valid) {
+            const errorMessage = `下载验证失败：\n${validation.errors.join('\n')}`;
+            console.error('Download validation failed:', validation.errors);
+            alert(errorMessage);
+            return;
+        }
         const optionElement = document.querySelector(`[data-format-id="${formatId}"]`);
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
@@ -685,17 +760,24 @@ function pollTaskStatus(taskId, optionElement) {
         const supportsBrowserDownload = optionElement.dataset.supportsBrowserDownload === 'true';
         
         if (supportsBrowserDownload) {
-            if (currentVideoData.download_type === 'video') {
-                handleDirectVideoDownload(formatId, optionElement);
-            } else {
-                handleDirectAudioDownload(formatId, optionElement);
-            }
+            // 直接下载模式：完整流可以直接通过浏览器下载
+            handleDirectDownload(formatId, optionElement, currentVideoData.download_type);
         } else {
+            // 后台下载模式：需要合并的视频/音频流，服务器处理完后弹出浏览器另存为
             handleBackgroundDownload(formatId, optionElement);
         }
     }
 
-    function handleDirectVideoDownload(formatId, optionElement) {
+    // 统一的直接下载处理函数
+    function handleDirectDownload(formatId, optionElement, downloadType) {
+        // 验证格式ID
+        const validation = validateFormatId(formatId, currentVideoData);
+        if (!validation.valid) {
+            console.error('Direct download validation failed:', validation.errors);
+            alert(`直接下载验证失败：\n${validation.errors.join('\n')}`);
+            return;
+        }
+        
         const t = getTranslations();
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
@@ -703,127 +785,87 @@ function pollTaskStatus(taskId, optionElement) {
         // 保存原始内容的文本
         const originalText = contentDiv.querySelector('span').textContent;
         
-        // Show direct download status
+        // 根据下载类型设置不同的显示内容
+        const isVideo = downloadType === 'video';
+        const statusText = isVideo ? 
+            (t.directDownloading || '直接下载中...') : 
+            (t.directAudioDownloading || '音频流传输中...');
+        const statusIcon = isVideo ? '⚡' : '🎵';
+        const delay = isVideo ? 1500 : 1200;
+        
+        // 显示下载状态
         contentDiv.classList.add('hidden');
         progressDiv.innerHTML = `
             <div class="flex-grow text-center">
-                <span class="font-semibold text-blue-400" data-translate="directDownloading">${t.directDownloading || '直接下载中...'}</span>
+                <span class="font-semibold text-blue-400">${statusText}</span>
             </div>
             <div class="download-icon text-blue-400">
-                ⚡
+                ${statusIcon}
             </div>
         `;
         progressDiv.classList.remove('hidden');
         
-        // 获取原始URL并构建直接下载链接
+        // 构建下载参数
         const originalUrl = currentVideoData.original_url;
-        const title = currentVideoData.title || 'video';
-        const resolution = optionElement.dataset.resolution || '';
+        const title = currentVideoData.title || (isVideo ? 'video' : 'audio');
+        const resolution = isVideo ? (optionElement.dataset.resolution || '') : 'audio';
         
-        // 触发浏览器直接下载
+        // 构建下载URL
         const downloadUrl = `/download-stream?${new URLSearchParams({
             url: originalUrl,
-            download_type: 'video',
+            download_type: downloadType,
             format_id: formatId,
             resolution: resolution,
             title: title
         }).toString()}`;
         
-        // 创建隐藏的下载链接并点击
+        // 构建文件名
+        let filename;
+        if (isVideo) {
+            filename = `${title}_${resolution}.mp4`;
+        } else {
+            const audioFormat = optionElement.dataset.audioFormat || 'm4a';
+            filename = `${title}.${audioFormat}`;
+        }
+        
+        // 触发浏览器下载
+        triggerBrowserDownload(downloadUrl, filename);
+        
+        // 延迟显示完成状态
+        setTimeout(() => {
+            showDownloadComplete(contentDiv, progressDiv, originalText, optionElement);
+        }, delay);
+    }
+    
+    // 通用的浏览器下载触发函数
+    function triggerBrowserDownload(downloadUrl, filename) {
         const link = document.createElement('a');
         link.href = downloadUrl;
-        link.download = `${title}_${resolution}.mp4`;
+        link.download = filename;
         link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-        // 短暂延迟后显示完成状态
-        setTimeout(() => {
-            // 恢复原来的内容，但替换下载图标为完成图标
-            progressDiv.classList.add('hidden');
-            contentDiv.innerHTML = `
-                <div class="flex-grow text-center">
-                    <span class="font-semibold" data-translate-dynamic="video">${originalText}</span>
-                </div>
-                <div class="download-icon text-green-400">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </div>
-            `;
-            contentDiv.classList.remove('hidden');
-            optionElement.classList.remove('is-downloading');
-            optionElement.classList.add('border', 'border-green-500');
-        }, 1500);
     }
-
-    function handleDirectAudioDownload(formatId, optionElement) {
-        const t = getTranslations();
-        const contentDiv = optionElement.querySelector('.option-content');
-        const progressDiv = optionElement.querySelector('.option-progress');
-        
-        // 保存原始内容的文本
-        const originalText = contentDiv.querySelector('span').textContent;
-        
-        // Show direct audio download status
-        contentDiv.classList.add('hidden');
-        progressDiv.innerHTML = `
+    
+    // 通用的下载完成状态显示函数
+    function showDownloadComplete(contentDiv, progressDiv, originalText, optionElement) {
+        progressDiv.classList.add('hidden');
+        contentDiv.innerHTML = `
             <div class="flex-grow text-center">
-                <span class="font-semibold text-blue-400" data-translate="directAudioDownloading">${t.directAudioDownloading || '音频流传输中...'}</span>
+                <span class="font-semibold">${originalText}</span>
             </div>
-            <div class="download-icon text-blue-400">
-                🎵
+            <div class="download-icon text-green-400">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
         `;
-        progressDiv.classList.remove('hidden');
-        
-        // 获取原始URL并构建直接下载链接
-        const originalUrl = currentVideoData.original_url;
-        const title = currentVideoData.title || 'audio';
-        const audioFormat = optionElement.dataset.audioFormat || 'm4a';
-        
-        // 触发浏览器直接下载
-        const downloadUrl = `/download-stream?${new URLSearchParams({
-            url: originalUrl,
-            download_type: 'audio',
-            format_id: formatId,
-            resolution: 'audio',
-            title: title
-        }).toString()}`;
-        
-        // 创建隐藏的下载链接并点击
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = `${title}.${audioFormat}`;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        // 短暂延迟后显示完成状态
-        setTimeout(() => {
-            // 恢复原来的内容，但替换下载图标为完成图标
-            progressDiv.classList.add('hidden');
-            contentDiv.innerHTML = `
-                <div class="flex-grow text-center">
-                    <span class="font-semibold" data-translate-dynamic="audio_lossless">${originalText}</span>
-                </div>
-                <div class="download-icon text-green-400">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </div>
-            `;
-            contentDiv.classList.remove('hidden');
-            optionElement.classList.remove('is-downloading');
-            optionElement.classList.add('border', 'border-green-500');
-        }, 1200);
+        contentDiv.classList.remove('hidden');
+        optionElement.classList.remove('is-downloading');
+        optionElement.classList.add('border', 'border-green-500');
     }
 
-    function handleBackgroundDownload(formatId, optionElement) {
-        const t = getTranslations();
-        const contentDiv = optionElement.querySelector('.option-content');
-        const progressDiv = optionElement.querySelector('.option-progress');
-        const resolution = optionElement.dataset.resolution || '';
-
-        // 动态注入不确定进度条的CSS动画
+    // 通用的进度条样式初始化函数
+    function initializeIndeterminateProgressStyle() {
         if (!document.getElementById('indeterminate-progress-style')) {
             const style = document.createElement('style');
             style.id = 'indeterminate-progress-style';
@@ -839,16 +881,40 @@ function pollTaskStatus(taskId, optionElement) {
             `;
             document.head.appendChild(style);
         }
-
-        // 将下载选项替换为不确定进度条
+    }
+    
+    // 通用的不确定进度条显示函数
+    function showIndeterminateProgress(optionElement) {
+        const contentDiv = optionElement.querySelector('.option-content');
+        const progressDiv = optionElement.querySelector('.option-progress');
+        
+        initializeIndeterminateProgressStyle();
+        
         contentDiv.classList.add('hidden');
         progressDiv.innerHTML = `
-            <div class="progress-bar-container w-full bg-gray-700 rounded-full h-2.5 overflow-hidden"><div class="progress-bar-indeterminate bg-purple-500 h-2.5 rounded-full"></div></div>
+            <div class="progress-bar-container w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
+                <div class="progress-bar-indeterminate bg-purple-500 h-2.5 rounded-full"></div>
+            </div>
         `;
         progressDiv.classList.remove('hidden');
         optionElement.style.pointerEvents = 'none';
         optionElement.style.opacity = '0.7';
+    }
 
+    function handleBackgroundDownload(formatId, optionElement) {
+        // 验证格式ID
+        const validation = validateFormatId(formatId, currentVideoData);
+        if (!validation.valid) {
+            console.error('Background download validation failed:', validation.errors);
+            alert(`后台下载验证失败：\n${validation.errors.join('\n')}`);
+            return;
+        }
+        
+        const t = getTranslations();
+        const resolution = optionElement.dataset.resolution || '';
+
+        // 显示不确定进度条
+        showIndeterminateProgress(optionElement);
         fetch('/downloads', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -856,7 +922,7 @@ function pollTaskStatus(taskId, optionElement) {
                 url: currentVideoData.original_url,
                 download_type: currentVideoData.download_type,
                 format_id: formatId,
-                resolution: resolution  // Send the resolution to the backend
+                resolution: resolution
             }),
         })
         .then(response => {
@@ -1085,31 +1151,33 @@ function get_query_params(url, type, formatId, resolution, title) {
     });
 }
 
-function triggerFileDownload(url, type, formatId, resolution, title) {
-    console.log('triggerFileDownload called with:', { url, type, formatId, resolution, title });
-    triggerTraditionalDownload(url, type, formatId, resolution, title);
-}
-
-function triggerTraditionalDownload(url, type, formatId, resolution, title) {
-    console.log('triggerTraditionalDownload called with:', { url, type, formatId, resolution, title });
+// 统一的文件下载触发函数（替换triggerFileDownload和triggerTraditionalDownload）
+function triggerStreamDownload(url, type, formatId, resolution, title) {
+    // 基础参数验证
+    if (!url || !type || !formatId) {
+        console.error('Missing required parameters for stream download:', { url, type, formatId });
+        alert('下载参数不完整，无法继续下载');
+        return;
+    }
+    
+    // 验证formatId安全性
+    if (currentVideoData) {
+        const validation = validateFormatId(formatId, currentVideoData);
+        if (!validation.valid) {
+            console.error('Stream download format validation failed:', validation.errors);
+            alert(`流式下载格式验证失败：\n${validation.errors.join('\n')}`);
+            return;
+        }
+    }
+    
     const query_params = get_query_params(url, type, formatId, resolution, title);
     const downloadUrl = `/download-stream?${query_params.toString()}`;
     
-    console.log('Generated download URL:', downloadUrl);
-    
-    // Generate a proper filename with extension
+    // 生成带时间戳的文件名
     const extension = type === 'video' ? '.mp4' : '.mp3';
-    const safeTitle = sanitizeFilename(title);
+    const safeTitle = sanitizeFilename(title || 'download');
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
     const filename = `${safeTitle}_${resolution}_${timestamp}${extension}`;
     
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    
-    console.log('Triggering download link click with filename:', filename);
-    link.click();
-    document.body.removeChild(link);
-    console.log('Download link clicked and removed');
+    triggerBrowserDownload(downloadUrl, filename);
 }

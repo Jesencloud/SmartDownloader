@@ -644,9 +644,10 @@ def test_frontend_integration():
             if js_file == 'static/script.js':
                 checks = [
                     ('handleDownload', '主下载处理函数'),
-                    ('handleDirectVideoDownload', '视频直接下载处理函数'),
-                    ('handleDirectAudioDownload', '音频直接下载处理函数'),
+                    ('handleDirectDownload', '统一直接下载处理函数'),
                     ('handleBackgroundDownload', '后台下载处理函数'),
+                    ('showTaskStatus', '通用任务状态显示函数'),
+                    ('triggerBrowserDownload', '浏览器下载触发函数'),
                     ('is_complete_stream', '完整流检测字段'),
                     ('supports_browser_download', '浏览器下载支持字段')
                 ]

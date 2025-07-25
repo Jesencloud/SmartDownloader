@@ -334,8 +334,56 @@ async def get_video_info(request: VideoInfoRequest):
         download_type=request.download_type
     )
 
+def validate_format_id(format_id: str) -> tuple[bool, str]:
+    """
+    验证格式ID的安全性和有效性
+    
+    Returns:
+        tuple[bool, str]: (is_valid, error_message)
+    """
+    if not format_id or not format_id.strip():
+        return False, "Format ID cannot be empty"
+    
+    # 防止路径遍历和注入攻击
+    dangerous_patterns = [
+        '../',  # 路径遍历
+        '..\\',  # Windows路径遍历
+        '<', '>', '"', "'", '\\',  # HTML/JS注入字符
+        '\x00',  # 空字节
+        '\r', '\n',  # 换行符
+        ';', '&', '|', '`', '$'  # 命令注入字符
+    ]
+    
+    for pattern in dangerous_patterns:
+        if pattern in format_id:
+            return False, f"Format ID contains dangerous characters: {pattern}"
+    
+    # 长度限制
+    if len(format_id) > 100:
+        return False, "Format ID too long (max 100 characters)"
+    
+    # 只允许字母、数字、连字符、下划线和加号
+    import re
+    if not re.match(r'^[a-zA-Z0-9_+-]+$', format_id):
+        return False, "Format ID contains invalid characters (only alphanumeric, _, +, - allowed)"
+    
+    return True, ""
+
 @app.post("/downloads", response_model=DownloadResponse, status_code=202)
 async def start_download(request: DownloadRequest):
+    # 验证格式ID
+    is_valid, error_msg = validate_format_id(request.format_id)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid format ID: {error_msg}")
+    
+    # 验证下载类型
+    if request.download_type not in ['video', 'audio']:
+        raise HTTPException(status_code=400, detail="Invalid download type. Must be 'video' or 'audio'")
+    
+    # 验证URL
+    if not request.url or not request.url.strip():
+        raise HTTPException(status_code=400, detail="URL cannot be empty")
+    
     task = download_video_task.delay(
         video_url=request.url, 
         download_type=request.download_type,
@@ -348,6 +396,19 @@ async def start_download(request: DownloadRequest):
 async def download_stream(request: Request, url: str, download_type: str, format_id: str, resolution: str, title: str):
     
     log.info(f"Stream download request: {url}, format_id: {format_id}, type: {download_type}")
+    
+    # 验证格式ID
+    is_valid, error_msg = validate_format_id(format_id)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid format ID: {error_msg}")
+    
+    # 验证下载类型
+    if download_type not in ['video', 'audio']:
+        raise HTTPException(status_code=400, detail="Invalid download type. Must be 'video' or 'audio'")
+    
+    # 验证URL
+    if not url or not url.strip():
+        raise HTTPException(status_code=400, detail="URL cannot be empty")
     
     try:
         async def stream_downloader():
