@@ -9,6 +9,11 @@ on:
   pull_request:
     branches: [ "main", "master" ]
 
+# Concurrency control: cancel in-progress runs on the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Job 1: 运行快速的单元测试和不依赖外部服务的集成测试
   unit-tests:
@@ -82,6 +87,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Install Redis client
+      run: |
+        sudo apt-get update && sudo apt-get install -y redis-tools
+
     - name: Prepare yt-dlp for Linux
       run: |
         # Download the Linux binary and place it where the platform-aware
@@ -106,22 +115,17 @@ jobs:
         done
         echo "Redis is up and running!"
 
-        # 启动 Celery worker
+        # 启动 Celery worker 并将日志输出到文件，方便调试
         echo "Starting Celery worker..."
-        celery -A web.celery_app worker --loglevel=info &
-        
-        # 输出 Celery worker 的启动日志到文件，方便调试
-        echo "Celery worker started. Logs will be in celery_worker.log"
-        celery -A web.celery_app worker --loglevel=info > celery_worker.log 2>&1 &
+        # 为 worker 指定一个明确的主机名，并监听默认的 'celery' 队列，这在CI环境中更可靠
+        celery -A web.celery_app worker --loglevel=info --hostname=e2e-worker@%h -Q celery > celery_worker.log 2>&1 &
 
     - name: Start FastAPI server in background
       env:
         CELERY_BROKER_URL: redis://redis:6379/0
         CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
       run: |
-        uvicorn web.main:app --host 0.0.0.0 --port 8000 &
-        
-        # 将 uvicorn 的启动日志输出到文件，方便调试
+        # 启动 FastAPI 服务器并将日志输出到文件，方便调试
         echo "FastAPI server started. Logs will be in uvicorn.log"
         uvicorn web.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
 
@@ -151,20 +155,25 @@ jobs:
         CELERY_BROKER_URL: redis://redis:6379/0
         CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
       run: |
+       set -o pipefail
        echo "Waiting for Celery worker to be responsive..."
        for i in {1..15}; do
-         # The 'celery status' command will return a non-zero exit code if no workers respond.
-         if celery -A web.celery_app status > /dev/null 2>&1; then
+         # 使用 'inspect ping' 并增加超时时间。
+         # 'set -o pipefail' 确保如果 'celery' 命令失败，整个管道也会失败。
+         if celery -A web.celery_app inspect ping --timeout 10 | grep -q "e2e-worker@"; then
            echo "✅ Celery worker is responsive."
            exit 0
          else
-           echo "Celery worker not yet responsive, checking logs..."
+           echo "Celery worker not yet responsive (attempt $i/15). Checking logs..."
            tail celery_worker.log  # 打印 Celery worker 的日志
          fi
          sleep 2
        done
         echo "❌ Celery worker did not become ready in 30 seconds."
-        celery -A web.celery_app status # Run one last time to show error output and fail the job
+        echo "--- Final Celery Worker Log ---"
+        cat celery_worker.log
+        echo "--- Final Ping Attempt ---"
+        celery -A web.celery_app inspect ping --timeout 10 # 最后运行一次以显示错误输出并使作业失败
         exit 1
 
     - name: Run end-to-end tests
