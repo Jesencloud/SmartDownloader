@@ -28,6 +28,7 @@ def create_test_files(base_path: Path):
     
     return len(test_files)
 
+@pytest.mark.e2e
 def test_lightweight_cleanup(client, tmp_path, monkeypatch):
     """测试轻量级清理功能"""
     print("🧪 测试优化后的轻量级清理功能...")

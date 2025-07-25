@@ -144,6 +144,9 @@ jobs:
         exit 1
 
     - name: Run end-to-end tests
+      env:
+        CELERY_BROKER_URL: redis://redis:6379/0
+        CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
       run: |
         # 仅运行标记为 e2e 的测试
         pytest -m e2e -v
