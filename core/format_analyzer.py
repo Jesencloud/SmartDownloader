@@ -2,7 +2,12 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Tuple
+try:
+    from typing import Optional, Dict, List, Tuple, Any
+except ImportError:
+    # Python 3.8兼容性
+    from typing import Optional, Dict, List, Any
+    Tuple = tuple
 from enum import Enum
 
 log = logging.getLogger(__name__)

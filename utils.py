@@ -1,4 +1,3 @@
-import os
 import argparse
 import asyncio
 import logging
@@ -7,7 +6,6 @@ import re
 from pathlib import Path
 from typing import Optional, List
 
-import aiofiles
 from rich.console import Console
 from rich.logging import RichHandler
 

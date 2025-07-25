@@ -4,8 +4,6 @@ import asyncio
 import json
 import logging
 import re
-import time
-from typing import Optional
 
 from rich.progress import Progress, TaskID
 

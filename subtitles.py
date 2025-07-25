@@ -5,7 +5,6 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional, List, Tuple
-from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
 from rich.console import Console
@@ -166,7 +165,7 @@ class TranslationProcessor:
                 if translator_service != "mymemory":
                     try:
                         self.fallback_translators.append(MyMemoryTranslator(source='en', target='zh-CN'))
-                    except:
+                    except Exception:
                         pass
                         
                 if translator_service != "google":
@@ -176,7 +175,7 @@ class TranslationProcessor:
                             target='zh-CN', 
                             proxies=proxy_config
                         ))
-                    except:
+                    except Exception:
                         pass
                         
             except Exception as e:
@@ -448,6 +447,6 @@ class SubtitleProcessor:
         
         existing_files = await asyncio.to_thread(_glob)
         if existing_files:
-            log.info(f"    ℹ️ 检测到已有字幕，跳过AI生成。")
+            log.info("    ℹ️ 检测到已有字幕，跳过AI生成。")
             return True
         return False

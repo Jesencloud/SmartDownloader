@@ -5,18 +5,21 @@
 包含cookies缓存机制和详细异常处理
 """
 
-import json
 import logging
 import os
 import shutil
 import sqlite3
-import subprocess
 import sys
 import tempfile
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+try:
+    from typing import Optional, Dict, List, Tuple
+except ImportError:
+    # Python 3.8兼容性
+    from typing import Optional, Dict, List
+    Tuple = tuple
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)

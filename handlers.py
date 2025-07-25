@@ -5,17 +5,12 @@
 """
 
 import argparse
-import asyncio
-import json
-import logging
 from pathlib import Path
-from typing import Optional, Any, Dict, AsyncGenerator
+from typing import Optional
 
 import aiofiles
 import aiofiles.os as aos
-from rich.console import Console
 
-from config_manager import config
 from downloader import Downloader
 from core import (
     DownloaderException, NonRecoverableErrorException, 

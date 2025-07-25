@@ -87,7 +87,7 @@ def try_auto_extract_cookies(first_url: str, browser_type: str, cookies_config) 
             console.print(f'✅ 成功自动获取cookies: {cookies}', style='bold green')
             return cookies
         else:
-            console.print(f'⚠️ 无法自动获取cookies，将在无cookies情况下继续', style='yellow')
+            console.print('⚠️ 无法自动获取cookies，将在无cookies情况下继续', style='yellow')
             return None
     except ImportError as e:
         console.print(f'⚠️ 自动cookies模块不可用，请手动放置cookies.txt文件: {e}', style='yellow')
@@ -110,13 +110,13 @@ def handle_browser_mode_cookies(inputs: List[str], browser_type: str, cookies_co
         Optional[str]: cookies文件路径，如果成功则返回路径，否则返回None。
     """
     if not cookies_config.auto_extract_enabled:
-        console.print(f'⚠️ 自动cookies提取已禁用', style='yellow')
+        console.print('⚠️ 自动cookies提取已禁用', style='yellow')
         return None
     
     if cookies_config.mode == 'browser':
-        console.print(f'🔍 配置设置强制从浏览器获取cookies...', style='cyan')
+        console.print('🔍 配置设置强制从浏览器获取cookies...', style='cyan')
     elif force_refresh:
-        console.print(f'🔄 配置设置强制刷新cookies...', style='cyan')
+        console.print('🔄 配置设置强制刷新cookies...', style='cyan')
     
     if inputs:
         first_url = inputs[0]
@@ -154,7 +154,7 @@ def handle_cache_cookies(cookies_config, inputs: List[str], browser_type: str) -
             console.print(f'🍪 使用有效的cookies缓存: {cookies}', style='green')
             return cookies
         else:
-            console.print(f'⚠️ cookies缓存已过期，尝试自动获取新cookies...', style='yellow')
+            console.print('⚠️ cookies缓存已过期，尝试自动获取新cookies...', style='yellow')
             if cookies_config.auto_extract_enabled and inputs:
                 first_url = inputs[0]
                 return try_auto_extract_cookies(first_url, browser_type, cookies_config)
@@ -193,12 +193,12 @@ def handle_auto_mode_cookies(inputs: List[str], browser_type: str, cookies_confi
     
     # 没有手动cookies和缓存，尝试自动获取
     if cookies_config.auto_extract_enabled:
-        console.print(f'🔍 未找到手动cookies文件和缓存，尝试自动获取浏览器cookies...', style='yellow')
+        console.print('🔍 未找到手动cookies文件和缓存，尝试自动获取浏览器cookies...', style='yellow')
         if inputs:
             first_url = inputs[0]
             return try_auto_extract_cookies(first_url, browser_type, cookies_config)
     else:
-        console.print(f'⚠️ 未找到cookies文件且自动获取已禁用', style='yellow')
+        console.print('⚠️ 未找到cookies文件且自动获取已禁用', style='yellow')
     
     return None
 
@@ -216,7 +216,7 @@ def get_cookies(inputs: List[str]) -> Optional[str]:
     cookies_config = config.cookies
     
     if cookies_mode == 'skip':
-        console.print(f'🚫 跳过cookies（配置设置）', style='yellow')
+        console.print('🚫 跳过cookies（配置设置）', style='yellow')
         return None
     
     if cookies_mode == 'manual':
@@ -240,10 +240,10 @@ def process_x_com_urls(current_url_tasks: List[tuple], video_count: int, url: st
         List[tuple]: 处理后的任务列表。
     """
     if video_count > 1 and ('x.com' in url or 'twitter.com' in url):
-        console.print(f'⚠️  不支持一个链接🔗里包含多个视频下载哦～', style='bold red')
+        console.print('⚠️  不支持一个链接🔗里包含多个视频下载哦～', style='bold red')
         console.print(f'🔗 当前链接包含 {video_count} 个视频，仅支持单视频链接', style='yellow')
-        console.print(f'💡 建议：请分别获取每个视频的单独链接进行下载', style='cyan')
-        console.print(f'📥 将仅下载第一个视频...', style='bold yellow')
+        console.print('💡 建议：请分别获取每个视频的单独链接进行下载', style='cyan')
+        console.print('📥 将仅下载第一个视频...', style='bold yellow')
         
         if current_url_tasks:
             return [current_url_tasks[0]]  # 只返回第一个视频

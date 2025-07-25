@@ -7,8 +7,7 @@
 import asyncio
 import logging
 import os
-from pathlib import Path
-from typing import Optional, List, Tuple, Any
+from typing import Optional, List, Tuple
 
 from rich.console import Console
 from rich.progress import Progress, TaskID
@@ -17,8 +16,8 @@ from .retry_manager import RetryManager, with_retries
 from .subprocess_progress_handler import SubprocessProgressHandler
 from .error_handler import ErrorHandler
 from .exceptions import (
-    DownloaderException, FFmpegException, NetworkException,
-    DownloadStalledException, MaxRetriesExceededException
+    DownloaderException, NetworkException,
+    DownloadStalledException
 )
 
 log = logging.getLogger(__name__)
@@ -242,7 +241,7 @@ class SubprocessManager:
                     process.communicate(), timeout=timeout
                 )
             except asyncio.TimeoutError:
-                raise DownloadStalledException(f'进程执行超时')
+                raise DownloadStalledException('进程执行超时')
             
             stdout_str = stdout.decode('utf-8', errors='ignore')
             stderr_str = stderr.decode('utf-8', errors='ignore')

@@ -9,21 +9,19 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Optional, List, Dict, Any, AsyncGenerator
+from typing import Optional, Dict, Any, AsyncGenerator
 import sys
-import os
-import shutil
 from rich.console import Console
 from rich.progress import (
     Progress, BarColumn, DownloadColumn, ProgressColumn,
-    TextColumn, TimeElapsedColumn, TimeRemainingColumn, TransferSpeedColumn,
+    TextColumn, TransferSpeedColumn,
     SpinnerColumn, TaskID, Task
 )
 from rich.text import Text
 
 from config_manager import config
 from core import (
-    DownloaderException, FFmpegException, with_retries,
+    DownloaderException, with_retries,
     CommandBuilder, SubprocessManager, FileProcessor, AuthenticationException
 )
 from core.format_analyzer import DownloadStrategy
@@ -143,14 +141,14 @@ class Downloader:
                         # 重新构建信息获取命令
                         info_cmd = self.command_builder.build_playlist_info_cmd(url)
                         auth_retry_count += 1
-                        log.info(f"✅ Cookies已更新,重试获取视频信息...")
+                        log.info("✅ Cookies已更新,重试获取视频信息...")
                         continue
                     else:
-                        log.error(f"❌ 无法自动更新cookies,获取视频信息失败")
+                        log.error("❌ 无法自动更新cookies,获取视频信息失败")
                         raise e
                 else:
                     if not self.cookies_manager:
-                        log.error(f"❌ 未配置cookies管理器,无法自动处理认证错误")
+                        log.error("❌ 未配置cookies管理器,无法自动处理认证错误")
                     else:
                         log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries})")
                     raise e
@@ -253,14 +251,14 @@ class Downloader:
                         cmd = rebuilt_cmd[0] if isinstance(rebuilt_cmd, tuple) else rebuilt_cmd
                         
                         auth_retry_count += 1
-                        log.info(f"✅ Cookies已更新,重试命令...")
+                        log.info("✅ Cookies已更新,重试命令...")
                         continue
                     else:
-                        log.error(f"❌ 无法自动更新cookies,命令执行失败.")
+                        log.error("❌ 无法自动更新cookies,命令执行失败.")
                         raise e
                 else:
                     if not self.cookies_manager:
-                        log.error(f"❌ 未配置cookies管理器,无法自动处理认证错误.")
+                        log.error("❌ 未配置cookies管理器,无法自动处理认证错误.")
                     elif auth_retry_count >= max_auth_retries:
                         log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries}).")
                     raise e
@@ -307,7 +305,7 @@ class Downloader:
                 log.debug(f"✅ 主动验证成功: 找到文件 '{potential_file.name}'")
                 return potential_file
         
-        log.warning(f"主动验证失败，未找到任何首选扩展名的文件。将回退到搜索模式...")
+        log.warning("主动验证失败，未找到任何首选扩展名的文件。将回退到搜索模式...")
 
         # 策略2: 回退到glob搜索 (以处理未知扩展名)
         matching_files = list(self.download_folder.glob(f"{prefix}*"))
@@ -320,7 +318,7 @@ class Downloader:
         valid_files = [f for f in matching_files if f.is_file() and f.stat().st_size > 0]
 
         if not valid_files:
-            log.error(f'搜索模式失败: 找到的文件均无效 (是目录或大小为0)。')
+            log.error('搜索模式失败: 找到的文件均无效 (是目录或大小为0)。')
             return None
 
         # 返回最新修改的文件，以处理可能的重试或覆盖情况
@@ -674,7 +672,7 @@ class Downloader:
                     raise DownloaderException(f"音频转换失败，预期的输出文件 '{exact_output_path}' 未找到或为空。")
             else:
                 # --- 策略2: 直接下载原始流 (主动验证) ---
-                log.info(f"直接音频流下载请求。将采用主动验证策略。")
+                log.info("直接音频流下载请求。将采用主动验证策略。")
                 # 使用模板让yt-dlp能自动添加正确的扩展名
                 output_template = self.download_folder / f"{sanitized_title}.%(ext)s"
                 cmd_args = {"url": video_url, "output_template": str(output_template), "audio_format": audio_format}

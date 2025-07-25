@@ -3,15 +3,12 @@
 内置的简单 Celery 监控 Web 界面
 作为 Flower 的轻量级替代方案
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 import time
 import psutil
 import os
 from pathlib import Path
-import asyncio
-from celery import Celery
 
 # 导入现有的 Celery 应用
 import sys

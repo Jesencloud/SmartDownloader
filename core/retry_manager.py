@@ -9,7 +9,7 @@ import functools
 import logging
 import random
 import time
-from typing import Any, Callable, TypeVar, Union
+from typing import Any, Callable, TypeVar
 
 from rich.console import Console
 

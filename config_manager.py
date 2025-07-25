@@ -8,7 +8,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Any, Dict
+from typing import Optional, List
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, ValidationError, ValidationInfo, ConfigDict
@@ -283,7 +283,7 @@ class ConfigManager:
         except yaml.YAMLError as e:
             log.error(f"❌ 配置文件格式错误: {e}")
         except ValidationError as e:
-            log.error(f"❌ 配置内容验证失败:")
+            log.error("❌ 配置内容验证失败:")
             for error in e.errors():
                 loc = '.'.join(map(str, error['loc']))
                 log.error(f"  - {loc}: {error['msg']}")

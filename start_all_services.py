@@ -7,7 +7,6 @@ import sys
 import time
 import signal
 import os
-from pathlib import Path
 
 def start_redis():
     """检查并启动 Redis"""
@@ -18,7 +17,7 @@ def start_redis():
         if result.returncode == 0 and 'PONG' in result.stdout:
             print("✅ Redis 已运行")
             return True
-    except:
+    except Exception:
         pass
     
     print("🔄 尝试启动 Redis...")
@@ -33,7 +32,7 @@ def start_redis():
         if result.returncode == 0 and 'PONG' in result.stdout:
             print("✅ Redis 启动成功")
             return True
-    except:
+    except Exception:
         pass
     
     print("❌ Redis 启动失败，请手动启动 Redis")
@@ -116,7 +115,7 @@ def main():
                         os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                     else:
                         process.kill()
-            except:
+            except Exception:
                 pass
         
         print("✅ 所有服务已停止")

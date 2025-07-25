@@ -1,16 +1,11 @@
 # web/tasks.py
 import sys
 import logging
-import json
 from pathlib import Path
 import asyncio
-import os
 import psutil
 from celery import Task
-import signal
-from celery.exceptions import Retry, WorkerLostError
 from celery.signals import task_prerun, task_postrun, task_failure, task_revoked
-import psutil
 import time
 
 # Set up logging

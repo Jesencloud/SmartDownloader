@@ -14,8 +14,6 @@ import time
 from cachetools import TTLCache, cached
 import sys
 import os
-import glob
-import signal
 import psutil
 import logging
 import platform

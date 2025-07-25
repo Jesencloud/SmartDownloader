@@ -2,7 +2,6 @@
 
 import logging
 import os
-from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -48,7 +47,7 @@ class CookiesManager:
         Returns:
             str: 新的cookies文件路径，失败时返回None
         """
-        log.info(f"🍪 检测到认证错误，正在自动从浏览器更新cookies...")
+        log.info("🍪 检测到认证错误，正在自动从浏览器更新cookies...")
         
         try:
             # 备份当前cookies文件
@@ -66,10 +65,10 @@ class CookiesManager:
             if new_cookies_file:
                 # 更新主cookies文件
                 self._update_main_cookies_file(new_cookies_file)
-                log.info(f"✅ Cookies自动更新成功！")
+                log.info("✅ Cookies自动更新成功！")
                 return self.cookies_file
             else:
-                log.warning(f"❌ 无法从浏览器获取新cookies")
+                log.warning("❌ 无法从浏览器获取新cookies")
                 # 尝试恢复备份
                 self._restore_backup_cookies()
                 return None
@@ -98,7 +97,7 @@ class CookiesManager:
             if os.path.exists(backup_file):
                 import shutil
                 shutil.copy2(backup_file, self.cookies_file)
-                log.info(f"已恢复备份的cookies文件")
+                log.info("已恢复备份的cookies文件")
         except Exception as e:
             log.warning(f"恢复备份cookies文件失败: {e}")
     

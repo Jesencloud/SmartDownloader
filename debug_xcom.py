@@ -3,7 +3,6 @@
 调试X.com链接格式处理的脚本
 """
 
-import asyncio
 import json
 import subprocess
 import sys
@@ -12,7 +11,6 @@ from pathlib import Path
 # 添加项目根目录到path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from web.main import fetch_video_info_sync
 
 def test_yt_dlp_raw_output():
     """测试yt-dlp的原始输出"""
@@ -34,14 +32,14 @@ def test_yt_dlp_raw_output():
         if result.returncode == 0:
             try:
                 video_data = json.loads(result.stdout.strip())
-                print(f"✅ yt-dlp成功获取数据")
+                print("✅ yt-dlp成功获取数据")
                 print(f"📊 标题: {video_data.get('title', 'N/A')}")
                 print(f"🎬 格式数量: {len(video_data.get('formats', []))}")
                 print(f"🆔 实际ID: {video_data.get('id', 'N/A')}")
                 
                 # 显示前几个格式的详细信息
                 formats = video_data.get('formats', [])[:6]
-                print(f"\n📋 格式详情:")
+                print("\n📋 格式详情:")
                 for i, fmt in enumerate(formats):
                     print(f"  {i+1}. {fmt.get('format_id'):>20} | {fmt.get('ext'):>4} | {fmt.get('vcodec'):>12} | {fmt.get('acodec'):>12} | {fmt.get('width', 'N/A')}x{fmt.get('height', 'N/A')}")
                 
@@ -148,7 +146,7 @@ def test_web_api_processing():
     }
     
     try:
-        print(f"✅ 使用模拟数据测试Web API处理逻辑")
+        print("✅ 使用模拟数据测试Web API处理逻辑")
         print(f"📊 标题: {mock_video_data_raw.get('title', 'N/A')}")
         print(f"🎬 原始格式数量: {len(mock_video_data_raw.get('formats', []))}")
         

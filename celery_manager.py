@@ -6,7 +6,6 @@ Celery 工作进程管理脚本
 import os
 import sys
 import time
-import signal
 import subprocess
 import psutil
 from pathlib import Path
@@ -201,7 +200,7 @@ class CeleryManager:
             
             print(f"✅ Flower 已启动 (PID: {process.pid})")
             print(f"   访问地址: http://localhost:{port}")
-            print(f"   用户名: admin, 密码: admin123")
+            print("   用户名: admin, 密码: admin123")
             
             return process
             
@@ -387,9 +386,6 @@ def main():
     elif args.action == 'restart':
         # 需要先获取原有的 simple_mode 设置
         if args.worker in manager.workers:
-            simple_mode = manager.workers[args.worker].get('simple_mode', False)
-            queue = manager.workers[args.worker].get('queue')
-            concurrency = manager.workers[args.worker].get('concurrency')
             manager.restart_worker(args.worker)
         else:
             manager.start_worker(args.worker, args.concurrency, args.queue, args.simple)
