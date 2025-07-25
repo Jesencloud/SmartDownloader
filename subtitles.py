@@ -4,7 +4,7 @@ import re
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
@@ -356,7 +356,7 @@ class SubtitleMerger:
             log.error(f"字幕合并失败: {e}")
             return None
     
-    async def _read_subtitle_files(self, en_srt: Path, zh_srt: Path) -> tuple[str, str]:
+    async def _read_subtitle_files(self, en_srt: Path, zh_srt: Path) -> Tuple[str, str]:
         """读取英文和中文字幕文件"""
         async with aiofiles.open(en_srt, 'r', encoding='utf-8') as f:
             en_content = await f.read()

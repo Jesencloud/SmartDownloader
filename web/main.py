@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from celery.result import AsyncResult
-from typing import Literal, Dict, Any, List, Optional, Union
+from typing import Literal, Dict, Any, List, Optional, Union, Tuple
 from pathlib import Path
 from urllib.parse import urlparse
 import subprocess
@@ -339,7 +339,7 @@ async def get_video_info(request: VideoInfoRequest):
         download_type=request.download_type
     )
 
-def validate_url_security(url: str) -> tuple[bool, str]:
+def validate_url_security(url: str) -> Tuple[bool, str]:
     """
     验证URL的安全性
     
@@ -433,7 +433,7 @@ def validate_url_security(url: str) -> tuple[bool, str]:
     
     return True, ""
 
-def validate_format_id(format_id: str) -> tuple[bool, str]:
+def validate_format_id(format_id: str) -> Tuple[bool, str]:
     """
     验证格式ID的安全性和有效性
     

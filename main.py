@@ -9,7 +9,7 @@ import asyncio
 import sys
 import logging
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 from rich.console import Console
 
@@ -24,7 +24,7 @@ console = Console(file=sys.stdout)
 log = logging.getLogger(__name__)
 
 
-def get_cookies_configuration() -> tuple[str, str, str, bool, bool]:
+def get_cookies_configuration() -> Tuple[str, str, str, bool, bool]:
     """获取cookies配置信息。
     
     Returns:
