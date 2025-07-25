@@ -15,7 +15,7 @@ import sys
 project_root = Path(__file__).parent
 sys.path.append(str(project_root))
 
-from web.celery_app import celery_app
+from web.celery_app import celery_app  # noqa: E402
 
 app = FastAPI(title="Celery 监控面板")
 

@@ -17,9 +17,9 @@ project_root = str(Path(__file__).resolve().parents[1])
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from downloader import Downloader
-from config_manager import config
-from .celery_app import celery_app
+from downloader import Downloader  # noqa: E402
+from config_manager import config  # noqa: E402
+from .celery_app import celery_app  # noqa: E402
 
 class BaseDownloadTask(Task):
     """基础下载任务类，提供通用功能"""

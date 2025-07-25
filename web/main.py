@@ -126,9 +126,10 @@ def fetch_video_info_sync(url: str) -> dict:
             "--dump-json",
             "--no-download",
             "--no-playlist",
+            "--socket-timeout", "30",
             url
         ]
-        process = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
+        process = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=True)
         return json.loads(process.stdout)
     except subprocess.TimeoutExpired:
         # Raise standard exceptions to be handled by the endpoint
