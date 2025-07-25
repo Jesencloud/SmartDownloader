@@ -3,6 +3,7 @@
 内置的简单 Celery 监控 Web 界面
 作为 Flower 的轻量级替代方案
 """
+
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 import time
@@ -12,6 +13,7 @@ from pathlib import Path
 
 # 导入现有的 Celery 应用
 import sys
+
 project_root = Path(__file__).parent
 sys.path.append(str(project_root))
 
@@ -19,13 +21,14 @@ from web.celery_app import celery_app  # noqa: E402
 
 app = FastAPI(title="Celery 监控面板")
 
+
 class CeleryMonitor:
     """Celery 监控器"""
-    
+
     def __init__(self, celery_app):
         self.celery_app = celery_app
         self.inspect = celery_app.control.inspect()
-    
+
     def get_worker_stats(self):
         """获取 Worker 统计信息"""
         try:
@@ -33,47 +36,49 @@ class CeleryMonitor:
             active = self.inspect.active() or {}
             scheduled = self.inspect.scheduled() or {}
             reserved = self.inspect.reserved() or {}
-            
+
             worker_info = {}
-            
-            for worker_name in (stats or {}):
+
+            for worker_name in stats or {}:
                 worker_info[worker_name] = {
-                    'status': 'online',
-                    'active_tasks': len(active.get(worker_name, [])),
-                    'scheduled_tasks': len(scheduled.get(worker_name, [])),
-                    'reserved_tasks': len(reserved.get(worker_name, [])),
-                    'total_tasks': stats[worker_name]['total'],
-                    'pool_type': stats[worker_name]['pool']['max-concurrency']
+                    "status": "online",
+                    "active_tasks": len(active.get(worker_name, [])),
+                    "scheduled_tasks": len(scheduled.get(worker_name, [])),
+                    "reserved_tasks": len(reserved.get(worker_name, [])),
+                    "total_tasks": stats[worker_name]["total"],
+                    "pool_type": stats[worker_name]["pool"]["max-concurrency"],
                 }
-                
+
             return worker_info
-            
+
         except Exception as e:
             print(f"获取 Worker 统计信息失败: {e}")
             return {}
-    
+
     def get_system_stats(self):
         """获取系统统计信息"""
         try:
             memory = psutil.virtual_memory()
             cpu_percent = psutil.cpu_percent(interval=1)
-            disk = psutil.disk_usage('/')
-            
+            disk = psutil.disk_usage("/")
+
             return {
-                'cpu_percent': cpu_percent,
-                'memory_total': memory.total // (1000**3),  # GB
-                'memory_used': memory.used // (1000**3),    # GB
-                'memory_percent': memory.percent,
-                'disk_total': disk.total // (1000**3),      # GB
-                'disk_used': disk.used // (1000**3),        # GB
-                'disk_percent': (disk.used / disk.total) * 100,
-                'load_avg': os.getloadavg() if hasattr(os, 'getloadavg') else [0, 0, 0]
+                "cpu_percent": cpu_percent,
+                "memory_total": memory.total // (1000**3),  # GB
+                "memory_used": memory.used // (1000**3),  # GB
+                "memory_percent": memory.percent,
+                "disk_total": disk.total // (1000**3),  # GB
+                "disk_used": disk.used // (1000**3),  # GB
+                "disk_percent": (disk.used / disk.total) * 100,
+                "load_avg": os.getloadavg() if hasattr(os, "getloadavg") else [0, 0, 0],
             }
         except Exception as e:
             print(f"获取系统统计信息失败: {e}")
             return {}
 
+
 monitor = CeleryMonitor(celery_app)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
@@ -286,24 +291,26 @@ async def dashboard():
     """
     return HTMLResponse(content=html_content)
 
+
 @app.get("/api/stats")
 async def get_stats():
     """获取监控数据 API"""
     worker_stats = monitor.get_worker_stats()
     system_stats = monitor.get_system_stats()
-    
-    return JSONResponse({
-        "workers": worker_stats,
-        "system": system_stats,
-        "timestamp": time.time()
-    })
+
+    return JSONResponse(
+        {"workers": worker_stats, "system": system_stats, "timestamp": time.time()}
+    )
+
 
 def start_monitor_server(port=8001):
     """启动监控服务器"""
     import uvicorn
+
     print(f"🖥️ 启动内置 Celery 监控面板 (端口: {port})")
     print(f"   访问地址: http://localhost:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 if __name__ == "__main__":
     start_monitor_server()

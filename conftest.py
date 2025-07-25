@@ -8,6 +8,7 @@ from web.main import app
 # --- 测试客户端 ---
 # 通过 `TestClient` 类创建一个测试客户端，以便在测试中进行 HTTP 请求。
 
+
 @pytest.fixture(scope="session")
 def client():
     """
