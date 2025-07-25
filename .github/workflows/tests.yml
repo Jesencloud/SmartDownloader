@@ -66,6 +66,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        ports: ["6379:6379"]
 
     steps:
     - name: Checkout code
@@ -97,7 +98,21 @@ jobs:
         CELERY_BROKER_URL: redis://redis:6379/0
         CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
       run: |
+        # 确保 Redis 服务可用
+        echo "Waiting for Redis to be available..."
+        while ! redis-cli -h redis ping | grep PONG; do
+          echo "Redis not available yet, sleeping..."
+          sleep 2
+        done
+        echo "Redis is up and running!"
+
+        # 启动 Celery worker
+        echo "Starting Celery worker..."
         celery -A web.celery_app worker --loglevel=info &
+        
+        # 输出 Celery worker 的启动日志到文件，方便调试
+        echo "Celery worker started. Logs will be in celery_worker.log"
+        celery -A web.celery_app worker --loglevel=info > celery_worker.log 2>&1 &
 
     - name: Start FastAPI server in background
       env:
@@ -105,7 +120,13 @@ jobs:
         CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
       run: |
         uvicorn web.main:app --host 0.0.0.0 --port 8000 &
+        
+        # 将 uvicorn 的启动日志输出到文件，方便调试
+        echo "FastAPI server started. Logs will be in uvicorn.log"
+        uvicorn web.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
 
+
+        
     - name: Wait for server to be ready
       run: |
         echo "Waiting for server to be ready..."
@@ -116,7 +137,7 @@ jobs:
         # -f: fail silently (no output) on HTTP errors (returns non-zero exit code)
         for i in {1..30}; do
           if curl -sSf http://127.0.0.1:8000/ > /dev/null; then
-            echo "✅ Server is up and running!"
+            echo "✅ FastAPI Server is up and running!"
             exit 0
           fi
           sleep 1
@@ -130,15 +151,18 @@ jobs:
         CELERY_BROKER_URL: redis://redis:6379/0
         CELERY_RESULT_BACKEND_URL: redis://redis:6379/0
       run: |
-        echo "Waiting for Celery worker to be responsive..."
-        for i in {1..15}; do
-          # The 'celery status' command will return a non-zero exit code if no workers respond.
-          if celery -A web.celery_app status > /dev/null 2>&1; then
-            echo "✅ Celery worker is responsive."
-            exit 0
-          fi
-          sleep 2
-        done
+       echo "Waiting for Celery worker to be responsive..."
+       for i in {1..15}; do
+         # The 'celery status' command will return a non-zero exit code if no workers respond.
+         if celery -A web.celery_app status > /dev/null 2>&1; then
+           echo "✅ Celery worker is responsive."
+           exit 0
+         else
+           echo "Celery worker not yet responsive, checking logs..."
+           tail celery_worker.log  # 打印 Celery worker 的日志
+         fi
+         sleep 2
+       done
         echo "❌ Celery worker did not become ready in 30 seconds."
         celery -A web.celery_app status # Run one last time to show error output and fail the job
         exit 1
@@ -150,3 +174,12 @@ jobs:
       run: |
         # 仅运行标记为 e2e 的测试
         pytest -m e2e -v
+        
+    - name: 集群信息 (调试)
+      if: always()  # 总是执行，用于调试
+      run: |
+        echo "Celery 集群信息:"
+        celery -A web.celery_app status  # 获取 Celery 集群状态
+        echo "=========================="
+        echo "Redis 信息:"
+        redis-cli -h redis info  # 获取 Redis 信息
