@@ -699,6 +699,9 @@ function pollTaskStatus(taskId, optionElement) {
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
         
+        // 保存原始内容的文本
+        const originalText = contentDiv.querySelector('span').textContent;
+        
         // Show direct download status
         contentDiv.classList.add('hidden');
         progressDiv.innerHTML = `
@@ -736,14 +739,17 @@ function pollTaskStatus(taskId, optionElement) {
         
         // 短暂延迟后显示完成状态
         setTimeout(() => {
-            progressDiv.innerHTML = `
+            // 恢复原来的内容，但替换下载图标为完成图标
+            progressDiv.classList.add('hidden');
+            contentDiv.innerHTML = `
                 <div class="flex-grow text-center">
-                    <span class="font-semibold text-green-400" data-translate="directDownloadComplete">${t.directDownloadComplete || '直接下载完成'}</span>
+                    <span class="font-semibold" data-translate-dynamic="video">${originalText}</span>
                 </div>
                 <div class="download-icon text-green-400">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
             `;
+            contentDiv.classList.remove('hidden');
             optionElement.classList.remove('is-downloading');
             optionElement.classList.add('border', 'border-green-500');
         }, 1500);
@@ -753,6 +759,9 @@ function pollTaskStatus(taskId, optionElement) {
         const t = getTranslations();
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
+        
+        // 保存原始内容的文本
+        const originalText = contentDiv.querySelector('span').textContent;
         
         // Show direct audio download status
         contentDiv.classList.add('hidden');
@@ -791,14 +800,17 @@ function pollTaskStatus(taskId, optionElement) {
         
         // 短暂延迟后显示完成状态
         setTimeout(() => {
-            progressDiv.innerHTML = `
+            // 恢复原来的内容，但替换下载图标为完成图标
+            progressDiv.classList.add('hidden');
+            contentDiv.innerHTML = `
                 <div class="flex-grow text-center">
-                    <span class="font-semibold text-green-400" data-translate="directAudioDownloadComplete">${t.directAudioDownloadComplete || '音频下载开始'}</span>
+                    <span class="font-semibold" data-translate-dynamic="audio_lossless">${originalText}</span>
                 </div>
                 <div class="download-icon text-green-400">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
             `;
+            contentDiv.classList.remove('hidden');
             optionElement.classList.remove('is-downloading');
             optionElement.classList.add('border', 'border-green-500');
         }, 1200);
