@@ -1,11 +1,46 @@
 // static/script.js
 
-document.addEventListener('DOMContentLoaded', () => {
+// --- Global Configuration ---
+let appConfig = {
+    security: {
+        allowed_domains: [] // Will be loaded from backend
+    }
+};
+
+// --- Configuration Loading ---
+async function loadConfiguration() {
+    try {
+        const response = await fetch('/config');
+        if (response.ok) {
+            appConfig = await response.json();
+            console.log('Configuration loaded from backend:', appConfig.security?.allowed_domains);
+        } else {
+            console.warn('Failed to load configuration from backend, using fallback');
+            // Fallback to hardcoded domains if backend config fails
+            appConfig.security.allowed_domains = ["x.com", "youtube.com", "bilibili.com", "youtu.be"];
+        }
+    } catch (error) {
+        console.error('Error loading configuration:', error);
+        // Fallback to hardcoded domains if fetch fails
+        appConfig.security.allowed_domains = ["x.com", "youtube.com", "bilibili.com", "youtu.be"];
+    }
+}
+
+// --- Configuration Reload Function (for future use) ---
+async function reloadConfiguration() {
+    console.log('Reloading configuration from backend...');
+    await loadConfiguration();
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
     // --- Initialize Page Elements ---
     initializeDarkMode();
     initializeLanguageSelector();
     const savedLang = localStorage.getItem('language') || 'zh';
     switchLanguage(savedLang);
+    
+    // --- Load Configuration from Backend ---
+    await loadConfiguration();
 
     // --- Get DOM Elements ---
     const urlInput = document.getElementById('videoUrl');
@@ -155,18 +190,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = getTranslations();
 
         // --- Frontend Whitelist Check ---
-        // This list should ideally be fetched from the backend to stay in sync.
+        // Use dynamically loaded configuration from backend
         // NOTE: This is NOT a security measure, just a user-friendly check.
         // The real enforcement is on the backend.
-        const allowedDomains = ["x.com", "youtube.com", "bilibili.com", "youtu.be"]; 
+        const allowedDomains = appConfig.security?.allowed_domains || [];
         
         if (url && allowedDomains.length > 0) {
             try {
                 const urlHostname = new URL(url).hostname.toLowerCase();
-                const isAllowed = allowedDomains.some(domain => urlHostname.endsWith(domain));
+                // Use the same logic as backend: check if domain ends with any allowed domain
+                const isAllowed = allowedDomains.some(domain => urlHostname.endsWith(domain.toLowerCase()));
                 
                 if (!isAllowed) {
-                    alert(`Sorry, downloads from "${urlHostname}" are not allowed by the site administrator.`);
+                    const t = getTranslations();
+                    const domainList = allowedDomains.join(', ');
+                    alert(`${t.domainNotAllowed || 'Sorry, downloads from'} "${urlHostname}" ${t.notAllowedSuffix || 'are not allowed. Only downloads from the following sites are permitted:'} ${domainList}`);
                     return; // Stop processing
                 }
             } catch (e) { /* Invalid URL, let the backend handle it. */ }
@@ -337,12 +375,15 @@ document.addEventListener('DOMContentLoaded', () => {
             highBitrateText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(bestAudioFormat.filesize, bestAudioFormat.filesize_is_approx)}`;
         }
 
+        // 智能标识：音频格式支持直接下载
+        const audioStreamIndicator = bestAudioFormat.supports_browser_download ? ' ⚡️' : '';
+
         optionsHTML += `
             <div class="resolution-option ${audioColorClasses[0] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors"
-                 data-format-id="best_original_audio" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-abr="${audioBitrate || ''}" data-resolution="audio">
+                 data-format-id="best_original_audio" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-abr="${audioBitrate || ''}" data-resolution="audio" data-is-complete-stream="${bestAudioFormat.is_complete_stream || false}" data-supports-browser-download="${bestAudioFormat.supports_browser_download || false}">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
-                        <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}</span>
+                        <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}${audioStreamIndicator}</span>
                     </div>
                     <div class="download-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -391,16 +432,24 @@ document.addEventListener('DOMContentLoaded', () => {
             // 格式化显示文本为: {resolution} {filesize}
             const displayText = `${resolutionText} ${formattedSize}`;
             
+            // 智能标识系统：检测完整流并添加⚡️标识
+            let streamTypeIndicator = '';
+            if (format.is_complete_stream && format.supports_browser_download) {
+                streamTypeIndicator = ' ⚡️'; // 完整流，可直接下载
+            } else if (format.needs_merge) {
+                streamTypeIndicator = ''; // 分离流，无特殊符号
+            }
+            
             // 从颜色数组中选择颜色，如果选项超过数组长度，则使用默认灰色
             const colorClass = videoColorClasses[index] || defaultColorClass;
 
             return `
                 <div class="resolution-option ${colorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
-                     data-format-id="${format.format_id}" data-resolution="${resolutionText}" data-display-text="${displayText}" data-ext="${format.ext}" data-filesize="${format.filesize || ''}" data-filesize-is-approx="${format.filesize_is_approx || false}">
+                     data-format-id="${format.format_id}" data-resolution="${resolutionText}" data-display-text="${displayText}" data-ext="${format.ext}" data-filesize="${format.filesize || ''}" data-filesize-is-approx="${format.filesize_is_approx || false}" data-is-complete-stream="${format.is_complete_stream || false}" data-supports-browser-download="${format.supports_browser_download || false}">
                     <div class="option-content w-full flex items-center">
                         <div class="flex-grow text-center">
-                            <!-- 显示格式: 下载 {resolution} {filesize} {ext} -->
-                            <span class="font-semibold" data-translate-dynamic="video">${t.download} ${displayText} ${format.ext}</span>
+                            <!-- 显示格式: 下载 {resolution} {filesize} {ext} {⚡️标识} -->
+                            <span class="font-semibold" data-translate-dynamic="video">${t.download} ${displayText} ${format.ext}${streamTypeIndicator}</span>
                         </div>
                         <div class="download-icon">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -414,17 +463,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     resultContainer.innerHTML = `
-        <div class="download-container bg-gray-900 bg-opacity-50 p-6 rounded-2xl text-white">
+        <div class="download-container bg-gray-900 bg-opacity-50 p-6 rounded-2xl text-white relative">
             <h3 class="text-xl font-bold mb-4" data-translate="${headerKey}">${t[headerKey]}</h3>
             <div class="resolution-grid grid grid-cols-1 gap-4">${optionsHTML}</div>
             <div class="text-center mt-6">
                 <button id="backButton" class="button bg-gray-600 hover:bg-gray-700" data-translate="returnHome">${t.returnHome}</button>
+            </div>
+            <!-- 智能下载说明 - 右下角 -->
+            <div id="smartDownloadInfo" class="absolute bottom-4 right-4 text-white text-xs hidden">
+                <div data-translate="smartDownloadInfoText">${t.smartDownloadInfoText}</div>
             </div>
         </div>`;
 
     document.querySelectorAll('.resolution-option').forEach(el => {
         el.addEventListener('click', () => handleDownload(el.dataset.formatId));
     });
+    
+    // 检查是否有完整流格式，如果有则显示智能下载说明
+    const hasCompleteStream = document.querySelector('[data-is-complete-stream="true"][data-supports-browser-download="true"]');
+    const smartDownloadInfo = document.getElementById('smartDownloadInfo');
+    if (hasCompleteStream && smartDownloadInfo) {
+        smartDownloadInfo.classList.remove('hidden');
+    }
+    
     // Use the new centralized handler for the back button
     const backButton = document.getElementById('backButton');
     if (backButton) {
@@ -616,6 +677,137 @@ function pollTaskStatus(taskId, optionElement) {
         const progressDiv = optionElement.querySelector('.option-progress');
 
         optionElement.classList.add('is-downloading');
+        const resolution = optionElement.dataset.resolution || '';
+
+        // Check if this is a complete stream that supports direct download
+        const isCompleteStream = optionElement.dataset.isCompleteStream === 'true';
+        const supportsBrowserDownload = optionElement.dataset.supportsBrowserDownload === 'true';
+        
+        if (isCompleteStream && supportsBrowserDownload) {
+            if (currentVideoData.download_type === 'video') {
+                handleDirectVideoDownload(formatId, optionElement);
+            } else {
+                handleDirectAudioDownload(formatId, optionElement);
+            }
+        } else {
+            handleBackgroundDownload(formatId, optionElement);
+        }
+    }
+
+    function handleDirectVideoDownload(formatId, optionElement) {
+        const t = getTranslations();
+        const contentDiv = optionElement.querySelector('.option-content');
+        const progressDiv = optionElement.querySelector('.option-progress');
+        
+        // Show direct download status
+        contentDiv.classList.add('hidden');
+        progressDiv.innerHTML = `
+            <div class="flex-grow text-center">
+                <span class="font-semibold text-blue-400" data-translate="directDownloading">${t.directDownloading || '直接下载中...'}</span>
+            </div>
+            <div class="download-icon text-blue-400">
+                ⚡
+            </div>
+        `;
+        progressDiv.classList.remove('hidden');
+        
+        // 获取原始URL并构建直接下载链接
+        const originalUrl = currentVideoData.original_url;
+        const title = currentVideoData.title || 'video';
+        const resolution = optionElement.dataset.resolution || '';
+        
+        // 触发浏览器直接下载
+        const downloadUrl = `/download-stream?${new URLSearchParams({
+            url: originalUrl,
+            download_type: 'video',
+            format_id: formatId,
+            resolution: resolution,
+            title: title
+        }).toString()}`;
+        
+        // 创建隐藏的下载链接并点击
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `${title}_${resolution}.mp4`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // 短暂延迟后显示完成状态
+        setTimeout(() => {
+            progressDiv.innerHTML = `
+                <div class="flex-grow text-center">
+                    <span class="font-semibold text-green-400" data-translate="directDownloadComplete">${t.directDownloadComplete || '直接下载完成'}</span>
+                </div>
+                <div class="download-icon text-green-400">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            `;
+            optionElement.classList.remove('is-downloading');
+            optionElement.classList.add('border', 'border-green-500');
+        }, 1500);
+    }
+
+    function handleDirectAudioDownload(formatId, optionElement) {
+        const t = getTranslations();
+        const contentDiv = optionElement.querySelector('.option-content');
+        const progressDiv = optionElement.querySelector('.option-progress');
+        
+        // Show direct audio download status
+        contentDiv.classList.add('hidden');
+        progressDiv.innerHTML = `
+            <div class="flex-grow text-center">
+                <span class="font-semibold text-blue-400" data-translate="directAudioDownloading">${t.directAudioDownloading || '音频流传输中...'}</span>
+            </div>
+            <div class="download-icon text-blue-400">
+                🎵
+            </div>
+        `;
+        progressDiv.classList.remove('hidden');
+        
+        // 获取原始URL并构建直接下载链接
+        const originalUrl = currentVideoData.original_url;
+        const title = currentVideoData.title || 'audio';
+        const audioFormat = optionElement.dataset.audioFormat || 'm4a';
+        
+        // 触发浏览器直接下载
+        const downloadUrl = `/download-stream?${new URLSearchParams({
+            url: originalUrl,
+            download_type: 'audio',
+            format_id: formatId,
+            resolution: 'audio',
+            title: title
+        }).toString()}`;
+        
+        // 创建隐藏的下载链接并点击
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `${title}.${audioFormat}`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // 短暂延迟后显示完成状态
+        setTimeout(() => {
+            progressDiv.innerHTML = `
+                <div class="flex-grow text-center">
+                    <span class="font-semibold text-green-400" data-translate="directAudioDownloadComplete">${t.directAudioDownloadComplete || '音频下载开始'}</span>
+                </div>
+                <div class="download-icon text-green-400">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            `;
+            optionElement.classList.remove('is-downloading');
+            optionElement.classList.add('border', 'border-green-500');
+        }, 1200);
+    }
+
+    function handleBackgroundDownload(formatId, optionElement) {
+        const t = getTranslations();
+        const contentDiv = optionElement.querySelector('.option-content');
+        const progressDiv = optionElement.querySelector('.option-progress');
         const resolution = optionElement.dataset.resolution || '';
 
         // 动态注入不确定进度条的CSS动画

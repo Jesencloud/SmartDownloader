@@ -73,7 +73,16 @@ const translations = {
         downloadTimeout: '检查超时',
         downloadTimeoutMessage: '下载状态检查超时。',
         cleaningUp: '正在取消下载并清理文件...',
-        cleanupComplete: '清理完成！删除了 {fileCount} 个临时文件{sizeInfo}'
+        cleanupComplete: '清理完成！删除了 {fileCount} 个临时文件{sizeInfo}',
+        domainNotAllowed: '抱歉，不允许从',
+        notAllowedSuffix: '下载。只允许从以下网站下载：',
+        directDownloading: '直接下载中...',
+        directDownloadComplete: '直接下载完成',
+        smartDownloadTitle: '智能下载',
+        completeStreamInfo: '⚡ 完整流',
+        directAudioDownloading: '音频流传输中...',
+        directAudioDownloadComplete: '音频下载开始',
+        smartDownloadInfoText: '⚡️ 完整流，可直接下载'
     },
     en: {
         // From script.js
@@ -147,7 +156,16 @@ const translations = {
         downloadTimeout: 'Check Timed Out',
         downloadTimeoutMessage: 'Download status check timed out.',
         cleaningUp: 'Cancelling downloads and cleaning up files...',
-        cleanupComplete: 'Cleanup complete! Deleted {fileCount} temporary files{sizeInfo}'
+        cleanupComplete: 'Cleanup complete! Deleted {fileCount} temporary files{sizeInfo}',
+        domainNotAllowed: 'Sorry, downloads from',
+        notAllowedSuffix: 'are not allowed. Only downloads from the following sites are permitted:',
+        directDownloading: 'Direct downloading...',
+        directDownloadComplete: 'Direct download complete',
+        smartDownloadTitle: 'Smart Download',
+        completeStreamInfo: '⚡ Complete Stream',
+        directAudioDownloading: 'Audio streaming...',
+        directAudioDownloadComplete: 'Audio download started',
+        smartDownloadInfoText: '⚡️ Complete stream, direct download available'
     },
 };
 
@@ -236,17 +254,24 @@ function switchLanguage(lang) {
         if (type === 'video') {
             const displayText = option.dataset.displayText;
             const ext = option.dataset.ext;
-            newText = `${t.download} ${displayText} ${ext}`;
+            const isCompleteStream = option.dataset.isCompleteStream === 'true';
+            const supportsBrowserDownload = option.dataset.supportsBrowserDownload === 'true';
+            // 智能标识：检测完整流并添加⚡️标识
+            const streamIndicator = (isCompleteStream && supportsBrowserDownload) ? ' ⚡️' : '';
+            newText = `${t.download} ${displayText} ${ext}${streamIndicator}`;
         } else if (type === 'audio_lossless') {
             const audioFormat = option.dataset.audioFormat;
             const abr = option.dataset.abr;
+            const supportsBrowserDownload = option.dataset.supportsBrowserDownload === 'true';
+            // 智能标识：音频格式支持直接下载
+            const streamIndicator = supportsBrowserDownload ? ' ⚡️' : '';
             if (abr && abr !== 'null' && abr !== 'undefined' && abr !== '') {
-                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${abr}kbps`;
+                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${abr}kbps${streamIndicator}`;
             } else {
                 // Fallback to old logic if abr is not available
                 const filesize = option.dataset.filesize;
                 const isApprox = option.dataset.filesizeIsApprox === 'true';
-                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(filesize, isApprox)}`;
+                newText = `${t.losslessAudio} ${audioFormat.toUpperCase()} ${formatFileSize(filesize, isApprox)}${streamIndicator}`;
             }
         } else if (type === 'audio_compatible') {
             const originalFormat = option.dataset.audioFormatOriginal;

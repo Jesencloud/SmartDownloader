@@ -157,10 +157,15 @@ async def process_download_phase(dlr: Downloader, sub_proc: Optional[SubtitlePro
         vid_path = None
         aud_path = None
         
-        # 处理视频下载 - 统一采用合并下载模式
+        # 处理视频下载 - 优先采用智能下载模式
         if args.mode in ['video', 'both']:
-            console.print(f'🎬 正在准备下载: {prefix}', style='bold blue')
-            vid_path = await dlr.download_and_merge(url, prefix)
+            console.print(f'🎬 正在准备智能下载: {prefix}', style='bold blue')
+            try:
+                # 尝试使用智能下载策略
+                vid_path = await dlr.download_with_smart_strategy(url, prefix)
+            except Exception as e:
+                console.print(f'⚠️  智能下载失败，使用传统方法: {e}', style='yellow')
+                vid_path = await dlr.download_and_merge(url, prefix)
 
         # 处理纯音频下载
         if args.mode == 'audio':

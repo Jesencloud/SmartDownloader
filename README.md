@@ -189,7 +189,7 @@
 打开您的“终端”应用，`cd` 进入 `SmartDownloader` 文件夹，然后运行以下命令：
 
 ```bash
-python main.py urls.txt -b -m both --ai-subs
+python main.py -b urls.txt -m both --ai-subs
 ```
 
 ##### **第三步：命令解析**
@@ -223,7 +223,7 @@ python main.py urls.txt -b -m both --ai-subs
 - [使用示例](#-使用示例)
 
 ```bash
-(base) test@testdeMac-mini SmartDownloader % python main.py urls.txt -b --mode both --ai-subs
+(base) test@testdeMac-mini SmartDownloader % python main.py -b urls.txt --mode both --ai-subs
 INFO     2025-07-10 10:35:26,137 - [INFO] - __main__ - 🚀 智能媒体下载与AI字幕工具 v3.0 (Logging) 启动 🚀                            
 🔄 重试机制已启用: 最多 3 次重试，基础延迟 10s
 🌐 网络中断处理: 将持续重试直到网络恢复（最多50次）

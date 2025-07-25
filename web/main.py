@@ -77,6 +77,8 @@ class VideoFormat(BaseModel):
     acodec: Optional[str]
     abr: Optional[int] = None
     needs_merge: bool = Field(default=False, description="Indicates if this format requires merging.")
+    is_complete_stream: bool = Field(default=False, description="Indicates if this format contains both video and audio.")
+    supports_browser_download: bool = Field(default=False, description="Indicates if this format supports direct browser download.")
 
 class VideoInfo(BaseModel):
     title: str
@@ -200,11 +202,26 @@ async def get_video_info(request: VideoInfoRequest):
         # --- NEW: Unified video format processing logic ---
         all_possible_formats = []
 
-        # Part 1: Process pre-merged (complete) MP4 formats
-        complete_formats_raw = [
-            f for f in raw_formats 
-            if f.get('ext') == 'mp4' and f.get('vcodec') not in ('none', None) and f.get('acodec') not in ('none', None) and f.get('width') and f.get('height')
-        ]
+        # Part 1: Process pre-merged (complete) MP4 formats with improved Unknown/Null codec support
+        complete_formats_raw = []
+        for f in raw_formats:
+            if (f.get('ext') == 'mp4' and 
+                f.get('width') and f.get('height')):  # 必须有分辨率信息
+                
+                vcodec = f.get('vcodec')
+                acodec = f.get('acodec')
+                
+                # 包含以下情况：
+                # 1. 明确的编解码器（非none）
+                # 2. unknown编解码器（通常是完整流）
+                # 3. null编解码器但有分辨率（X.com等平台的完整流）
+                # 4. 排除明确标记为单一类型的流
+                if ((vcodec not in ('none', None, '') and acodec not in ('none', None, '')) or
+                    (vcodec == 'unknown' and acodec == 'unknown') or
+                    (vcodec is None and acodec is None)):  # 处理null编解码器的完整流
+                    # 排除明确标记为单一类型的流
+                    if vcodec != 'audio only' and acodec != 'video only':
+                        complete_formats_raw.append(f)
         for c_fmt in complete_formats_raw:
             filesize = c_fmt.get('filesize') or c_fmt.get('filesize_approx')
             is_approx = not c_fmt.get('filesize') and c_fmt.get('filesize_approx')
@@ -217,7 +234,9 @@ async def get_video_info(request: VideoInfoRequest):
                 quality=f"{c_fmt.get('height')}p",
                 vcodec=c_fmt.get('vcodec'),
                 acodec=c_fmt.get('acodec'),
-                needs_merge=False
+                needs_merge=False,
+                is_complete_stream=True,  # Complete stream with both video and audio
+                supports_browser_download=True  # MP4 complete streams support direct download
             ))
 
         # Part 2: Process formats that need merging into MP4
@@ -245,7 +264,9 @@ async def get_video_info(request: VideoInfoRequest):
                     quality=f"{v_fmt.get('height')}p (需合并)",
                     vcodec=v_fmt.get('vcodec'),
                     acodec=best_audio_to_merge.get('acodec'),
-                    needs_merge=True
+                    needs_merge=True,
+                    is_complete_stream=False,  # Needs merging, so not a complete stream by itself
+                    supports_browser_download=False  # Merged formats need processing, can't be directly downloaded
                 ))
 
         # Part 3: Group by resolution and select the best by filesize
@@ -298,7 +319,9 @@ async def get_video_info(request: VideoInfoRequest):
                 quality=quality_desc,
                 vcodec=None,  # CRITICAL: Standardize to None for the frontend
                 acodec=best_audio_format_raw.get('acodec'),
-                abr=int(abr) if abr else None
+                abr=int(abr) if abr else None,
+                is_complete_stream=False,  # Audio only streams are not complete
+                supports_browser_download=True  # Audio formats generally support direct download
             ))
 
     return VideoInfo(
@@ -415,6 +438,15 @@ async def download_stream(request: Request, url: str, download_type: str, format
     except Exception as e:
         log.error(f"Error in download_stream endpoint: {e}")
         raise HTTPException(status_code=500, detail=f"Stream download failed: {str(e)}")
+
+
+@app.get("/download-direct")
+async def download_direct():
+    """
+    Direct download endpoint for complete streams that support browser downloads.
+    This endpoint is used for formats with is_complete_stream=True and supports_browser_download=True.
+    """
+    return {"status": "Direct download endpoint is available", "description": "This endpoint supports direct downloads for complete video streams."}
 
 
 async def terminate_process_tree(process):

@@ -26,6 +26,7 @@ from core import (
     DownloaderException, FFmpegException, with_retries,
     CommandBuilder, SubprocessManager, FileProcessor, AuthenticationException
 )
+from core.format_analyzer import DownloadStrategy
 from core.cookies_manager import CookiesManager
 
 log = logging.getLogger(__name__)
@@ -519,6 +520,111 @@ class Downloader:
             raise DownloaderException(f"主策略和备用策略均失败: {e}") from e
 
         raise DownloaderException("下载和合并视频失败，所有策略均已尝试。")
+
+    async def download_with_smart_strategy(self, video_url: str, format_id: str = None, 
+                                         resolution: str = '', fallback_prefix: Optional[str] = None) -> Optional[Path]:
+        """
+        使用智能策略下载视频，自动判断完整流vs分离流
+        
+        Args:
+            video_url: 视频URL
+            format_id: 要下载的特定视频格式ID (可选)
+            resolution: 视频分辨率 (例如: '1080p60')
+            fallback_prefix: 获取标题失败时的备用文件前缀 (可选)
+            
+        Returns:
+            下载完成的文件路径，失败返回None
+            
+        Raises:
+            DownloaderException: 下载失败
+        """
+        # 获取视频信息和格式列表
+        try:
+            video_info_gen = self.stream_playlist_info(video_url)
+            video_info = await video_info_gen.__anext__()
+            video_title = video_info.get('title', 'video')
+            formats = video_info.get('formats', [])
+            
+            if not formats:
+                raise DownloaderException("未找到任何可用的视频格式")
+            
+            # 生成文件前缀
+            resolution_suffix = ""
+            if format_id and 'formats' in video_info:
+                selected_format = next((f for f in formats if f.get('format_id') == format_id), None)
+                if selected_format and selected_format.get('width') and selected_format.get('height'):
+                    resolution_suffix = f"_{selected_format['width']}x{selected_format['height']}"
+            
+            file_prefix = f"{self._sanitize_filename(video_title)}{resolution_suffix}"
+            
+        except (StopAsyncIteration, DownloaderException) as e:
+            log.warning(f"无法获取视频信息: {e}。将使用备用前缀。")
+            file_prefix = fallback_prefix or "video"
+            formats = []
+        
+        log.info(f'智能下载开始: {file_prefix}')
+        self.download_folder.mkdir(parents=True, exist_ok=True)
+        
+        # 如果无法获取格式信息，降级到传统方法
+        if not formats:
+            log.warning("无法获取格式列表，降级到传统下载方法")
+            return await self.download_and_merge(video_url, format_id, resolution, fallback_prefix)
+        
+        try:
+            # 构建智能下载命令
+            cmd_builder_args = {
+                "output_path": str(self.download_folder),
+                "url": video_url,
+                "file_prefix": file_prefix,
+                "formats": formats,
+                "format_id": format_id,
+                "resolution": resolution
+            }
+            
+            download_cmd, format_used, exact_output_path, strategy = self.command_builder.build_smart_download_cmd(**cmd_builder_args)
+            
+            # 根据策略显示不同的进度描述
+            if strategy == DownloadStrategy.DIRECT:
+                progress_desc = "智能下载(完整流)"
+            else:
+                progress_desc = "智能下载(合并流)"
+            
+            # 执行下载
+            async with _progress_semaphore:
+                with Progress(
+                    SpinnerColumn(spinner_name="line"),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    "[progress.percentage]{task.percentage:>3.0f}%",
+                    "•",
+                    TransferSpeedColumn(),
+                    console=console
+                ) as progress:
+                    download_task = progress.add_task(progress_desc, total=100)
+                    await self._execute_cmd_with_auth_retry(
+                        initial_cmd=download_cmd,
+                        cmd_builder_func=self.command_builder.build_smart_download_cmd,
+                        url=video_url,
+                        cmd_builder_args=cmd_builder_args,
+                        progress=progress,
+                        task_id=download_task
+                    )
+            
+            # 验证输出文件
+            if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
+                strategy_name = "完整流直下" if strategy == DownloadStrategy.DIRECT else "分离流合并"
+                log.info(f"✅ 智能下载成功({strategy_name}): {exact_output_path.name}")
+                return exact_output_path
+            else:
+                log.warning("智能下载执行后未找到有效的输出文件，尝试传统方法")
+                return await self.download_and_merge(video_url, format_id, resolution, fallback_prefix)
+                
+        except asyncio.CancelledError:
+            log.warning("智能下载任务被取消")
+            raise
+        except Exception as e:
+            log.warning(f"智能下载失败: {e}，降级到传统方法")
+            return await self.download_and_merge(video_url, format_id, resolution, fallback_prefix)
 
     async def download_audio(self, video_url: str, audio_format: str = 'best', fallback_prefix: Optional[str] = None) -> Optional[Path]:
         """

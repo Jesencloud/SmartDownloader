@@ -2,9 +2,10 @@
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 from config_manager import config
+from .format_analyzer import FormatAnalyzer, DownloadStrategy
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ class CommandBuilder:
     def __init__(self, proxy: Optional[str] = None, cookies_file: Optional[str] = None):
         self.proxy = proxy
         self.cookies_file = cookies_file
+        self.format_analyzer = FormatAnalyzer()
 
     def update_cookies_file(self, new_cookies_file: str) -> None:
         """
@@ -200,6 +202,100 @@ class CommandBuilder:
         ])
         
         return cmd, combined_format, exact_output_path
+
+    def build_smart_download_cmd(self, output_path: str, url: str, file_prefix: str, 
+                                formats: List[Dict[str, Any]], format_id: str = None, 
+                                resolution: str = None) -> Tuple[List[str], str, Path, DownloadStrategy]:
+        """
+        构建智能下载命令 - 自动判断使用完整流还是分离流策略
+        
+        Args:
+            output_path: 输出目录
+            url: 视频URL
+            file_prefix: 文件前缀 (不含扩展名)
+            formats: 从yt-dlp获取的格式列表
+            format_id: 要下载的特定视频格式ID (可选)
+            resolution: 视频分辨率 (可选，例如: '720p60')
+            
+        Returns:
+            tuple: (命令列表, 使用的格式, 确切的输出文件路径, 下载策略)
+        """
+        try:
+            # 分析格式并获取最佳下载计划
+            download_plan = self.format_analyzer.find_best_download_plan(formats, format_id)
+            
+            log.info(f"智能下载策略: {download_plan.strategy.value} - {download_plan.reason}")
+            
+            # 确保下载目录存在
+            output_dir = Path(output_path).resolve()
+            output_dir.mkdir(parents=True, exist_ok=True)
+            exact_output_path = output_dir / f"{file_prefix}.mp4"
+            
+            if download_plan.strategy == DownloadStrategy.DIRECT:
+                # 直接下载完整流
+                return self._build_direct_download_cmd(
+                    url, exact_output_path, download_plan.primary_format.format_id, download_plan.strategy
+                )
+            
+            elif download_plan.strategy == DownloadStrategy.MERGE:
+                # 构建合并下载命令
+                video_format_id = download_plan.primary_format.format_id
+                audio_format_id = download_plan.secondary_format.format_id if download_plan.secondary_format else "bestaudio"
+                combined_format = f"{video_format_id}+{audio_format_id}"
+                
+                return self._build_merge_download_cmd(
+                    url, exact_output_path, combined_format, download_plan.strategy
+                )
+            
+        except Exception as e:
+            log.warning(f"智能格式分析失败: {e}，降级到传统方法")
+            # 降级到原有的组合下载逻辑
+            cmd, format_str, path = self.build_combined_download_cmd(
+                output_path, url, file_prefix, format_id, resolution
+            )
+            return cmd, format_str, path, DownloadStrategy.DIRECT
+    
+    def _build_direct_download_cmd(self, url: str, output_path: Path, 
+                                  format_id: str, strategy: DownloadStrategy) -> Tuple[List[str], str, Path, DownloadStrategy]:
+        """构建直接下载完整流的命令"""
+        cmd = self.build_yt_dlp_base_cmd()
+        
+        cmd.extend([
+            '-f', format_id,
+            '--merge-output-format', 'mp4',
+            '--newline',
+            '--no-warnings',
+            '--no-playlist', 
+            '--no-keep-fragments',
+            '--hls-prefer-native',
+            '-o', str(output_path),
+            '--',
+            url
+        ])
+        
+        log.info(f"构建直接下载命令: 格式={format_id}")
+        return cmd, format_id, output_path, strategy
+    
+    def _build_merge_download_cmd(self, url: str, output_path: Path, 
+                                 combined_format: str, strategy: DownloadStrategy) -> Tuple[List[str], str, Path, DownloadStrategy]:
+        """构建合并下载命令"""
+        cmd = self.build_yt_dlp_base_cmd()
+        
+        cmd.extend([
+            '-f', combined_format,
+            '--merge-output-format', 'mp4',
+            '--newline', 
+            '--no-warnings',
+            '--no-playlist',
+            '--no-keep-fragments',
+            '--hls-prefer-native', 
+            '-o', str(output_path),
+            '--',
+            url
+        ])
+        
+        log.info(f"构建合并下载命令: 格式={combined_format}")
+        return cmd, combined_format, output_path, strategy
 
     def build_metadata_download_cmd(self, output_path: str, url: str) -> List[str]:
         """构建元数据下载命令"""
