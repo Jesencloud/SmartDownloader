@@ -804,10 +804,41 @@ async def terminate_process_tree(process):
         log.error(f"Error terminating process tree: {e}")
 
 
+@app.get("/debug/task/{task_id}")
+async def debug_task_status(task_id: str):
+    """Debug endpoint to examine task status in detail"""
+    task_result = AsyncResult(task_id, app=celery_app)
+
+    debug_info = {
+        "task_id": task_id,
+        "status": task_result.status,
+        "result": task_result.result,
+        "info": getattr(task_result, "info", None),
+        "result_type": str(type(task_result.result)),
+        "backend": str(task_result.backend),
+        "traceback": getattr(task_result, "traceback", None),
+        "successful": task_result.successful(),
+        "failed": task_result.failed(),
+        "ready": task_result.ready(),
+        "state": task_result.state,
+    }
+
+    return JSONResponse(content=debug_info)
+
+
 @app.get("/downloads/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
     task_result = AsyncResult(task_id, app=celery_app)
     result = task_result.result
+
+    # 添加详细调试信息
+    log.info("=== TASK STATUS DEBUG ===")
+    log.info(f"Task ID: {task_id}")
+    log.info(f"Task status: {task_result.status}")
+    log.info(f"Task result type: {type(task_result.result)}")
+    log.info(f"Task result: {task_result.result}")
+    log.info(f"Task info: {getattr(task_result, 'info', 'No info')}")
+    log.info("========================")
 
     # Handle different result types
     if isinstance(task_result.result, Exception):

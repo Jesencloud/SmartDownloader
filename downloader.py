@@ -131,9 +131,14 @@ class Downloader:
 
     def _update_progress(self, message: str, progress: int):
         """更新下载进度"""
+        log.info(f"Progress update: {progress}% - {message}")
         if self.progress_callback:
             try:
                 self.progress_callback(message, progress)
+                # 增加延迟确保前端能够捕捉到进度更新
+                import time
+
+                time.sleep(0.3)  # 增加到300ms确保更可靠的捕获
             except Exception as e:
                 log.warning(f"进度回调函数执行失败: {e}")
 
@@ -395,16 +400,17 @@ class Downloader:
             DownloaderException: 下载或合并失败, 请检查日志获取详细信息
         """
         # 开始下载
-        self._update_progress("开始获取视频信息...", 5)
-        
+        self._update_progress("正在下载中", 0)
+
         # --- 获取标题和分辨率，并生成最终文件名 ---
         try:
             # 1. Get video title
+            self._update_progress("正在下载中", 10)
             video_info_gen = self.stream_playlist_info(video_url)
             video_info = await video_info_gen.__anext__()
             video_title = video_info.get("title", "video")
 
-            self._update_progress(f"获取到视频信息: {video_title}", 15)
+            self._update_progress("正在下载中", 20)
 
             # 2. 根据 format_id 查找确切的分辨率
             resolution_suffix = ""
@@ -441,8 +447,8 @@ class Downloader:
 
         # --- 主策略：尝试一体化下载和合并 ---
         log.info("尝试主策略：一体化下载和合并...")
-        self._update_progress("开始下载视频...", 25)
-        
+        self._update_progress("正在下载中", 30)
+
         try:
             cmd_builder_args = {
                 "output_path": str(self.download_folder),
@@ -455,7 +461,7 @@ class Downloader:
                 self.command_builder.build_combined_download_cmd(**cmd_builder_args)
             )
 
-            self._update_progress("正在下载视频文件...", 50)
+            self._update_progress("正在下载中", 40)
 
             async with _progress_semaphore:
                 with Progress(
@@ -468,6 +474,10 @@ class Downloader:
                     console=console,
                 ) as progress:
                     download_task = progress.add_task("Download/Merge", total=100)
+
+                    # 更新进度：开始执行下载命令
+                    self._update_progress("正在下载中", 50)
+
                     await self._execute_cmd_with_auth_retry(
                         initial_cmd=download_cmd,
                         cmd_builder_func=self.command_builder.build_combined_download_cmd,
@@ -477,11 +487,19 @@ class Downloader:
                         task_id=download_task,
                     )
 
+                    # 更新进度：下载命令执行完成
+                    self._update_progress("正在下载中", 60)
+
+            self._update_progress("正在下载中", 70)
             if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
+                self._update_progress("正在下载中", 80)
+                self._update_progress("正在下载中", 90)
+                self._update_progress("下载完成", 100)
                 log.info(f"✅ 主策略成功: {exact_output_path.name}")
                 return exact_output_path
             else:
                 log.warning("主策略执行后未找到有效的输出文件。")
+                self._update_progress("正在下载中", 35)
 
         except asyncio.CancelledError:
             log.warning("主策略下载任务被取消")
@@ -491,11 +509,13 @@ class Downloader:
 
         # --- 备用策略：分步下载和手动合并 ---
         log.info("切换到备用策略：分步下载和手动合并...")
+        self._update_progress("正在下载中", 35)
         video_file = None
         audio_file = None
 
         try:
             # 1. 下载视频部分
+            self._update_progress("正在下载中", 40)
             async with _progress_semaphore:
                 with Progress(
                     SpinnerColumn(spinner_name="line"),
@@ -525,6 +545,7 @@ class Downloader:
                         task_id=video_task,
                     )
 
+            self._update_progress("正在下载中", 50)
             video_file = await self._find_output_file(
                 f"{file_prefix}.video", (".mp4", ".webm", ".mkv")
             )
@@ -536,6 +557,7 @@ class Downloader:
             log.info(f"✅ 视频部分下载成功: {video_file.name}")
 
             # 2. 下载音频部分
+            self._update_progress("正在下载中", 60)
             async with _progress_semaphore:
                 with Progress(
                     SpinnerColumn(spinner_name="line"),
@@ -564,6 +586,7 @@ class Downloader:
                         task_id=audio_task,
                     )
 
+            self._update_progress("正在下载中", 70)
             audio_file = await self._find_and_verify_output_file(
                 f"{file_prefix}.audio", (".m4a", ".mp3", ".opus", ".aac")
             )
@@ -572,6 +595,7 @@ class Downloader:
 
             # 3. 手动合并
             if video_file and audio_file:
+                self._update_progress("正在下载中", 75)
                 merged_file_path = self.download_folder / f"{file_prefix}.mp4"
                 log.info(
                     f"🔧 正在手动合并: {video_file.name} + {audio_file.name} -> {merged_file_path.name}"
@@ -581,7 +605,10 @@ class Downloader:
                     video_file, audio_file, merged_file_path
                 )
 
+                self._update_progress("正在下载中", 80)
+                self._update_progress("正在下载中", 90)
                 if merged_file_path.exists() and merged_file_path.stat().st_size > 0:
+                    self._update_progress("下载完成", 100)
                     log.info(f"✅ 备用策略成功: {merged_file_path.name}")
                     return merged_file_path
                 else:
@@ -589,10 +616,13 @@ class Downloader:
 
             # 如果只有视频文件，作为最后手段返回
             if video_file:
+                self._update_progress("正在下载中", 80)
                 log.warning("备用策略：无法合并，返回仅视频文件。")
                 # 重命名视频文件以匹配最终文件名
                 final_video_path = self.download_folder / f"{file_prefix}.mp4"
                 video_file.rename(final_video_path)
+                self._update_progress("正在下载中", 90)
+                self._update_progress("下载完成", 100)
                 return final_video_path
 
         except Exception as e:
@@ -746,7 +776,7 @@ class Downloader:
     ) -> Optional[Path]:
         """
         下载指定URL的音频。
-        对已知的转换格式（如mp3）采用“主动指定”策略，对直接下载的原始流采用“主动搜索”策略。
+        对已知的转换格式（如mp3）采用"主动指定"策略，对直接下载的原始流采用"主动搜索"策略。
 
         Args:
             video_url: 视频URL
@@ -762,18 +792,25 @@ class Downloader:
         log.info(f"开始下载音频: {video_url} (请求的格式/策略: {audio_format})")
         self.download_folder.mkdir(parents=True, exist_ok=True)
 
+        # 开始音频下载进度更新
+        self._update_progress("正在下载中", 0)
+
         try:
             try:
+                self._update_progress("正在下载中", 10)
                 video_info_gen = self.stream_playlist_info(video_url)
                 video_info = await video_info_gen.__anext__()
                 video_title = video_info.get("title", "audio")
+                self._update_progress("正在下载中", 20)
             except (StopAsyncIteration, DownloaderException) as e:
                 log.warning(f"无法获取视频标题: {e}。将使用备用前缀。")
                 video_title = fallback_prefix or "audio"
+                self._update_progress("正在下载中", 20)
 
             sanitized_title = self._sanitize_filename(video_title)
             file_prefix = f"{sanitized_title}_{audio_format}"
             log.info(f"使用文件前缀: {file_prefix}")
+            self._update_progress("正在下载中", 30)
 
             known_conversion_formats = ["mp3", "m4a", "wav", "opus", "aac", "flac"]
 
@@ -783,12 +820,16 @@ class Downloader:
                     self.download_folder / f"{sanitized_title}.{audio_format}"
                 )
                 log.info(f"音频转换请求。确切的输出路径为: {exact_output_path}")
+                self._update_progress("正在下载中", 40)
+
                 cmd_args = {
                     "url": video_url,
                     "output_template": str(exact_output_path),
                     "audio_format": audio_format,
                 }
                 cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
+
+                self._update_progress("正在下载中", 50)
                 await self._execute_cmd_with_auth_retry(
                     initial_cmd=cmd,
                     cmd_builder_func=self.command_builder.build_audio_download_cmd,
@@ -796,7 +837,11 @@ class Downloader:
                     cmd_builder_args=cmd_args,
                 )
 
+                self._update_progress("正在下载中", 70)
+                self._update_progress("正在下载中", 80)
+                self._update_progress("正在下载中", 90)
                 if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
+                    self._update_progress("下载完成", 100)
                     return exact_output_path
                 else:
                     raise DownloaderException(
@@ -805,6 +850,8 @@ class Downloader:
             else:
                 # --- 策略2: 直接下载原始流 (主动验证) ---
                 log.info("直接音频流下载请求。将采用主动验证策略。")
+                self._update_progress("正在下载中", 40)
+
                 # 使用模板让yt-dlp能自动添加正确的扩展名
                 output_template = self.download_folder / f"{sanitized_title}.%(ext)s"
                 cmd_args = {
@@ -813,6 +860,8 @@ class Downloader:
                     "audio_format": audio_format,
                 }
                 cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
+
+                self._update_progress("正在下载中", 60)
                 await self._execute_cmd_with_auth_retry(
                     initial_cmd=cmd,
                     cmd_builder_func=self.command_builder.build_audio_download_cmd,
@@ -820,6 +869,7 @@ class Downloader:
                     cmd_builder_args=cmd_args,
                 )
 
+                self._update_progress("正在下载中", 80)
                 # 主动验证并查找输出文件
                 preferred_extensions = (
                     ".m4a",
@@ -834,6 +884,8 @@ class Downloader:
                 )
 
                 if output_file:
+                    self._update_progress("正在下载中", 90)
+                    self._update_progress("下载完成", 100)
                     log.info(f"✅ 音频下载成功: {output_file.name}")
                     return output_file
                 else:

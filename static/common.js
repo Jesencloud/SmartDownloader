@@ -83,13 +83,8 @@ const translations = {
         directAudioDownloading: '音频流传输中...',
         directAudioDownloadComplete: '音频下载开始',
         smartDownloadInfoText: '⚡️ 支持直接下载',
-        startingDownload: '准备下载...',
-        downloading: '下载中...',
-        fetchingVideoInfo: '开始获取视频信息...',
-        startingVideoDownload: '开始下载视频...',
-        downloadingVideoFile: '正在下载视频文件...',
-        mergingFiles: '正在合并文件...',
-        processingAudio: '处理音频...'
+        downloading: '正在下载中',
+        downloadComplete: '下载完成'
     },
     en: {
         // From script.js
@@ -173,13 +168,8 @@ const translations = {
         directAudioDownloading: 'Audio streaming...',
         directAudioDownloadComplete: 'Audio download started',
         smartDownloadInfoText: '⚡️ Direct download supported',
-        startingDownload: 'Preparing download...',
-        downloading: 'Downloading...',
-        fetchingVideoInfo: 'Starting to fetch video info...',
-        startingVideoDownload: 'Starting video download...',
-        downloadingVideoFile: 'Downloading video file...',
-        mergingFiles: 'Merging files...',
-        processingAudio: 'Processing audio...'
+        downloading: 'Downloading',
+        downloadComplete: 'Download Complete'
     },
 };
 
@@ -301,20 +291,8 @@ function switchLanguage(lang) {
             newText = t.downloadFailed;
         } else if (type === 'download_timeout') {
             newText = t.downloadTimeout;
-        } else if (type === 'progress_fetching_info') {
-            newText = t.fetchingVideoInfo || '开始获取视频信息...';
-        } else if (type === 'progress_starting_download') {
-            newText = t.startingVideoDownload || '开始下载视频...';
-        } else if (type === 'progress_downloading_file') {
-            newText = t.downloadingVideoFile || '正在下载视频文件...';
-        } else if (type === 'progress_downloading') {
-            newText = t.downloading || '下载中...';
-        } else if (type === 'progress_preparing') {
-            newText = t.startingDownload || '准备下载...';
-        } else if (type === 'progress_merging') {
-            newText = t.mergingFiles || '正在合并文件...';
-        } else if (type === 'progress_processing_audio') {
-            newText = t.processingAudio || '处理音频...';
+        } else if (type === 'downloading') {
+            newText = t.downloading;
         }
         
         if (newText) {

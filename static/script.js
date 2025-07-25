@@ -772,6 +772,14 @@ function pollTaskStatus(taskId, optionElement) {
                     const progress = meta.progress || 0;
                     let statusMessage = meta.status || t.downloading || '下载中...';
                     
+                    // 详细调试信息
+                    console.log(`=== PROGRESS DEBUG ===`);
+                    console.log(`Raw data:`, JSON.stringify(data, null, 2));
+                    console.log(`Meta:`, JSON.stringify(meta, null, 2));
+                    console.log(`Progress value:`, progress, typeof progress);
+                    console.log(`Status message:`, statusMessage);
+                    console.log(`=====================`);
+                    
                     // 多语言处理：将后端的中文消息翻译为当前语言
                     statusMessage = translateProgressMessage(statusMessage, t);
                     
@@ -1269,22 +1277,12 @@ function pollTaskStatus(taskId, optionElement) {
         // 确保progress在0-100范围内
         const clampedProgress = Math.max(0, Math.min(100, progress));
         
-        // 确定进度消息的翻译键
+        // 简化的翻译键判断
         let translateKey = '';
-        if (message === '开始获取视频信息...' || message === 'Starting to fetch video info...') {
-            translateKey = 'progress_fetching_info';
-        } else if (message === '开始下载视频...' || message === 'Starting video download...') {
-            translateKey = 'progress_starting_download';
-        } else if (message === '正在下载视频文件...' || message === 'Downloading video file...') {
-            translateKey = 'progress_downloading_file';
-        } else if (message === '下载中...' || message === 'Downloading...') {
-            translateKey = 'progress_downloading';
-        } else if (message === '准备下载...' || message === 'Preparing download...') {
-            translateKey = 'progress_preparing';
-        } else if (message === '正在合并文件...' || message === 'Merging files...') {
-            translateKey = 'progress_merging';
-        } else if (message === '处理音频...' || message === 'Processing audio...') {
-            translateKey = 'progress_processing_audio';
+        if (message === '正在下载中' || message === 'Downloading') {
+            translateKey = 'downloading';
+        } else if (message === '下载完成' || message === 'Download Complete') {
+            translateKey = 'downloadComplete';
         }
         
         progressDiv.innerHTML = `
@@ -1323,33 +1321,9 @@ function pollTaskStatus(taskId, optionElement) {
     function translateProgressMessage(message, translations) {
         const progressTranslations = {
             // 中文到多语言的映射
-            '开始获取视频信息...': {
-                zh: '开始获取视频信息...',
-                en: 'Starting to fetch video info...'
-            },
-            '开始下载视频...': {
-                zh: '开始下载视频...',
-                en: 'Starting video download...'
-            },
-            '正在下载视频文件...': {
-                zh: '正在下载视频文件...',
-                en: 'Downloading video file...'
-            },
-            '下载中...': {
-                zh: '下载中...',
-                en: 'Downloading...'
-            },
-            '准备下载...': {
-                zh: '准备下载...',
-                en: 'Preparing download...'
-            },
-            '正在合并文件...': {
-                zh: '正在合并文件...',
-                en: 'Merging files...'
-            },
-            '处理音频...': {
-                zh: '处理音频...',
-                en: 'Processing audio...'
+            '正在下载中': {
+                zh: '正在下载中',
+                en: 'Downloading'
             },
             '下载完成': {
                 zh: '下载完成',
@@ -1364,33 +1338,9 @@ function pollTaskStatus(taskId, optionElement) {
                 en: 'Check Timeout'
             },
             // 英文到多语言的映射（逆向翻译）
-            'Starting to fetch video info...': {
-                zh: '开始获取视频信息...',
-                en: 'Starting to fetch video info...'
-            },
-            'Starting video download...': {
-                zh: '开始下载视频...',
-                en: 'Starting video download...'
-            },
-            'Downloading video file...': {
-                zh: '正在下载视频文件...',
-                en: 'Downloading video file...'
-            },
-            'Downloading...': {
-                zh: '下载中...',
-                en: 'Downloading...'
-            },
-            'Preparing download...': {
-                zh: '准备下载...',
-                en: 'Preparing download...'
-            },
-            'Merging files...': {
-                zh: '正在合并文件...',
-                en: 'Merging files...'
-            },
-            'Processing audio...': {
-                zh: '处理音频...',
-                en: 'Processing audio...'
+            'Downloading': {
+                zh: '正在下载中',
+                en: 'Downloading'
             },
             'Download Complete': {
                 zh: '下载完成',
@@ -1438,7 +1388,7 @@ function pollTaskStatus(taskId, optionElement) {
         const resolution = optionElement.dataset.resolution || '';
 
         // 显示初始进度条（0%）
-        const initialMessage = translateProgressMessage(t.startingDownload || '准备下载...', t);
+        const initialMessage = translateProgressMessage(t.downloading || '正在下载中', t);
         showProgressBar(optionElement, 0, initialMessage);
         
         // 确保进度条样式已初始化

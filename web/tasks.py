@@ -213,9 +213,7 @@ def download_video_task(
     task_id = self.request.id
 
     # 更新任务状态
-    self.update_state(
-        state="PROGRESS", meta={"status": "Initializing download...", "progress": 0}
-    )
+    self.update_state(state="PROGRESS", meta={"status": "正在下载中", "progress": 0})
 
     async def _async_download():
         try:
@@ -238,20 +236,12 @@ def download_video_task(
             def progress_callback(message: str, progress: int):
                 """进度回调函数，更新Celery任务状态"""
                 self.update_state(
-                    state="PROGRESS",
-                    meta={"status": message, "progress": progress}
+                    state="PROGRESS", meta={"status": message, "progress": progress}
                 )
 
             # 初始化下载器，传入进度回调
             self.downloader = Downloader(
-                download_folder=download_folder,
-                progress_callback=progress_callback
-            )
-
-            # 更新进度
-            self.update_state(
-                state="PROGRESS",
-                meta={"status": "Starting download...", "progress": 10},
+                download_folder=download_folder, progress_callback=progress_callback
             )
 
             if download_type == "video":
