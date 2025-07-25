@@ -154,10 +154,18 @@ jobs:
         done
         echo "Redis is up and running!"
 
+        # 设置环境变量
+        export CELERY_BROKER_URL=redis://localhost:6379/0
+        export CELERY_RESULT_BACKEND_URL=redis://localhost:6379/0
+
         # 启动 Celery worker 并将日志输出到文件，方便调试
         echo "Starting Celery worker..."
-        # 为 worker 指定一个明确的主机名，并监听默认的 'celery' 队列，这在CI环境中更可靠
-        celery -A web.celery_app worker --loglevel=info --hostname=e2e-worker@%h -Q celery > celery_worker.log 2>&1 &
+        # 监听所有配置的队列：download_queue, maintenance_queue 和默认的 celery 队列
+        celery -A web.celery_app worker --loglevel=info --hostname=e2e-worker@%h -Q download_queue,maintenance_queue,celery > celery_worker.log 2>&1 &
+        
+        # 等待Celery worker启动
+        echo "Waiting for Celery worker to start..."
+        sleep 5
 
     - name: Start FastAPI server in background
       run: |
@@ -189,24 +197,37 @@ jobs:
       run: |
        set -o pipefail
        echo "Waiting for Celery worker to be responsive..."
-       for i in {1..15}; do
-         # 使用 'inspect ping' 并增加超时时间。
-         # 'set -o pipefail' 确保如果 'celery' 命令失败，整个管道也会失败。
-         # 通过 -b 参数强制 inspect 命令使用 localhost 连接 Redis，避免CI中的DNS解析问题
-         if celery -A web.celery_app -b redis://localhost:6379/0 inspect ping --timeout 10 | grep -q "e2e-worker@"; then
-           echo "✅ Celery worker is responsive."
-           exit 0
+       
+       # 添加环境变量以确保Celery使用正确的broker
+       export CELERY_BROKER_URL=redis://localhost:6379/0
+       export CELERY_RESULT_BACKEND_URL=redis://localhost:6379/0
+       
+       for i in {1..20}; do
+         # 使用 'inspect stats' 替代 'inspect ping'，因为它更能准确反映worker的就绪状态
+         # 同时检查worker是否在处理我们配置的队列
+         if celery -A web.celery_app -b redis://localhost:6379/0 inspect stats --timeout 15 | grep -q "e2e-worker@"; then
+           echo "✅ Celery worker is responsive and ready."
+           echo "Verifying queues are being monitored..."
+           if celery -A web.celery_app -b redis://localhost:6379/0 inspect active_queues --timeout 10 | grep -E "(download_queue|maintenance_queue|celery)"; then
+             echo "✅ Worker is monitoring the required queues."
+             exit 0
+           else
+             echo "⚠️ Worker is responsive but queues may not be properly configured."
+             echo "--- Active queues ---"
+             celery -A web.celery_app -b redis://localhost:6379/0 inspect active_queues --timeout 10
+           fi
          else
-           echo "Celery worker not yet responsive (attempt $i/15). Checking logs..."
-           tail celery_worker.log  # 打印 Celery worker 的日志
+           echo "Celery worker not yet responsive (attempt $i/20). Checking logs..."
+           echo "--- Last 10 lines of worker log ---"
+           tail -n 10 celery_worker.log || echo "No worker log available yet"
          fi
-         sleep 2
+         sleep 3
        done
-        echo "❌ Celery worker did not become ready in 30 seconds."
+        echo "❌ Celery worker did not become ready in 60 seconds."
         echo "--- Final Celery Worker Log ---"
         cat celery_worker.log
-        echo "--- Final Ping Attempt ---"
-        celery -A web.celery_app -b redis://localhost:6379/0 inspect ping --timeout 10 # 最后运行一次以显示错误输出并使作业失败
+        echo "--- Final Status Check ---"
+        celery -A web.celery_app -b redis://localhost:6379/0 inspect stats --timeout 15
         exit 1
 
     - name: Run end-to-end tests

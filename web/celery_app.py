@@ -63,6 +63,9 @@ celery_app.conf.update(
             "routing_key": "maintenance",
         },
     },
+    # === 默认队列配置 ===
+    task_default_queue="celery",  # 默认队列
+    task_default_routing_key="default",
     # === 安全配置 ===
     broker_transport_options={
         "visibility_timeout": 3600,  # 消息可见性超时
