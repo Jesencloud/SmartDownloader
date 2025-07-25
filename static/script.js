@@ -189,42 +189,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         const url = urlInput.value.trim();
         const t = getTranslations();
 
-        // --- Frontend Whitelist Check ---
-        // Use dynamically loaded configuration from backend
-        // NOTE: This is NOT a security measure, just a user-friendly check.
-        // The real enforcement is on the backend.
-        const allowedDomains = appConfig.security?.allowed_domains || [];
-        
-        if (url && allowedDomains.length > 0) {
-            try {
-                const urlHostname = new URL(url).hostname.toLowerCase();
-                // Use the same logic as backend: check if domain ends with any allowed domain
-                const isAllowed = allowedDomains.some(domain => urlHostname.endsWith(domain.toLowerCase()));
-                
-                if (!isAllowed) {
-                    const t = getTranslations();
-                    const domainList = allowedDomains.join(', ');
-                    alert(`${t.domainNotAllowed || 'Sorry, downloads from'} "${urlHostname}" ${t.notAllowedSuffix || 'are not allowed. Only downloads from the following sites are permitted:'} ${domainList}`);
-                    return; // Stop processing
-                }
-            } catch (e) { /* Invalid URL, let the backend handle it. */ }
+        // --- 新的综合URL验证 ---
+        const urlValidation = validateCompleteURL(url);
+        if (!urlValidation.valid) {
+            const errorMessage = `URL验证失败：\n${urlValidation.errors.join('\n')}`;
+            alert(errorMessage);
+            return;
         }
-        // --- End of Frontend Whitelist Check ---
+        
+        const validatedUrl = urlValidation.cleanUrl;
+        // --- 综合URL验证结束 ---
 
         // --- NEW: Developer Test Mode ---
-        if (url === 'test-video' || url === 'test-audio') {
+        if (validatedUrl === 'test-video' || validatedUrl === 'test-audio') {
             showLoadingState(downloadType);
 
             // Simulate a short delay to mimic network latency
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            const mockData = url === 'test-video' ? getMockVideoData() : getMockAudioData();
+            const mockData = validatedUrl === 'test-video' ? getMockVideoData() : getMockAudioData();
             currentVideoData = mockData; // Store it for language switching
             renderResults(mockData);
             return; // Exit the function to prevent the real fetch
         }
         // --- END: Developer Test Mode ---
-        if (!url) {
+        if (!validatedUrl) {
             alert(t.urlPlaceholder);
             return;
         }
@@ -235,7 +224,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const response = await fetch('/video-info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url, download_type: downloadType }),
+                body: JSON.stringify({ url: validatedUrl, download_type: downloadType }),
             });
 
             if (!response.ok) {
@@ -642,7 +631,168 @@ function pollTaskStatus(taskId, optionElement) {
     console.log(`Started polling for task ${taskId} with interval ID ${intervalId}`);
 }
 
-    // 格式ID验证函数
+    // URL安全验证函数
+    function validateURL(url) {
+        const errors = [];
+        
+        // 基础验证
+        if (!url || url.trim() === '') {
+            errors.push('链接不能为空');
+            return { valid: false, errors };
+        }
+        
+        const trimmedUrl = url.trim();
+        
+        // 长度限制（防止DoS攻击）
+        if (trimmedUrl.length > 2048) {
+            errors.push('链接长度超过限制（最大2048字符）');
+        }
+        
+        // 安全协议验证
+        const dangerousProtocols = [
+            'javascript:',
+            'data:',
+            'file:',
+            'ftp:',
+            'mailto:',
+            'tel:',
+            'sms:',
+            'vbscript:',
+            'about:',
+            'chrome:',
+            'chrome-extension:',
+            'moz-extension:',
+            'ms-appx:',
+            'x-javascript:'
+        ];
+        
+        const lowerUrl = trimmedUrl.toLowerCase();
+        for (const protocol of dangerousProtocols) {
+            if (lowerUrl.startsWith(protocol)) {
+                errors.push(`不允许的协议类型: ${protocol}`);
+                break;
+            }
+        }
+        
+        // XSS防护：检查危险字符
+        const dangerousPatterns = [
+            /<script[^>]*>/i,
+            /<\/script>/i,
+            /<iframe[^>]*>/i,
+            /<object[^>]*>/i,
+            /<embed[^>]*>/i,
+            /<link[^>]*>/i,
+            /<meta[^>]*>/i,
+            /on\w+\s*=/i,  // 事件处理器
+            /\x00/,         // 空字节
+            /[\r\n]/,       // 换行符
+        ];
+        
+        for (const pattern of dangerousPatterns) {
+            if (pattern.test(trimmedUrl)) {
+                errors.push('链接包含危险字符或标签');
+                break;
+            }
+        }
+        
+        // URL格式验证
+        try {
+            const parsedUrl = new URL(trimmedUrl);
+            
+            // 只允许HTTP/HTTPS协议
+            if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+                errors.push('只支持HTTP和HTTPS协议的链接');
+            }
+            
+            // 防止内网IP地址攻击（SSRF防护）
+            const hostname = parsedUrl.hostname.toLowerCase();
+            const forbiddenHosts = [
+                'localhost',
+                '127.0.0.1',
+                '0.0.0.0',
+                '::1',
+                '[::1]'
+            ];
+            
+            if (forbiddenHosts.includes(hostname)) {
+                errors.push('不允许访问本地地址');
+            }
+            
+            // 检查内网IP段
+            if (hostname.match(/^10\.|^172\.(1[6-9]|2[0-9]|3[01])\.|^192\.168\./)) {
+                errors.push('不允许访问内网地址');
+            }
+            
+            // 检查端口安全性
+            if (parsedUrl.port) {
+                const port = parseInt(parsedUrl.port);
+                const dangerousPorts = [22, 23, 25, 53, 110, 143, 993, 995, 1433, 3306, 5432, 6379, 27017];
+                if (dangerousPorts.includes(port)) {
+                    errors.push(`不允许访问端口: ${port}`);
+                }
+            }
+            
+        } catch (e) {
+            errors.push('无效的URL格式');
+        }
+        
+        return {
+            valid: errors.length === 0,
+            errors,
+            cleanUrl: trimmedUrl
+        };
+    }
+    
+    // 域名白名单验证函数（保留原有逻辑）
+    function validateDomainWhitelist(url) {
+        const allowedDomains = appConfig.security?.allowed_domains || [];
+        
+        if (allowedDomains.length === 0) {
+            return { valid: true, errors: [] };
+        }
+        
+        try {
+            const urlHostname = new URL(url).hostname.toLowerCase();
+            const isAllowed = allowedDomains.some(domain => urlHostname.endsWith(domain.toLowerCase()));
+            
+            if (!isAllowed) {
+                const domainList = allowedDomains.join(', ');
+                return {
+                    valid: false,
+                    errors: [`不支持从 "${urlHostname}" 下载。只支持以下网站: ${domainList}`]
+                };
+            }
+            
+            return { valid: true, errors: [] };
+        } catch (e) {
+            return { valid: false, errors: ['无法解析链接域名'] };
+        }
+    }
+    
+    // 综合URL验证函数
+    function validateCompleteURL(url) {
+        const errors = [];
+        
+        // 1. 基础安全验证
+        const securityValidation = validateURL(url);
+        if (!securityValidation.valid) {
+            errors.push(...securityValidation.errors);
+        }
+        
+        // 2. 域名白名单验证
+        if (securityValidation.valid) {
+            const whitelistValidation = validateDomainWhitelist(securityValidation.cleanUrl);
+            if (!whitelistValidation.valid) {
+                errors.push(...whitelistValidation.errors);
+            }
+        }
+        
+        return {
+            valid: errors.length === 0,
+            errors,
+            cleanUrl: securityValidation.cleanUrl
+        };
+    }
     function validateFormatId(formatId, currentVideoData) {
         const errors = [];
         

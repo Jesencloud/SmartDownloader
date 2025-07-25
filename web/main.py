@@ -151,6 +151,11 @@ async def get_video_info(request: VideoInfoRequest):
     """
     Fetches video information using a cached, thread-safe helper function.
     """
+    # --- URL安全验证 ---
+    is_valid, error_msg = validate_url_security(request.url)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid URL: {error_msg}")
+    
     # --- Whitelist Enforcement ---
     allowed_domains = config.security.allowed_domains
     if allowed_domains:  # Only check if the list is not empty
@@ -334,6 +339,100 @@ async def get_video_info(request: VideoInfoRequest):
         download_type=request.download_type
     )
 
+def validate_url_security(url: str) -> tuple[bool, str]:
+    """
+    验证URL的安全性
+    
+    Returns:
+        tuple[bool, str]: (is_valid, error_message)
+    """
+    if not url or not url.strip():
+        return False, "URL cannot be empty"
+    
+    url = url.strip()
+    
+    # 长度限制
+    if len(url) > 2048:
+        return False, "URL too long (max 2048 characters)"
+    
+    # 安全协议检查
+    dangerous_protocols = [
+        'javascript:', 'data:', 'file:', 'ftp:', 'mailto:', 'tel:', 'sms:',
+        'vbscript:', 'about:', 'chrome:', 'chrome-extension:', 'moz-extension:',
+        'ms-appx:', 'x-javascript:'
+    ]
+    
+    url_lower = url.lower()
+    for protocol in dangerous_protocols:
+        if url_lower.startswith(protocol):
+            return False, f"Dangerous protocol not allowed: {protocol}"
+    
+    # XSS防护
+    import re
+    dangerous_patterns = [
+        r'<script[^>]*>',
+        r'</script>',
+        r'<iframe[^>]*>',
+        r'<object[^>]*>',
+        r'<embed[^>]*>',
+        r'<link[^>]*>',
+        r'<meta[^>]*>',
+        r'on\w+\s*=',  # 事件处理器
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, url, re.IGNORECASE):
+            return False, "URL contains dangerous characters or tags"
+    
+    # 检查空字节和换行符
+    if '\x00' in url or '\r' in url or '\n' in url:
+        return False, "URL contains dangerous characters or tags"
+    
+    # URL格式验证和SSRF防护
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        
+        # 只允许HTTP/HTTPS
+        if parsed.scheme not in ['http', 'https']:
+            return False, "Only HTTP and HTTPS protocols are allowed"
+        
+        # 防止SSRF攻击
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "Invalid hostname"
+        
+        hostname_lower = hostname.lower()
+        
+        # 禁止本地地址
+        forbidden_hosts = [
+            'localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'
+        ]
+        
+        if hostname_lower in forbidden_hosts:
+            return False, "Access to local addresses is not allowed"
+        
+        # 检查内网IP段
+        import ipaddress
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                return False, "Access to private network addresses is not allowed"
+        except ValueError:
+            # 不是IP地址，是域名，继续检查
+            pass
+        
+        # 检查端口安全性
+        if parsed.port:
+            dangerous_ports = [22, 23, 25, 53, 110, 143, 993, 995, 1433, 3306, 5432, 6379, 27017]
+            if parsed.port in dangerous_ports:
+                return False, f"Access to port {parsed.port} is not allowed"
+        
+    except Exception as e:
+        return False, f"Invalid URL format: {str(e)}"
+    
+    return True, ""
+
 def validate_format_id(format_id: str) -> tuple[bool, str]:
     """
     验证格式ID的安全性和有效性
@@ -371,18 +470,19 @@ def validate_format_id(format_id: str) -> tuple[bool, str]:
 
 @app.post("/downloads", response_model=DownloadResponse, status_code=202)
 async def start_download(request: DownloadRequest):
+    # 验证URL安全性
+    url_valid, url_error = validate_url_security(request.url)
+    if not url_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid URL: {url_error}")
+    
     # 验证格式ID
-    is_valid, error_msg = validate_format_id(request.format_id)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=f"Invalid format ID: {error_msg}")
+    format_valid, format_error = validate_format_id(request.format_id)
+    if not format_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid format ID: {format_error}")
     
     # 验证下载类型
     if request.download_type not in ['video', 'audio']:
         raise HTTPException(status_code=400, detail="Invalid download type. Must be 'video' or 'audio'")
-    
-    # 验证URL
-    if not request.url or not request.url.strip():
-        raise HTTPException(status_code=400, detail="URL cannot be empty")
     
     task = download_video_task.delay(
         video_url=request.url, 
@@ -397,18 +497,19 @@ async def download_stream(request: Request, url: str, download_type: str, format
     
     log.info(f"Stream download request: {url}, format_id: {format_id}, type: {download_type}")
     
+    # 验证URL安全性
+    url_valid, url_error = validate_url_security(url)
+    if not url_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid URL: {url_error}")
+    
     # 验证格式ID
-    is_valid, error_msg = validate_format_id(format_id)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=f"Invalid format ID: {error_msg}")
+    format_valid, format_error = validate_format_id(format_id)
+    if not format_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid format ID: {format_error}")
     
     # 验证下载类型
     if download_type not in ['video', 'audio']:
         raise HTTPException(status_code=400, detail="Invalid download type. Must be 'video' or 'audio'")
-    
-    # 验证URL
-    if not url or not url.strip():
-        raise HTTPException(status_code=400, detail="URL cannot be empty")
     
     try:
         async def stream_downloader():
