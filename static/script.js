@@ -380,7 +380,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         optionsHTML += `
             <div class="resolution-option ${audioColorClasses[0] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors"
-                 data-format-id="best_original_audio" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-abr="${audioBitrate || ''}" data-resolution="audio" data-is-complete-stream="${bestAudioFormat.is_complete_stream || false}" data-supports-browser-download="${bestAudioFormat.supports_browser_download || false}">
+                 data-format-id="${bestAudioFormat.format_id}" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-abr="${audioBitrate || ''}" data-resolution="audio" data-is-complete-stream="${bestAudioFormat.is_complete_stream || false}" data-supports-browser-download="${bestAudioFormat.supports_browser_download || false}">
                 <div class="option-content w-full flex items-center">
                     <div class="flex-grow text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}${audioStreamIndicator}</span>
@@ -479,10 +479,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         el.addEventListener('click', () => handleDownload(el.dataset.formatId));
     });
     
-    // 检查是否有完整流格式，如果有则显示智能下载说明
+    // 检查是否有完整流格式或支持直接下载的格式，如果有则显示智能下载说明
     const hasCompleteStream = document.querySelector('[data-is-complete-stream="true"][data-supports-browser-download="true"]');
+    const hasDirectDownload = document.querySelector('[data-supports-browser-download="true"]');
     const smartDownloadInfo = document.getElementById('smartDownloadInfo');
-    if (hasCompleteStream && smartDownloadInfo) {
+    if ((hasCompleteStream || hasDirectDownload) && smartDownloadInfo) {
         smartDownloadInfo.classList.remove('hidden');
     }
     
@@ -679,11 +680,11 @@ function pollTaskStatus(taskId, optionElement) {
         optionElement.classList.add('is-downloading');
         const resolution = optionElement.dataset.resolution || '';
 
-        // Check if this is a complete stream that supports direct download
+        // Check if this supports direct download (either complete stream or audio with browser download support)
         const isCompleteStream = optionElement.dataset.isCompleteStream === 'true';
         const supportsBrowserDownload = optionElement.dataset.supportsBrowserDownload === 'true';
         
-        if (isCompleteStream && supportsBrowserDownload) {
+        if (supportsBrowserDownload) {
             if (currentVideoData.download_type === 'video') {
                 handleDirectVideoDownload(formatId, optionElement);
             } else {

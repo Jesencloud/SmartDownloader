@@ -82,7 +82,7 @@ const translations = {
         completeStreamInfo: '⚡ 完整流',
         directAudioDownloading: '音频流传输中...',
         directAudioDownloadComplete: '音频下载开始',
-        smartDownloadInfoText: '⚡️ 完整流，可直接下载'
+        smartDownloadInfoText: '⚡️ 支持直接下载'
     },
     en: {
         // From script.js
@@ -165,7 +165,7 @@ const translations = {
         completeStreamInfo: '⚡ Complete Stream',
         directAudioDownloading: 'Audio streaming...',
         directAudioDownloadComplete: 'Audio download started',
-        smartDownloadInfoText: '⚡️ Complete stream, direct download available'
+        smartDownloadInfoText: '⚡️ Direct download supported'
     },
 };
 
