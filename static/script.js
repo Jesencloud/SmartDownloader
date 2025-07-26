@@ -772,14 +772,6 @@ function pollTaskStatus(taskId, optionElement) {
                     const progress = meta.progress || 0;
                     let statusMessage = meta.status || t.downloading || '下载中...';
                     
-                    // 详细调试信息
-                    console.log(`=== PROGRESS DEBUG ===`);
-                    console.log(`Raw data:`, JSON.stringify(data, null, 2));
-                    console.log(`Meta:`, JSON.stringify(meta, null, 2));
-                    console.log(`Progress value:`, progress, typeof progress);
-                    console.log(`Status message:`, statusMessage);
-                    console.log(`=====================`);
-                    
                     // 多语言处理：将后端的中文消息翻译为当前语言
                     statusMessage = translateProgressMessage(statusMessage, t);
                     

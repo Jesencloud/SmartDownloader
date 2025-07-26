@@ -138,7 +138,7 @@ class Downloader:
                 # 增加延迟确保前端能够捕捉到进度更新
                 import time
 
-                time.sleep(0.3)  # 增加到300ms确保更可靠的捕获
+                time.sleep(0.5)  # 设置为500ms，在用户体验和功能性之间平衡
             except Exception as e:
                 log.warning(f"进度回调函数执行失败: {e}")
 

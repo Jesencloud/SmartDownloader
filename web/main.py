@@ -832,13 +832,13 @@ async def get_task_status(task_id: str):
     result = task_result.result
 
     # 添加详细调试信息
-    log.info("=== TASK STATUS DEBUG ===")
-    log.info(f"Task ID: {task_id}")
-    log.info(f"Task status: {task_result.status}")
-    log.info(f"Task result type: {type(task_result.result)}")
-    log.info(f"Task result: {task_result.result}")
-    log.info(f"Task info: {getattr(task_result, 'info', 'No info')}")
-    log.info("========================")
+    # log.info(f"=== TASK STATUS DEBUG ===")
+    # log.info(f"Task ID: {task_id}")
+    # log.info(f"Task status: {task_result.status}")
+    # log.info(f"Task result type: {type(task_result.result)}")
+    # log.info(f"Task result: {task_result.result}")
+    # log.info(f"Task info: {getattr(task_result, 'info', 'No info')}")
+    # log.info(f"========================")
 
     # Handle different result types
     if isinstance(task_result.result, Exception):
