@@ -60,6 +60,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Check for active downloads by looking for the .is-downloading class
         const downloadingItems = document.querySelectorAll('.is-downloading');
         
+        // 停止所有平滑动画
+        smoothProgressManager.stopAllAnimations();
+        
         // Clear all active polling intervals first
         const pollingElements = document.querySelectorAll('[data-polling-interval]');
         console.log(`Found ${pollingElements.length} elements with active polling intervals`);
@@ -529,7 +532,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    // 通用的任务清理函数
+    // 获取当前显示的进度百分比
+    function getCurrentDisplayProgress(optionElement) {
+        const progressDiv = optionElement.querySelector('.option-progress');
+        if (!progressDiv || progressDiv.classList.contains('hidden')) {
+            return 0;
+        }
+        
+        const progressBar = progressDiv.querySelector('.progress-bar');
+        if (!progressBar) {
+            return 0;
+        }
+        
+        const style = progressBar.style.width;
+        if (style && style.includes('%')) {
+            return parseInt(style.replace('%', '')) || 0;
+        }
+        
+        return 0;
+    }
+
+    // 清理任务跟踪的通用函数
     function cleanupTaskTracking(timeoutId, optionElement) {
         if (timeoutId) {
             clearTimeout(timeoutId);
@@ -537,6 +560,132 @@ document.addEventListener('DOMContentLoaded', async () => {
         optionElement.removeAttribute('data-polling-interval');
         optionElement.classList.remove('is-downloading');
     }
+    // 平滑进度动画管理器
+    class SmoothProgressManager {
+        constructor() {
+            this.animations = new Map(); // 存储每个元素的动画状态
+        }
+        
+        startSmoothProgress(optionElement, currentProgress, targetProgress, etaSeconds, message) {
+            const elementId = optionElement.dataset.formatId;
+            
+            // 清除之前的动画
+            if (this.animations.has(elementId)) {
+                clearInterval(this.animations.get(elementId).intervalId);
+            }
+            
+            // 确保进度数值合理
+            currentProgress = Math.max(0, Math.min(100, currentProgress));
+            targetProgress = Math.max(0, Math.min(100, targetProgress));
+            
+            // 如果进度差距很小，直接更新
+            if (Math.abs(targetProgress - currentProgress) < 0.5) {
+                showProgressBar(optionElement, targetProgress, message);
+                return;
+            }
+            
+            // 如果目标进度小于当前进度，直接更新（避免进度倒退）
+            if (targetProgress < currentProgress) {
+                showProgressBar(optionElement, targetProgress, message);
+                return;
+            }
+            
+            // 特殊处理：接近完成时（currentProgress >= 90）使用更快的动画
+            if (currentProgress >= 90) {
+                showProgressBar(optionElement, targetProgress, message);
+                return;
+            }
+            
+            // 计算动画参数
+            const progressDiff = targetProgress - currentProgress;
+            
+            // 优化动画时长计算
+            let animationDuration;
+            if (etaSeconds > 0 && etaSeconds < 60) {
+                // 有效ETA且小于60秒，使用ETA的80%作为动画时长
+                animationDuration = Math.min(etaSeconds * 800, 15000); // 最多15秒
+            } else {
+                // 根据进度差距自适应动画时长
+                animationDuration = Math.min(progressDiff * 100, 8000); // 最多8秒
+            }
+            
+            const updateInterval = 100; // 改为每100ms更新一次，更流畅
+            const totalSteps = Math.max(1, Math.floor(animationDuration / updateInterval));
+            const progressStep = progressDiff / totalSteps;
+            
+            let currentAnimatedProgress = currentProgress;
+            let stepCount = 0;
+            
+            const intervalId = setInterval(() => {
+                stepCount++;
+                
+                // 使用缓动函数让动画更自然
+                const easingFactor = this._easeOutQuart(stepCount / totalSteps);
+                currentAnimatedProgress = currentProgress + (progressDiff * easingFactor);
+                
+                // 确保不超过目标进度
+                const displayProgress = Math.min(currentAnimatedProgress, targetProgress);
+                
+                // 更新进度条显示
+                showProgressBar(optionElement, Math.round(displayProgress * 10) / 10, message);
+                
+                // 动画完成或达到目标
+                if (stepCount >= totalSteps || displayProgress >= targetProgress) {
+                    clearInterval(intervalId);
+                    this.animations.delete(elementId);
+                    showProgressBar(optionElement, targetProgress, message);
+                    console.log(`✅ 平滑动画完成: ${targetProgress}%`);
+                }
+            }, updateInterval);
+            
+            // 存储动画状态
+            this.animations.set(elementId, {
+                intervalId,
+                currentProgress: currentAnimatedProgress,
+                targetProgress,
+                etaSeconds,
+                startTime: Date.now()
+            });
+            
+            console.log(`🎬 开始平滑动画: ${currentProgress}% → ${targetProgress}% (${animationDuration}ms, ${totalSteps}步)`);
+        }
+        
+        // 缓动函数：四次方缓出
+        _easeOutQuart(t) {
+            return 1 - Math.pow(1 - t, 4);
+        }
+        
+        stopAnimation(elementId) {
+            if (this.animations.has(elementId)) {
+                const animation = this.animations.get(elementId);
+                clearInterval(animation.intervalId);
+                this.animations.delete(elementId);
+                console.log(`🛑 停止动画: ${elementId}`);
+            }
+        }
+        
+        stopAllAnimations() {
+            console.log(`🛑 停止所有动画 (${this.animations.size}个)`);
+            this.animations.forEach((animation, elementId) => {
+                clearInterval(animation.intervalId);
+            });
+            this.animations.clear();
+        }
+        
+        // 获取当前动画状态
+        getAnimationState(elementId) {
+            return this.animations.get(elementId) || null;
+        }
+        
+        // 检查是否正在动画中
+        isAnimating(elementId) {
+            return this.animations.has(elementId);
+        }
+    }
+    
+    // 创建全局平滑进度管理器
+    const smoothProgressManager = new SmoothProgressManager();
+    
     // 动态轮询间隔管理器
     class DynamicPollingManager {
         constructor() {
@@ -715,6 +864,9 @@ function pollTaskStatus(taskId, optionElement) {
                 if (data.status === 'SUCCESS') {
                     stopPolling();
                     
+                    // 停止平滑动画
+                    smoothProgressManager.stopAnimation(optionElement.dataset.formatId);
+                    
                     // 显示成功统计信息
                     const phaseInfo = pollingManager.getPhaseInfo();
                     console.log(`下载完成 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
@@ -737,7 +889,7 @@ function pollTaskStatus(taskId, optionElement) {
                         // Fallback to stream download if no cached file
                         const formatId = optionElement.dataset.formatId;
                         const resolution = optionElement.dataset.resolution || 'unknown';
-                        triggerStreamDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title);
+                        triggerStreamDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title, optionElement);
                     }
                     
                     // 延迟显示下载完成状态，让动画播放完毕
@@ -756,6 +908,10 @@ function pollTaskStatus(taskId, optionElement) {
                     
                 } else if (data.status === 'FAILURE') {
                     stopPolling();
+                    
+                    // 停止平滑动画
+                    smoothProgressManager.stopAnimation(optionElement.dataset.formatId);
+                    
                     const errorIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
                     const failedMessage = translateProgressMessage('下载失败', t);
                     showTaskStatus(optionElement, 'failure', failedMessage, errorIcon, 'text-red-400', 'border-red-500');
@@ -770,14 +926,57 @@ function pollTaskStatus(taskId, optionElement) {
                     // 处理进度更新
                     const meta = data.result || data.meta || {};
                     const progress = meta.progress || 0;
+                    const etaSeconds = meta.eta_seconds || 0;
+                    const speed = meta.speed || '';
                     let statusMessage = meta.status || t.downloading || '下载中...';
                     
                     // 多语言处理：将后端的中文消息翻译为当前语言
                     statusMessage = translateProgressMessage(statusMessage, t);
                     
-                    // 更新进度条
-                    showProgressBar(optionElement, progress, statusMessage);
-                    console.log(`下载进度更新: ${progress}% - ${statusMessage}`);
+                    // 获取当前显示的进度
+                    const currentProgress = getCurrentDisplayProgress(optionElement);
+                    
+                    // 检查是否正在动画中
+                    const isAnimating = smoothProgressManager.isAnimating(optionElement.dataset.formatId);
+                    
+                    // 优化平滑进度策略
+                    if (isAnimating) {
+                        // 如果正在动画中，检查新进度是否显著不同
+                        const animationState = smoothProgressManager.getAnimationState(optionElement.dataset.formatId);
+                        if (animationState && Math.abs(progress - animationState.targetProgress) > 2) {
+                            // 进度跳跃较大，重新开始动画
+                            smoothProgressManager.startSmoothProgress(
+                                optionElement, 
+                                currentProgress, 
+                                progress, 
+                                etaSeconds, 
+                                statusMessage
+                            );
+                        }
+                        // 否则让当前动画继续
+                    } else {
+                        // 使用平滑进度动画的条件优化
+                        const progressDiff = progress - currentProgress;
+                        
+                        // 特殊处理：接近完成时（>=95%）直接更新，避免ETA=0导致的问题
+                        if (progress >= 95) {
+                            showProgressBar(optionElement, progress, statusMessage);
+                        } else if (etaSeconds > 0 && progressDiff > 0.5 && progressDiff < 30) {
+                            // 有ETA且进度差距合理时使用平滑动画
+                            smoothProgressManager.startSmoothProgress(
+                                optionElement, 
+                                currentProgress, 
+                                progress, 
+                                etaSeconds, 
+                                statusMessage
+                            );
+                        } else {
+                            // 其他情况直接更新
+                            showProgressBar(optionElement, progress, statusMessage);
+                        }
+                    }
+                    
+                    console.log(`📊 进度更新: ${progress}% (当前: ${currentProgress}%, 动画中: ${isAnimating})${etaSeconds > 0 ? ` ETA: ${etaSeconds}s` : ''}`);
                 }
                 // 如果状态是 PENDING 或 STARTED，则不执行任何操作，让加载动画继续
             }
@@ -1149,13 +1348,22 @@ function pollTaskStatus(taskId, optionElement) {
         const resolution = isVideo ? (optionElement.dataset.resolution || '') : 'audio';
         
         // 构建下载URL
-        const downloadUrl = `/download-stream?${new URLSearchParams({
+        const downloadParams = {
             url: originalUrl,
             download_type: downloadType,
             format_id: formatId,
             resolution: resolution,
             title: title
-        }).toString()}`;
+        };
+        
+        // 如果是音频下载，添加音频格式参数
+        if (!isVideo) {
+            const audioFormat = optionElement.dataset.audioFormat || 'm4a';
+            downloadParams.audio_format = audioFormat;
+            console.log(`🎵 直接下载音频格式: ${audioFormat}`, downloadParams);
+        }
+        
+        const downloadUrl = `/download-stream?${new URLSearchParams(downloadParams).toString()}`;
         
         // 构建文件名
         let filename;
@@ -1598,14 +1806,15 @@ function generateSafeFilename(title, resolution, type) {
 function sanitizeFilename(filename) {
     if (!filename) return 'untitled';
     
-    // Remove or replace dangerous characters
+    // 前端文件名清理 - 与后端保持一致
+    // 只替换文件系统绝对不支持的字符
     const cleaned = filename
-        .replace(/[<>:"/\\|?*\x00-\x1F\x7F-\x9F]/g, '_')  // Replace illegal characters
-        .replace(/^\./g, '_')                              // Cannot start with dot
-        .replace(/\s+/g, '_')                             // Replace spaces with underscores
-        .replace(/_{2,}/g, '_')                           // Merge multiple underscores
-        .replace(/^_+|_+$/g, '')                          // Remove leading and trailing underscores
-        .substring(0, 200);                               // Limit length
+        .replace(/[<>:"/\\|?*]/g, '_')    // 替换文件系统禁用字符
+        .replace(/[\x00-\x1F\x7F-\x9F]/g, '')  // 移除控制字符
+        .replace(/\s+/g, ' ')             // 合并多个空格为一个（保持空格而不是下划线）
+        .replace(/^\.|\.$/g, '_')         // 不能以点开头或结尾
+        .trim()                           // 移除首尾空格
+        .substring(0, 100);               // 前端使用相对宽松的限制，实际限制由后端配置控制
     
     // Ensure filename is not empty
     return cleaned || 'untitled';
@@ -1622,7 +1831,7 @@ function get_query_params(url, type, formatId, resolution, title) {
 }
 
 // 统一的文件下载触发函数（替换triggerFileDownload和triggerTraditionalDownload）
-function triggerStreamDownload(url, type, formatId, resolution, title) {
+function triggerStreamDownload(url, type, formatId, resolution, title, optionElement = null) {
     // 基础参数验证
     if (!url || !type || !formatId) {
         console.error('Missing required parameters for stream download:', { url, type, formatId });
@@ -1640,11 +1849,33 @@ function triggerStreamDownload(url, type, formatId, resolution, title) {
         }
     }
     
-    const query_params = get_query_params(url, type, formatId, resolution, title);
-    const downloadUrl = `/download-stream?${query_params.toString()}`;
+    // 构建下载参数，支持音频格式
+    const downloadParams = {
+        url: url,
+        download_type: type, 
+        format_id: formatId,
+        resolution: resolution,
+        title: title
+    };
+    
+    // 如果是音频下载且有optionElement，添加音频格式参数
+    if (type === 'audio' && optionElement) {
+        const audioFormat = optionElement.dataset.audioFormat || 'm4a';
+        downloadParams.audio_format = audioFormat;
+    }
+    
+    const downloadUrl = `/download-stream?${new URLSearchParams(downloadParams).toString()}`;
     
     // 生成带时间戳的文件名
-    const extension = type === 'video' ? '.mp4' : '.mp3';
+    let extension = '.mp4'; // 默认视频扩展名
+    if (type === 'audio') {
+        if (optionElement && optionElement.dataset.audioFormat) {
+            extension = '.' + optionElement.dataset.audioFormat;
+        } else {
+            extension = '.mp3'; // 备用音频扩展名
+        }
+    }
+    
     const safeTitle = sanitizeFilename(title || 'download');
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
     const filename = `${safeTitle}_${resolution}_${timestamp}${extension}`;

@@ -102,7 +102,7 @@ downloader:
 # 文件处理设置
 file_processing:
   # 文件名处理
-  filename_max_length: 30       # 文件名最大长度
+  filename_max_length: 100      # 文件名最大长度（增加到100字符以保留更多信息）
   filename_truncate_suffix: "..." # 文件名截断后缀
   
   # 等待时间
@@ -217,3 +217,4 @@ security:
     - "youtube.com"
     - "bilibili.com"
     - "youtu.be"
+    - "douyin.com"

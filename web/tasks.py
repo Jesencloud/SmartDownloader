@@ -233,11 +233,35 @@ def download_video_task(
                 )
 
             # 定义进度回调函数
-            def progress_callback(message: str, progress: int):
+            def progress_callback(message: str, progress: int, eta_seconds: int = 0, speed: str = ""):
                 """进度回调函数，更新Celery任务状态"""
+                # 确保进度值在合理范围内
+                progress = max(0, min(100, progress))
+                
+                meta = {
+                    "status": message, 
+                    "progress": progress
+                }
+                
+                # 如果有ETA信息，添加到meta中  
+                if eta_seconds > 0:
+                    # 限制ETA范围，避免异常值影响前端动画
+                    eta_seconds = min(max(eta_seconds, 1), 3600)  # 1秒到1小时
+                    meta["eta_seconds"] = eta_seconds
+                    
+                if speed:
+                    meta["speed"] = speed
+                    
+                # 添加时间戳用于前端去重和排序
+                meta["timestamp"] = time.time()
+                    
                 self.update_state(
-                    state="PROGRESS", meta={"status": message, "progress": progress}
+                    state="PROGRESS", 
+                    meta=meta
                 )
+                
+                # 记录详细的进度信息用于调试
+                log.debug(f"进度回调: {progress}% - {message} (ETA: {eta_seconds}s, 速度: {speed})")
 
             # 初始化下载器，传入进度回调
             self.downloader = Downloader(

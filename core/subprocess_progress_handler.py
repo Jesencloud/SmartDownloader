@@ -32,7 +32,10 @@ class SubprocessProgressHandler:
         """将 yt-dlp 输出中的大小字符串（例如 '10.5MiB'）转换为字节数。"""
         if not size_str:
             return 0
+        
+        original_size_str = size_str
         size_str = size_str.replace("~", "").strip()
+        
         units = {
             "B": 1,
             "KiB": 1024,
@@ -47,15 +50,62 @@ class SubprocessProgressHandler:
             "PB": 1000**5,
         }
 
-        for unit, multiplier in units.items():
+        # 按照单位长度从长到短排序，优先匹配长单位
+        sorted_units = sorted(units.items(), key=lambda x: len(x[0]), reverse=True)
+        
+        for unit, multiplier in sorted_units:
             if size_str.endswith(unit):
                 try:
-                    value = float(size_str[: -len(unit)])
-                    return int(value * multiplier)
-                except ValueError:
-                    log.warning(f"无法解析大小字符串: {size_str}")
+                    numeric_part = size_str[: -len(unit)].strip()
+                    value = float(numeric_part)
+                    result = int(value * multiplier)
+                    log.debug(f"成功解析大小: '{original_size_str}' -> {result} bytes")
+                    return result
+                except ValueError as e:
+                    log.debug(f"无法解析大小字符串数值部分: '{original_size_str}' (数值部分: '{numeric_part}') - {e}")
+                    # 对于解析失败的情况，如果包含数字，尝试提取并使用默认单位
+                    try:
+                        import re
+                        numbers = re.findall(r'\d+\.?\d*', original_size_str)
+                        if numbers:
+                            # 假设是MB作为默认单位
+                            fallback_value = float(numbers[0]) * 1024 * 1024
+                            log.debug(f"使用备用解析: {fallback_value} bytes")
+                            return int(fallback_value)
+                    except:
+                        pass
                     return 0
-        log.warning(f"未知大小单位或格式: {size_str}")
+        
+        log.debug(f"未知大小单位或格式: '{original_size_str}'")
+        return 0
+
+    def _parse_eta_to_seconds(self, eta_str: str) -> int:
+        """将ETA字符串（如'02:15'）转换为秒数，增加稳定性处理"""
+        if not eta_str or eta_str == "unknown" or eta_str.strip() == "":
+            return 0
+        
+        try:
+            eta_str = eta_str.strip()
+            
+            if ":" in eta_str:
+                parts = eta_str.split(":")
+                if len(parts) == 2:
+                    minutes, seconds = map(int, parts)
+                    total_seconds = minutes * 60 + seconds
+                    # 限制ETA范围，避免异常值
+                    return min(max(total_seconds, 0), 7200)  # 最多2小时
+                elif len(parts) == 3:
+                    hours, minutes, seconds = map(int, parts)
+                    total_seconds = hours * 3600 + minutes * 60 + seconds
+                    return min(max(total_seconds, 0), 7200)  # 最多2小时
+            else:
+                # 如果是纯数字，假设是秒
+                eta_seconds = int(float(eta_str))
+                return min(max(eta_seconds, 0), 7200)  # 最多2小时
+        except (ValueError, AttributeError) as e:
+            log.debug(f"无法解析ETA字符串 '{eta_str}': {e}")
+            return 0
+        
         return 0
 
     def _handle_json_progress_data(
@@ -288,6 +338,8 @@ class SubprocessProgressHandler:
         if "[download]" not in line:
             return False
 
+        log.debug(f"处理进度行: {line.strip()}")
+
         # 尝试匹配下载进度的正则表达式
         match = re.search(
             r"(\d+\.\d+)%\s+of\s+(~?\d+\.\d+[KMGTP]?i?B)(?:\s+at\s+(\d+\.\d+[KMGTP]?i?B/s|\d+\.\d+[KMGTP]?i?B/s|unknown\s+speed))?(?:\s+ETA\s+(\d{2}:\d{2}|unknown))?",
@@ -297,16 +349,38 @@ class SubprocessProgressHandler:
         if match:
             percentage = float(match.group(1))
             total_size_str = match.group(2)
+            speed_str = match.group(3) if match.group(3) else "unknown speed"
+            eta_str = match.group(4) if match.group(4) else "unknown"
+            
+            log.debug(f"正则表达式匹配成功: 进度={percentage}%, 总大小='{total_size_str}', 速度='{speed_str}', ETA='{eta_str}'")
+            
             total_bytes = self._parse_size_to_bytes(total_size_str)
             completed_bytes = int(total_bytes * (percentage / 100.0))
 
+            # 解析ETA为秒数
+            eta_seconds = self._parse_eta_to_seconds(eta_str)
+            
             # 确保任务可见后再更新进度
             if not progress.tasks[task_id].visible:
                 progress.update(task_id, visible=True)
+            
+            # 更新进度，包含ETA信息
             progress.update(task_id, completed=completed_bytes, total=total_bytes)
+            
+            # 存储ETA信息供外部访问 - 使用任务的fields字典
+            task = progress.tasks[task_id]
+            if not hasattr(task, 'fields') or task.fields is None:
+                task.fields = {}
+            task.fields.update({
+                'eta_seconds': eta_seconds,
+                'speed': speed_str,
+                'percentage': percentage
+            })
+            
             return True
 
         elif "Destination" in line or "already has best quality" in line:
+            log.debug(f"检测到下载完成指令: {line.strip()}")
             # 确保任务可见后再更新进度
             if not progress.tasks[task_id].visible:
                 progress.update(task_id, visible=True)
@@ -316,6 +390,8 @@ class SubprocessProgressHandler:
                 total=progress.tasks[task_id].total or 1,
             )
             return True
+        else:
+            log.debug(f"未匹配的进度行: {line.strip()}")
 
         return False
 
