@@ -1595,7 +1595,8 @@ function pollTaskStatus(taskId, optionElement) {
                 url: currentVideoData.original_url,
                 download_type: currentVideoData.download_type,
                 format_id: formatId,
-                resolution: resolution
+                resolution: resolution,
+                title: currentVideoData.title || 'download'
             }),
         })
         .then(response => {
@@ -1790,12 +1791,17 @@ function initializeLanguageSelector() {
 
 // Download functions (adapted from download.js)
 function generateSafeFilename(title, resolution, type) {
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
     const extension = type === 'video' ? 'mp4' : 'mp3';
     const cleanTitle = sanitizeFilename(title);
     const cleanResolution = sanitizeFilename(resolution);
     
-    return `${cleanTitle}_${cleanResolution}_${timestamp}.${extension}`;
+    if (type === 'video') {
+        // 视频文件格式：标题_分辨率.扩展名
+        return `${cleanTitle}_${cleanResolution}.${extension}`;
+    } else {
+        // 音频文件格式：标题.扩展名
+        return `${cleanTitle}.${extension}`;
+    }
 }
 
 function sanitizeFilename(filename) {
@@ -1861,7 +1867,7 @@ function triggerStreamDownload(url, type, formatId, resolution, title, optionEle
     
     const downloadUrl = `/download-stream?${new URLSearchParams(downloadParams).toString()}`;
     
-    // 生成带时间戳的文件名
+    // 生成统一格式的文件名
     let extension = '.mp4'; // 默认视频扩展名
     if (type === 'audio') {
         if (optionElement && optionElement.dataset.audioFormat) {
@@ -1872,8 +1878,14 @@ function triggerStreamDownload(url, type, formatId, resolution, title, optionEle
     }
     
     const safeTitle = sanitizeFilename(title || 'download');
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-    const filename = `${safeTitle}_${resolution}_${timestamp}${extension}`;
+    let filename;
+    if (type === 'video') {
+        // 视频文件格式：标题_分辨率.扩展名
+        filename = `${safeTitle}_${resolution}${extension}`;
+    } else {
+        // 音频文件格式：标题.扩展名
+        filename = `${safeTitle}${extension}`;
+    }
     
     triggerBrowserDownload(downloadUrl, filename);
 }

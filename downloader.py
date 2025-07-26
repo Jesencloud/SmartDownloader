@@ -129,17 +129,24 @@ class Downloader:
 
         return sanitized
 
-    def _update_progress(self, message: str, progress: int, eta_seconds: int = 0, speed: str = ""):
+    def _update_progress(
+        self, message: str, progress: int, eta_seconds: int = 0, speed: str = ""
+    ):
         """更新下载进度"""
-        log.debug(f"Progress update: {progress}% - {message} (ETA: {eta_seconds}s, 速度: {speed})")
-        
+        log.debug(
+            f"Progress update: {progress}% - {message} (ETA: {eta_seconds}s, 速度: {speed})"
+        )
+
         # 记录最后的进度值，供Rich进度监控使用
         self._last_celery_progress = progress
-        
+
         if self.progress_callback:
             try:
                 # 支持扩展的进度回调，包含ETA和速度信息
-                if hasattr(self.progress_callback, '__code__') and self.progress_callback.__code__.co_argcount > 3:
+                if (
+                    hasattr(self.progress_callback, "__code__")
+                    and self.progress_callback.__code__.co_argcount > 3
+                ):
                     self.progress_callback(message, progress, eta_seconds, speed)
                 else:
                     self.progress_callback(message, progress)
@@ -280,7 +287,7 @@ class Downloader:
                         progress_monitor_task = asyncio.create_task(
                             self._monitor_rich_progress(progress, task_id)
                         )
-                    
+
                     try:
                         result = await self.subprocess_manager.execute_with_progress(
                             cmd, progress, task_id, timeout=timeout
@@ -337,51 +344,51 @@ class Downloader:
         last_percentage = -1
         last_update_time = 0
         update_interval = 0.5  # 每500ms检查一次
-        
+
         # 获取当前Celery进度作为起始点，避免进度重置
         try:
-            current_celery_progress = getattr(self, '_last_celery_progress', 0)
-        except:
+            current_celery_progress = getattr(self, "_last_celery_progress", 0)
+        except Exception:
             current_celery_progress = 0
-        
+
         try:
             while True:
                 task = progress.tasks[task_id]
                 if task.total and task.total > 0:
                     rich_percentage = int((task.completed / task.total) * 100)
-                    
+
                     # 将Rich进度映射到剩余的Celery进度空间
                     # 如果当前Celery进度是20%，那么Rich的0-100%映射到20-100%
                     remaining_space = 100 - current_celery_progress
-                    adjusted_percentage = current_celery_progress + int((rich_percentage / 100) * remaining_space)
-                    
+                    adjusted_percentage = current_celery_progress + int(
+                        (rich_percentage / 100) * remaining_space
+                    )
+
                     current_time = asyncio.get_event_loop().time()
-                    
-                    # 检查是否需要更新  
-                    if (adjusted_percentage != last_percentage and 
-                        current_time - last_update_time >= update_interval):
-                        
+
+                    # 检查是否需要更新
+                    if (
+                        adjusted_percentage != last_percentage
+                        and current_time - last_update_time >= update_interval
+                    ):
                         # 从Rich任务中获取ETA和速度信息
                         eta_seconds = 0
                         speed = ""
-                        
-                        if hasattr(task, 'fields') and task.fields:
-                            eta_seconds = task.fields.get('eta_seconds', 0)
-                            speed = task.fields.get('speed', '')
-                        
+
+                        if hasattr(task, "fields") and task.fields:
+                            eta_seconds = task.fields.get("eta_seconds", 0)
+                            speed = task.fields.get("speed", "")
+
                         # 调用进度回调
                         self._update_progress(
-                            "正在下载中", 
-                            adjusted_percentage, 
-                            eta_seconds, 
-                            speed
+                            "正在下载中", adjusted_percentage, eta_seconds, speed
                         )
-                        
+
                         last_percentage = adjusted_percentage
                         last_update_time = current_time
-                
+
                 await asyncio.sleep(update_interval)
-                
+
         except asyncio.CancelledError:
             log.debug("进度监控任务已取消")
             raise
@@ -490,7 +497,7 @@ class Downloader:
 
             self._update_progress("正在解析格式信息", 10)
 
-            # 2. 根据 format_id 查找确切的分辨率
+            # 2. 根据 format_id 查找确切的分辨率，如果失败则使用传递的 resolution 参数
             resolution_suffix = ""
             if format_id and "formats" in video_info:
                 # Find the selected format to get its exact resolution
@@ -510,6 +517,17 @@ class Downloader:
                     resolution_suffix = (
                         f"_{selected_format['width']}x{selected_format['height']}"
                     )
+
+            # 如果无法从format_id获取分辨率，但有resolution参数，则使用它
+            if not resolution_suffix and resolution:
+                # resolution 可能是 "1920x1080" 格式，直接使用
+                if "x" in resolution and resolution != "audio":
+                    resolution_suffix = f"_{resolution}"
+                    log.info(f"使用传递的分辨率参数: {resolution}")
+                elif resolution.endswith("p") and resolution != "audio":
+                    # 处理如 "1080p" 格式
+                    resolution_suffix = f"_{resolution}"
+                    log.info(f"使用传递的分辨率参数: {resolution}")
 
             # 3. 组合成最终的文件前缀
             file_prefix = f"{self._sanitize_filename(video_title)}{resolution_suffix}"
@@ -753,6 +771,17 @@ class Downloader:
                         f"_{selected_format['width']}x{selected_format['height']}"
                     )
 
+            # 如果无法从format_id获取分辨率，但有resolution参数，则使用它
+            if not resolution_suffix and resolution:
+                # resolution 可能是 "1920x1080" 格式，直接使用
+                if "x" in resolution and resolution != "audio":
+                    resolution_suffix = f"_{resolution}"
+                    log.info(f"智能下载使用传递的分辨率参数: {resolution}")
+                elif resolution.endswith("p") and resolution != "audio":
+                    # 处理如 "1080p" 格式
+                    resolution_suffix = f"_{resolution}"
+                    log.info(f"智能下载使用传递的分辨率参数: {resolution}")
+
             file_prefix = f"{self._sanitize_filename(video_title)}{resolution_suffix}"
 
         except (StopAsyncIteration, DownloaderException) as e:
@@ -876,7 +905,8 @@ class Downloader:
                 self._update_progress("使用备用信息", 10)
 
             sanitized_title = self._sanitize_filename(video_title)
-            file_prefix = f"{sanitized_title}_{audio_format}"
+            # 音频文件不使用格式后缀作为前缀，只使用标题
+            file_prefix = sanitized_title
             log.info(f"使用文件前缀: {file_prefix}")
             self._update_progress("准备音频下载", 15)
 
@@ -965,7 +995,7 @@ class Downloader:
                 # 主动验证并查找输出文件
                 preferred_extensions = (
                     ".m4a",
-                    ".mp4", 
+                    ".mp4",
                     ".webm",
                     ".opus",
                     ".ogg",
