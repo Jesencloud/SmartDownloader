@@ -216,28 +216,36 @@ jobs:
        echo "Checking worker startup logs..."
        if [ -f celery_worker.log ]; then
          echo "--- Current worker log ---"
-         cat celery_worker.log
+         tail -n 20 celery_worker.log
          echo "--- End of worker log ---"
        fi
        
        for i in {1..25}; do
          echo "Attempt $i/25: Testing Celery worker connectivity..."
          
-         # 使用简单的ping测试，超时时间较短
-         if timeout 10 python -m celery -A web.celery_app -b redis://localhost:6379/0 inspect ping --timeout 5 2>/dev/null | grep -q "e2e-worker@"; then
+         # 使用更长的超时时间和更宽松的检测条件
+         echo "Testing ping command..."
+         PING_RESULT=$(timeout 15 python -m celery -A web.celery_app -b redis://localhost:6379/0 inspect ping --timeout 10 2>&1 || echo "ping_failed")
+         echo "Ping result: $PING_RESULT"
+         
+         # 检查是否有任何worker响应（不仅仅是特定主机名）
+         if echo "$PING_RESULT" | grep -E "(pong|ready)" > /dev/null; then
            echo "✅ Celery worker is responsive!"
            
            # 验证worker注册的队列
            echo "Checking registered queues..."
-           if timeout 10 python -m celery -A web.celery_app -b redis://localhost:6379/0 inspect active_queues --timeout 5 2>/dev/null | grep -E "celery"; then
+           QUEUE_RESULT=$(timeout 15 python -m celery -A web.celery_app -b redis://localhost:6379/0 inspect active_queues --timeout 10 2>&1 || echo "queue_check_failed")
+           echo "Queue result: $QUEUE_RESULT"
+           
+           if echo "$QUEUE_RESULT" | grep -E "celery" > /dev/null; then
              echo "✅ Worker is monitoring the celery queue."
-             exit 0
            else
              echo "⚠️ Worker responsive but celery queue not found. Continuing anyway..."
-             exit 0
            fi
+           exit 0
          else
            echo "Worker not responsive yet (attempt $i/25)"
+           echo "Ping result was: $PING_RESULT"
            
            # 显示最新的日志
            if [ -f celery_worker.log ]; then
@@ -265,6 +273,8 @@ jobs:
        cat celery_worker.log || echo "No worker log found"
        echo "--- Final connectivity test ---"
        timeout 15 python -m celery -A web.celery_app -b redis://localhost:6379/0 inspect ping --timeout 10 || true
+       echo "--- Final Redis status ---"
+       redis-cli -h localhost ping || true
        exit 1
 
     - name: Run end-to-end tests

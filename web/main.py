@@ -10,7 +10,6 @@ from urllib.parse import urlparse
 import subprocess
 import json
 import asyncio
-import time
 from cachetools import TTLCache, cached
 import sys
 import os
@@ -56,6 +55,7 @@ class DownloadRequest(BaseModel):
     resolution: str = Field(
         "", description="The resolution of the video (e.g., '1080p60')."
     )
+    title: str = Field("", description="The title of the video/audio.")
 
 
 class CancelRequest(BaseModel):
@@ -614,6 +614,7 @@ async def start_download(request: DownloadRequest):
         download_type=request.download_type,
         format_id=request.format_id,
         resolution=request.resolution,
+        title=request.title,
     )
     return {"task_id": task.id, "status": "pending"}
 
@@ -629,7 +630,7 @@ async def download_stream(
     audio_format: str = "mp3",  # 添加音频格式参数，默认为mp3保持向后兼容
 ):
     log.info(
-        f"Stream download request: {url}, format_id: {format_id}, type: {download_type}, audio_format: {audio_format}"
+        f"Stream download request: {url}, format_id: {format_id}, type: {download_type}, resolution: '{resolution}', audio_format: {audio_format}"
     )
 
     # 验证URL安全性
@@ -768,63 +769,75 @@ async def download_stream(
             """改进的文件名清理函数，使用配置文件中的长度限制"""
             if not title_str:
                 return ""
-            
+
             # 只移除文件系统绝对不支持的字符，保留其他所有字符
             # Windows/MacOS/Linux 都不支持的字符
             forbidden_chars = {
-                '<': '＜',  # 替换为全角字符
-                '>': '＞',
-                ':': '：',
+                "<": "＜",  # 替换为全角字符
+                ">": "＞",
+                ":": "：",
                 '"': '"',
-                '/': '／',
-                '\\': '＼',
-                '|': '｜',
-                '?': '？',
-                '*': '＊'
+                "/": "／",
+                "\\": "＼",
+                "|": "｜",
+                "?": "？",
+                "*": "＊",
             }
-            
+
             for forbidden, replacement in forbidden_chars.items():
                 title_str = title_str.replace(forbidden, replacement)
-            
+
             # 只移除控制字符（保留换行符和制表符转为空格）
-            title_str = ''.join(
-                ' ' if char in '\n\t\r' else char 
-                for char in title_str 
-                if ord(char) >= 32 or char in '\n\t\r'
+            title_str = "".join(
+                " " if char in "\n\t\r" else char
+                for char in title_str
+                if ord(char) >= 32 or char in "\n\t\r"
             )
-            
+
             # 清理多余的空格但保留标点
-            title_str = ' '.join(title_str.split())  # 合并多个空格为一个
+            title_str = " ".join(title_str.split())  # 合并多个空格为一个
             title_str = title_str.strip()  # 只移除首尾空格
-            
+
             # 使用配置文件中的长度限制
             max_length = config.file_processing.filename_max_length
             if len(title_str) > max_length:
                 # 改进的截断策略：优先保留前面的内容，因为通常标题的前半部分更重要
                 suffix = config.file_processing.filename_truncate_suffix
-                
+
                 # 计算可用的主要内容长度
                 available_length = max_length - len(suffix)
-                
+
                 if available_length > 20:  # 确保有足够空间保留有意义的内容
                     # 尝试在合适的位置截断（句号、问号、感叹号等）
-                    truncate_chars = ['。', '！', '？', '.', '!', '?', '】', ')', ']', '；', ';']
+                    truncate_chars = [
+                        "。",
+                        "！",
+                        "？",
+                        ".",
+                        "!",
+                        "?",
+                        "】",
+                        ")",
+                        "]",
+                        "；",
+                        ";",
+                    ]
                     truncated = False
-                    
+
                     # 在可用长度的80%-100%范围内寻找截断点
                     search_start = int(available_length * 0.8)
                     for i in range(available_length, search_start, -1):
                         if i < len(title_str) and title_str[i] in truncate_chars:
-                            title_str = title_str[:i+1] + suffix
+                            title_str = title_str[: i + 1] + suffix
                             truncated = True
                             break
-                    
+
                     if not truncated:
                         # 如果没找到合适的标点截断点，尝试在空格处截断
                         truncate_at = available_length
-                        if ' ' in title_str[:truncate_at]:
+                        if " " in title_str[:truncate_at]:
                             # 找到最后一个空格位置
-                            last_space = title_str.rfind(' ', 0, truncate_at)
+                            last_space = title_str.rfind(" ", 0, truncate_at)
                             if last_space > available_length * 0.7:  # 确保不会截断太多
                                 title_str = title_str[:last_space] + suffix
                             else:
@@ -834,102 +847,106 @@ async def download_stream(
                 else:
                     # 如果配置的长度过短，强制截断
                     title_str = title_str[:available_length] + suffix
-            
+
             return title_str
-        
+
         clean_title = sanitize_filename(title)
-        
+
         # 添加文件名处理日志
-        log.info(f"文件名处理: '{title}' → '{clean_title}' (max_length: {config.file_processing.filename_max_length})")
-        
+        log.info(
+            f"文件名处理: '{title}' → '{clean_title}' (max_length: {config.file_processing.filename_max_length})"
+        )
+
         # If the cleaned title is empty or too short, use a default
         if not clean_title or len(clean_title) < 2:
             clean_title = "video" if download_type == "video" else "audio"
             log.info(f"使用默认文件名: '{clean_title}'")
 
         # Create a safe filename - unified format for both video and audio
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        
         if download_type == "video":
-            # 视频文件包含分辨率和时间戳
-            filename = f"{clean_title}_{resolution}_{timestamp}.{file_extension}"
+            # 视频文件包含分辨率，格式：标题_分辨率.扩展名
+            log.info(f"视频下载 - 分辨率参数: '{resolution}', 标题: '{clean_title}'")
+            filename = f"{clean_title}_{resolution}.{file_extension}"
         else:
-            # 音频文件也包含时间戳，确保唯一性和格式一致性
-            filename = f"{clean_title}_{timestamp}.{file_extension}"
-        
+            # 音频文件不包含分辨率，格式：标题.扩展名
+            log.info(f"音频下载 - 标题: '{clean_title}'")
+            filename = f"{clean_title}.{file_extension}"
+
         log.info(f"生成完整文件名: '{filename}'")
 
         # 使用RFC 6266标准处理Unicode文件名
         import urllib.parse
-        
+
         # 对文件名进行URL编码以支持Unicode字符
-        encoded_filename = urllib.parse.quote(filename, safe='')
-        
+        encoded_filename = urllib.parse.quote(filename, safe="")
+
         # 创建符合RFC 6266的Content-Disposition头
         # 改进的ASCII备用文件名生成策略
         def create_ascii_safe_filename(original_filename):
             """为包含Unicode字符的文件名创建ASCII兼容的备用文件名"""
             # 分离文件名和扩展名
             name_part = original_filename
-            ext_part = ''
-            if '.' in original_filename:
-                name_part = original_filename.rsplit('.', 1)[0]
-                ext_part = '.' + original_filename.rsplit('.', 1)[1]
-            
+            ext_part = ""
+            if "." in original_filename:
+                name_part = original_filename.rsplit(".", 1)[0]
+                ext_part = "." + original_filename.rsplit(".", 1)[1]
+
             # 策略1: 尽可能保留ASCII字符和数字
             import re
+
             # 提取所有ASCII字母、数字、基本符号和空格
-            ascii_pattern = r'[a-zA-Z0-9\s\-_\(\)\[\]&+\.\,\!\?]+' 
+            ascii_pattern = r"[a-zA-Z0-9\s\-_\(\)\[\]&+\.\,\!\?]+"
             ascii_parts = re.findall(ascii_pattern, name_part)
-            
+
             if ascii_parts:
                 # 合并所有ASCII部分
-                ascii_combined = ''.join(ascii_parts).strip()
+                ascii_combined = "".join(ascii_parts).strip()
                 # 清理多余的空格和符号
-                ascii_combined = re.sub(r'\s+', ' ', ascii_combined)  # 合并空格
-                ascii_combined = re.sub(r'[-_]{2,}', '-', ascii_combined)  # 合并连字符
-                ascii_combined = ascii_combined.strip(' -_')  # 移除首尾的空格和符号
-                
+                ascii_combined = re.sub(r"\s+", " ", ascii_combined)  # 合并空格
+                ascii_combined = re.sub(r"[-_]{2,}", "-", ascii_combined)  # 合并连字符
+                ascii_combined = ascii_combined.strip(" -_")  # 移除首尾的空格和符号
+
                 # 检查是否有足够的有意义内容
-                meaningful_chars = re.sub(r'[\s\-_\(\)\[\]]+', '', ascii_combined)
+                meaningful_chars = re.sub(r"[\s\-_\(\)\[\]]+", "", ascii_combined)
                 if len(meaningful_chars) >= 3:  # 至少3个有意义的字符
                     # 控制ASCII文件名长度，但比原来更宽松
                     max_ascii_length = 50  # 最多50字符
                     if len(ascii_combined) > max_ascii_length:
                         # 尝试在单词边界截断
                         truncated = ascii_combined[:max_ascii_length]
-                        if ' ' in truncated:
-                            truncated = truncated.rsplit(' ', 1)[0]
+                        if " " in truncated:
+                            truncated = truncated.rsplit(" ", 1)[0]
                         ascii_combined = truncated
-                    
+
                     if ascii_combined and len(ascii_combined) >= 3:
                         log.info(f"ASCII备用文件名策略1成功: 提取到 '{ascii_combined}'")
                         return ascii_combined + ext_part
-            
-            # 策略2: 回退到时间戳文件名
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+            # 策略2: 回退到通用文件名
             if download_type == "video":
-                fallback_name = f"video_{timestamp}"
+                fallback_name = f"video_{resolution}"
             else:
-                fallback_name = f"audio_{timestamp}"
-            
-            log.info(f"ASCII备用文件名策略2: 时间戳回退 '{fallback_name}'")
+                fallback_name = "audio"
+
+            log.info(f"ASCII备用文件名策略2: 通用名称回退 '{fallback_name}'")
             return fallback_name + ext_part
-        
+
         # 检查文件名是否包含非ASCII字符
         try:
-            filename.encode('ascii')
+            filename.encode("ascii")
             # 如果编码成功，说明都是ASCII字符，直接使用
             safe_filename = filename
             log.info(f"文件名为纯ASCII字符，直接使用: '{safe_filename}'")
         except UnicodeEncodeError:
             # 包含非ASCII字符，生成ASCII兼容的备用文件名
             safe_filename = create_ascii_safe_filename(filename)
-            log.info(f"文件名包含Unicode字符，生成ASCII备用: '{filename}' → '{safe_filename}'")
-        
+            log.info(
+                f"文件名包含Unicode字符，生成ASCII备用: '{filename}' → '{safe_filename}'"
+            )
+
         # 构建完整的Content-Disposition头，支持Unicode
-        content_disposition = f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded_filename}'
-        
+        content_disposition = f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{encoded_filename}"
+
         log.info(f"HTTP文件名头部: {content_disposition}")
 
         return StreamingResponse(
