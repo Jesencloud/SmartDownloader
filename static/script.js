@@ -1365,14 +1365,9 @@ function pollTaskStatus(taskId, optionElement) {
         
         const downloadUrl = `/download-stream?${new URLSearchParams(downloadParams).toString()}`;
         
-        // 构建文件名
-        let filename;
-        if (isVideo) {
-            filename = `${title}_${resolution}.mp4`;
-        } else {
-            const audioFormat = optionElement.dataset.audioFormat || 'm4a';
-            filename = `${title}.${audioFormat}`;
-        }
+        // 文件名由后端处理，前端不再构建
+        // 后端会在HTTP响应头中设置正确的文件名（包括Unicode支持和智能截断）
+        const filename = 'download'; // 临时文件名，实际由后端Content-Disposition头决定
         
         // 触发浏览器下载
         triggerBrowserDownload(downloadUrl, filename);

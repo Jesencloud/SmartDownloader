@@ -847,14 +847,15 @@ async def download_stream(
             clean_title = "video" if download_type == "video" else "audio"
             log.info(f"使用默认文件名: '{clean_title}'")
 
-        # Create a safe filename - different format for video and audio
+        # Create a safe filename - unified format for both video and audio
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        
         if download_type == "video":
             # 视频文件包含分辨率和时间戳
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
             filename = f"{clean_title}_{resolution}_{timestamp}.{file_extension}"
         else:
-            # 音频文件使用更简洁的格式，只包含标题
-            filename = f"{clean_title}.{file_extension}"
+            # 音频文件也包含时间戳，确保唯一性和格式一致性
+            filename = f"{clean_title}_{timestamp}.{file_extension}"
         
         log.info(f"生成完整文件名: '{filename}'")
 
@@ -893,7 +894,7 @@ async def download_stream(
                 meaningful_chars = re.sub(r'[\s\-_\(\)\[\]]+', '', ascii_combined)
                 if len(meaningful_chars) >= 3:  # 至少3个有意义的字符
                     # 控制ASCII文件名长度，但比原来更宽松
-                    max_ascii_length = 50  # 增加到50字符
+                    max_ascii_length = 50  # 最多50字符
                     if len(ascii_combined) > max_ascii_length:
                         # 尝试在单词边界截断
                         truncated = ascii_combined[:max_ascii_length]
@@ -905,45 +906,14 @@ async def download_stream(
                         log.info(f"ASCII备用文件名策略1成功: 提取到 '{ascii_combined}'")
                         return ascii_combined + ext_part
             
-            # 策略2: 如果ASCII内容不足，尝试音译或使用通用描述
-            # 检查是否包含常见的中文视频关键词，生成描述性文件名
-            chinese_keywords = {
-                '为什么': 'why',
-                '怎么': 'how', 
-                '什么': 'what',
-                '中国': 'china',
-                '日本': 'japan',
-                '美国': 'usa',
-                '韩国': 'korea',
-                '印度': 'india',
-                '俄罗斯': 'russia',
-                '产业链': 'industry',
-                '分析': 'analysis',
-                '解释': 'explanation',
-                '细思极恐': 'thoughtprovoking'
-            }
-            
-            translated_parts = []
-            for chinese, english in chinese_keywords.items():
-                if chinese in name_part:
-                    translated_parts.append(english)
-            
-            if translated_parts:
-                # 限制翻译部分的数量，避免文件名过长
-                keyword_filename = '_'.join(translated_parts[:3])
-                timestamp = time.strftime("%m%d_%H%M")
-                descriptive_name = f"{keyword_filename}_{timestamp}"
-                log.info(f"ASCII备用文件名策略2: 关键词翻译 '{descriptive_name}'")
-                return descriptive_name + ext_part
-            
-            # 策略3: 回退到时间戳文件名
+            # 策略2: 回退到时间戳文件名
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             if download_type == "video":
                 fallback_name = f"video_{timestamp}"
             else:
                 fallback_name = f"audio_{timestamp}"
             
-            log.info(f"ASCII备用文件名策略3: 时间戳回退 '{fallback_name}'")
+            log.info(f"ASCII备用文件名策略2: 时间戳回退 '{fallback_name}'")
             return fallback_name + ext_part
         
         # 检查文件名是否包含非ASCII字符
