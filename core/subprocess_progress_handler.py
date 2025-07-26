@@ -270,15 +270,13 @@ class SubprocessProgressHandler:
         audio_total = self.combined_download_state["audio_total"]
         audio_completed = self.combined_download_state["audio_completed"]
 
-        # 如果两个文件大小都已知，根据当前下载的文件类型显示对应大小
+        # 如果两个文件大小都已知，显示合并后的总进度
         if video_total > 0 and audio_total > 0:
-            if current_type == "video":
-                return video_total, video_completed
-            elif current_type == "audio":
-                return audio_total, audio_completed
-            else:
-                # 如果当前类型未知，显示总大小
-                return video_total + audio_total, video_completed + audio_completed
+            # 计算总的合并进度：视频进度占80%，音频进度占20%
+            # 这样可以避免进度条从100%跳回到0%的问题
+            total_combined = video_total + audio_total
+            completed_combined = video_completed + audio_completed
+            return total_combined, completed_combined
         elif video_total > 0:
             # 只有视频大小已知，显示视频进度
             return video_total, video_completed

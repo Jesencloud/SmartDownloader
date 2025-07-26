@@ -323,7 +323,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // By setting the title to dynamic data, it's no longer a translatable string.
     // We must remove the attribute to prevent switchLanguage from overwriting it.
     mainHeading.removeAttribute('data-translate');
-    mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left';// --- 定义颜色主题 ---
+    mainHeading.className = 'text-xl font-bold text-white mb-4 break-words text-left leading-tight video-title';
+    
+    // --- 定义颜色主题 ---
     // 为不同选项设置不同的基色，但悬停时都统一变为紫色
     const hoverColor = 'hover:bg-purple-500 hover:bg-opacity-50';
     const defaultColorClass = `bg-gray-800 ${hoverColor}`;

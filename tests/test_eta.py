@@ -3,12 +3,14 @@
 测试ETA信息传递的脚本
 """
 
+import pytest
 import requests
 import time
 
 BASE_URL = "http://localhost:8000"
 
 
+@pytest.mark.e2e
 def test_eta_progress():
     """测试ETA信息是否被正确传递"""
     print("🧪 测试ETA信息传递...")

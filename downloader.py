@@ -137,6 +137,24 @@ class Downloader:
             f"Progress update: {progress}% - {message} (ETA: {eta_seconds}s, 速度: {speed})"
         )
 
+        # 强化防止进度回退：如果新进度小于上次进度，且不是明确的重置操作，则跳过更新
+        last_progress = getattr(self, "_last_celery_progress", 0)
+
+        # 只允许以下情况的进度更新：
+        # 1. 进度增加
+        # 2. 进度为100%（完成状态）
+        # 3. 进度为0%且上次进度也很低（<20%，允许早期重置）
+        # 4. 明确的状态消息变化（如从"下载中"变为"合并中"）
+        if progress < last_progress:
+            is_early_reset = progress == 0 and last_progress < 20
+            is_completion = progress == 100
+
+            if not (is_early_reset or is_completion):
+                log.debug(
+                    f"阻止进度回退: {progress}% < {last_progress}% (消息: {message})"
+                )
+                return
+
         # 记录最后的进度值，供Rich进度监控使用
         self._last_celery_progress = progress
 
@@ -351,6 +369,9 @@ class Downloader:
         except Exception:
             current_celery_progress = 0
 
+        # 强化防回退：记录监控期间的最高进度
+        max_progress_during_monitoring = current_celery_progress
+
         try:
             while True:
                 task = progress.tasks[task_id]
@@ -358,17 +379,22 @@ class Downloader:
                     rich_percentage = int((task.completed / task.total) * 100)
 
                     # 将Rich进度映射到剩余的Celery进度空间
-                    # 如果当前Celery进度是20%，那么Rich的0-100%映射到20-100%
+                    # 如果当前Celery进度是70%，那么Rich的0-100%映射到70-100%
                     remaining_space = 100 - current_celery_progress
-                    adjusted_percentage = current_celery_progress + int(
+                    base_adjusted_percentage = current_celery_progress + int(
                         (rich_percentage / 100) * remaining_space
+                    )
+
+                    # 强化防回退：确保调整后的进度不会低于监控期间的最高进度
+                    adjusted_percentage = max(
+                        base_adjusted_percentage, max_progress_during_monitoring
                     )
 
                     current_time = asyncio.get_event_loop().time()
 
-                    # 检查是否需要更新
+                    # 检查是否需要更新（只有进度增加时才更新）
                     if (
-                        adjusted_percentage != last_percentage
+                        adjusted_percentage > last_percentage
                         and current_time - last_update_time >= update_interval
                     ):
                         # 从Rich任务中获取ETA和速度信息
@@ -385,6 +411,7 @@ class Downloader:
                         )
 
                         last_percentage = adjusted_percentage
+                        max_progress_during_monitoring = adjusted_percentage
                         last_update_time = current_time
 
                 await asyncio.sleep(update_interval)
@@ -646,7 +673,7 @@ class Downloader:
             log.info(f"✅ 视频部分下载成功: {video_file.name}")
 
             # 2. 下载音频部分
-            self._update_progress("下载音频流", 60)
+            self._update_progress("下载音频流", 70)  # 调整为70%，避免与音频进度冲突
             async with _progress_semaphore:
                 with Progress(
                     SpinnerColumn(spinner_name="line"),
@@ -684,7 +711,7 @@ class Downloader:
 
             # 3. 手动合并
             if video_file and audio_file:
-                self._update_progress("合并音视频", 75)
+                self._update_progress("合并音视频", 85)  # 调整为85%
                 merged_file_path = self.download_folder / f"{file_prefix}.mp4"
                 log.info(
                     f"🔧 正在手动合并: {video_file.name} + {audio_file.name} -> {merged_file_path.name}"
@@ -703,7 +730,7 @@ class Downloader:
 
             # 如果只有视频文件，作为最后手段返回
             if video_file:
-                self._update_progress("处理视频文件", 80)
+                self._update_progress("处理视频文件", 90)  # 调整为90%
                 log.warning("备用策略：无法合并，返回仅视频文件。")
                 # 重命名视频文件以匹配最终文件名
                 final_video_path = self.download_folder / f"{file_prefix}.mp4"

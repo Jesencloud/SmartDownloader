@@ -43,6 +43,9 @@ log = logging.getLogger(__name__)
 # It will store up to 1024 recent results.
 cache = TTLCache(maxsize=1024, ttl=3600)
 
+# 专门的视频信息缓存，用于在视频和音频请求间共享数据
+video_info_cache = TTLCache(maxsize=512, ttl=3600)  # 1小时缓存
+
 # --- Pydantic Models ---
 
 
@@ -138,11 +141,69 @@ def get_ytdlp_binary_path() -> Path:
     return BASE_DIR / "bin" / binary_name
 
 
+def get_cached_video_info(url: str, download_type: str = "all") -> Optional[dict]:
+    """
+    智能获取缓存的视频信息，支持跨类型共享
+
+    Args:
+        url: 视频URL
+        download_type: 请求类型 ("video", "audio", "all")
+
+    Returns:
+        缓存的视频信息，如果没有缓存则返回None
+    """
+    # 先检查完整信息缓存（download_type="all"）
+    full_cache_key = f"{url}:all"
+    if full_cache_key in video_info_cache:
+        log.info(f"命中完整视频信息缓存: {url}")
+        return video_info_cache[full_cache_key]
+
+    # 如果请求音频，检查是否有视频缓存可以复用
+    if download_type == "audio":
+        video_cache_key = f"{url}:video"
+        if video_cache_key in video_info_cache:
+            log.info(f"音频请求复用视频缓存: {url}")
+            return video_info_cache[video_cache_key]
+
+    # 如果请求视频，检查是否有音频缓存可以复用
+    if download_type == "video":
+        audio_cache_key = f"{url}:audio"
+        if audio_cache_key in video_info_cache:
+            log.info(f"视频请求复用音频缓存: {url}")
+            return video_info_cache[audio_cache_key]
+
+    # 检查当前请求类型的缓存
+    current_cache_key = f"{url}:{download_type}"
+    if current_cache_key in video_info_cache:
+        log.info(f"命中当前类型缓存: {url}:{download_type}")
+        return video_info_cache[current_cache_key]
+
+    return None
+
+
+def set_video_info_cache(url: str, download_type: str, video_info: dict):
+    """
+    设置视频信息缓存
+
+    Args:
+        url: 视频URL
+        download_type: 请求类型
+        video_info: 视频信息数据
+    """
+    cache_key = f"{url}:{download_type}"
+    video_info_cache[cache_key] = video_info
+    log.debug(f"设置视频信息缓存: {cache_key}")
+
+
 @cached(cache)
-def fetch_video_info_sync(url: str) -> dict:
+def fetch_video_info_sync(url: str, download_type: str = "all") -> dict:
     """
     This is a SYNCHRONOUS and BLOCKING function that fetches video info.
     Its results are cached by @cached. It should be run in a thread.
+
+    Args:
+        url: Video URL to fetch info for
+        download_type: "video", "audio", or "all" to optimize parsing speed
     """
     try:
         cmd = [
@@ -151,11 +212,49 @@ def fetch_video_info_sync(url: str) -> dict:
             "--no-download",
             "--no-playlist",
             "--socket-timeout",
-            "30",
-            url,
+            "20",  # 减少超时时间从30s到20s
         ]
+
+        # 优化：根据下载类型跳过不必要的解析步骤来提升速度
+        if download_type == "audio":
+            # 音频模式：跳过缩略图、字幕和其他视频相关内容解析
+            cmd.extend(
+                [
+                    "--skip-download",
+                    "--no-write-thumbnail",
+                    "--no-write-subs",
+                    "--no-write-auto-subs",
+                    "--no-write-description",  # 跳过描述
+                    "--no-write-annotations",  # 跳过注释
+                ]
+            )
+        elif download_type == "video":
+            # 视频模式：跳过字幕但保留缩略图，跳过部分不必要内容
+            cmd.extend(
+                [
+                    "--skip-download",
+                    "--no-write-subs",
+                    "--no-write-auto-subs",
+                    "--no-write-annotations",  # 跳过注释
+                ]
+            )
+        # download_type == "all" 时使用默认设置
+
+        # 添加缓存优化
+        cmd.extend(
+            [
+                "--no-call-home"  # 禁用调用主页功能
+            ]
+        )
+
+        cmd.append(url)
+
         process = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60, check=True
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=True,  # 减少总超时时间
         )
         return json.loads(process.stdout)
     except subprocess.TimeoutExpired:
@@ -181,6 +280,7 @@ async def read_index():
 async def get_video_info(request: VideoInfoRequest):
     """
     Fetches video information using a cached, thread-safe helper function.
+    支持智能缓存共享，视频和音频请求可以复用已缓存的数据。
     """
     # --- URL安全验证 ---
     is_valid, error_msg = validate_url_security(request.url)
@@ -211,16 +311,33 @@ async def get_video_info(request: VideoInfoRequest):
     # --- End of Whitelist Enforcement ---
 
     try:
-        # Run the synchronous, cached function in a separate thread to avoid
-        # blocking the main FastAPI event loop.
-        # Provide backward compatibility for Python < 3.9
-        if sys.version_info >= (3, 9):
-            video_data_raw = await asyncio.to_thread(fetch_video_info_sync, request.url)
+        # 首先尝试从智能缓存获取数据
+        cached_data = get_cached_video_info(request.url, request.download_type)
+
+        if cached_data:
+            log.info(f"使用缓存的视频信息: {request.url} ({request.download_type})")
+            video_data_raw = cached_data
         else:
-            loop = asyncio.get_running_loop()
-            video_data_raw = await loop.run_in_executor(
-                None, fetch_video_info_sync, request.url
+            # 缓存未命中，获取新数据
+            log.info(
+                f"缓存未命中，获取新的视频信息: {request.url} ({request.download_type})"
             )
+
+            # Run the synchronous, cached function in a separate thread to avoid
+            # blocking the main FastAPI event loop.
+            # Provide backward compatibility for Python < 3.9
+            if sys.version_info >= (3, 9):
+                video_data_raw = await asyncio.to_thread(
+                    fetch_video_info_sync, request.url, request.download_type
+                )
+            else:
+                loop = asyncio.get_running_loop()
+                video_data_raw = await loop.run_in_executor(
+                    None, fetch_video_info_sync, request.url, request.download_type
+                )
+
+            # 将新获取的数据保存到智能缓存
+            set_video_info_cache(request.url, request.download_type, video_data_raw)
 
     except TimeoutError as e:
         raise HTTPException(status_code=408, detail=str(e))
@@ -240,6 +357,197 @@ async def get_video_info(request: VideoInfoRequest):
 
     formats = []
     raw_formats = video_data_raw.get("formats", [])
+
+    # 优化：根据下载类型提前过滤格式，减少后续处理开销
+    if request.download_type == "video":
+        # 视频模式：保留视频格式和必要的音频格式（用于合并）
+        original_count = len(video_data_raw.get("formats", []))
+
+        # 第一步：保留视频格式和音频格式
+        video_audio_formats = [
+            f
+            for f in raw_formats
+            if (
+                # 保留有视频内容的格式
+                f.get("vcodec") not in ("none", None, "audio only")
+                or (f.get("width") and f.get("height"))
+            )
+            or (
+                # 也保留纯音频格式（用于合并）
+                f.get("acodec") not in ("none", None, "video only")
+                and f.get("vcodec") in ("none", None, "audio only")
+            )
+        ]
+
+        # 第二步：优先选择mp4相关格式，并在每个分辨率中选择文件大小最小的
+        mp4_video_formats_raw = [
+            f
+            for f in video_audio_formats
+            if f.get("ext") == "mp4" and f.get("width") and f.get("height")
+        ]
+        mp4_audio_formats = [
+            f
+            for f in video_audio_formats
+            if f.get("ext") in ["mp4", "m4a"]
+            and not (f.get("width") and f.get("height"))
+        ]
+
+        # 对mp4视频格式按分辨率分组，并在每组中选择文件大小最小的格式
+        mp4_by_resolution = {}
+        for fmt in mp4_video_formats_raw:
+            resolution = f"{fmt.get('width')}x{fmt.get('height')}"
+            if resolution not in mp4_by_resolution:
+                mp4_by_resolution[resolution] = []
+            mp4_by_resolution[resolution].append(fmt)
+
+        # 为每个分辨率选择文件大小最小的mp4格式
+        mp4_video_formats = []
+        for resolution, formats in mp4_by_resolution.items():
+            # 将格式分为有文件大小和无文件大小两组
+            with_filesize = [
+                f for f in formats if f.get("filesize") or f.get("filesize_approx")
+            ]
+            without_filesize = [
+                f
+                for f in formats
+                if not (f.get("filesize") or f.get("filesize_approx"))
+            ]
+
+            if with_filesize:
+                # 选择文件大小最小的格式
+                best_format = min(
+                    with_filesize,
+                    key=lambda f: (f.get("filesize") or f.get("filesize_approx")),
+                )
+                mp4_video_formats.append(best_format)
+
+                # 记录选择的格式信息
+                filesize = best_format.get("filesize") or best_format.get(
+                    "filesize_approx"
+                )
+                log.info(
+                    f"分辨率 {resolution} 选择最小文件大小的mp4格式: {best_format.get('format_id')} ({filesize / 1000000:.2f}MB)"
+                )
+
+                # 如果有其他被跳过的格式，记录日志
+                if len(with_filesize) > 1:
+                    skipped_formats = [f for f in with_filesize if f != best_format]
+                    for skipped in skipped_formats:
+                        skipped_size = skipped.get("filesize") or skipped.get(
+                            "filesize_approx"
+                        )
+                        log.info(
+                            f"  跳过较大格式: {skipped.get('format_id')} ({skipped_size / 1000000:.2f}MB)"
+                        )
+            elif without_filesize:
+                # 如果都没有文件大小信息，选择第一个
+                mp4_video_formats.append(without_filesize[0])
+                log.info(
+                    f"分辨率 {resolution} 无文件大小信息，选择第一个mp4格式: {without_filesize[0].get('format_id')}"
+                )
+
+        if mp4_video_formats:
+            # 如果有mp4视频格式，优先使用mp4格式 + 必要的音频格式
+            raw_formats = mp4_video_formats + mp4_audio_formats
+            # 如果没有mp4音频，添加最佳音频格式用于合并
+            if not mp4_audio_formats:
+                audio_formats = [
+                    f
+                    for f in video_audio_formats
+                    if f.get("acodec") not in ("none", None, "video only")
+                    and f.get("vcodec") in ("none", None, "audio only")
+                ]
+                if audio_formats:
+                    best_audio = max(audio_formats, key=lambda f: f.get("abr", 0))
+                    raw_formats.append(best_audio)
+
+            log.info(f"视频模式优化：保留 {len(raw_formats)} 个优选mp4格式")
+        else:
+            # 如果没有mp4视频格式，使用所有视频和音频格式
+            raw_formats = video_audio_formats
+            log.info(f"视频模式混合：保留 {len(raw_formats)} 个格式")
+
+    elif request.download_type == "audio":
+        # 音频模式：优先保留高质量音频格式（m4a, aac, opus），过滤低质量格式
+        original_count = len(video_data_raw.get("formats", []))
+
+        # 第一步：只保留音频格式
+        audio_formats = [
+            f
+            for f in raw_formats
+            if (
+                # 条件A: 有有效的音频编解码器（包括unknown作为特殊情况）
+                (f.get("acodec") not in ("none", None, "video only"))
+                or
+                # 条件B: 特殊情况 - resolution明确标记为audio only
+                f.get("resolution") == "audio only"
+                or
+                # 条件C: format_id包含audio关键词（如hls-audio-*）
+                "audio" in str(f.get("format_id", "")).lower()
+            )
+            and (
+                # 满足音频特征条件之一
+                # 明确标记为仅音频的格式
+                f.get("vcodec") in ("none", None, "audio only")
+                or
+                # 或者没有视频分辨率的格式
+                (not f.get("width") or not f.get("height"))
+                or
+                # 或者是mp4格式的音频（某些网站的mp4音频可能有尺寸信息但实际是音频）
+                (
+                    f.get("ext") == "mp4"
+                    and (not f.get("vcodec") or f.get("vcodec") == "unknown")
+                )
+                or
+                # 或者是其他明确的音频格式
+                (
+                    f.get("ext") in ["m4a", "aac", "opus", "mp3", "ogg", "webm"]
+                    and f.get("acodec")
+                )
+                or
+                # 用户提示：resolution为audio only的是音频
+                f.get("resolution") == "audio only"
+                or
+                # format_note包含audio关键词
+                "audio" in str(f.get("format_note", "")).lower()
+                or
+                # format_id包含audio关键词（如hls-audio-*）
+                "audio" in str(f.get("format_id", "")).lower()
+            )
+        ]
+
+        log.info(
+            f"音频模式: 从 {original_count} 个原始格式过滤到 {len(audio_formats)} 个音频格式"
+        )
+
+        # Debug: 显示过滤后的音频格式分布
+        if audio_formats:
+            audio_ext_summary = {}
+            for f in audio_formats:
+                ext = f.get("ext", "unknown")
+                audio_ext_summary[ext] = audio_ext_summary.get(ext, 0) + 1
+            log.info(f"音频格式分布: {audio_ext_summary}")
+
+        # 第二步：按优先级选择音频格式（m4a > mp4 > aac > opus > mp3 > 其他）
+        preferred_audio_formats = []
+        format_priority = ["m4a", "mp4", "aac", "opus", "mp3"]
+
+        for preferred_ext in format_priority:
+            matching_formats = [
+                f for f in audio_formats if f.get("ext") == preferred_ext
+            ]
+            if matching_formats:
+                preferred_audio_formats.extend(matching_formats)
+                log.info(f"选择音频格式: {preferred_ext} ({len(matching_formats)} 个)")
+                break  # 找到优先格式就停止
+
+        if preferred_audio_formats:
+            raw_formats = preferred_audio_formats
+            log.info(f"音频模式优化：保留 {len(raw_formats)} 个优选音频格式")
+        else:
+            # 如果没有优选格式，使用所有音频格式
+            raw_formats = audio_formats
+            log.info(f"音频模式保守：保留 {len(raw_formats)} 个音频格式")
 
     if request.download_type == "video":
         # --- NEW: Unified video format processing logic ---
@@ -270,9 +578,36 @@ async def get_video_info(request: VideoInfoRequest):
                     # 排除明确标记为单一类型的流
                     if vcodec != "audio only" and acodec != "video only":
                         complete_formats_raw.append(f)
+
         for c_fmt in complete_formats_raw:
             filesize = c_fmt.get("filesize") or c_fmt.get("filesize_approx")
             is_approx = not c_fmt.get("filesize") and c_fmt.get("filesize_approx")
+
+            # 如果mp4格式没有文件大小信息，尝试从同分辨率的其他格式获取估算值
+            if filesize is None:
+                width = c_fmt.get("width")
+                height = c_fmt.get("height")
+
+                # 查找相同分辨率的其他格式作为文件大小估算参考
+                for alt_fmt in video_data_raw.get(
+                    "formats", []
+                ):  # 使用原始未过滤的格式列表
+                    if (
+                        alt_fmt.get("width") == width
+                        and alt_fmt.get("height") == height
+                        and alt_fmt.get("format_id") != c_fmt.get("format_id")
+                    ):
+                        alt_filesize = alt_fmt.get("filesize") or alt_fmt.get(
+                            "filesize_approx"
+                        )
+                        if alt_filesize:
+                            filesize = alt_filesize
+                            is_approx = True  # 标记为估算值
+                            log.info(
+                                f"mp4格式 {c_fmt.get('format_id')} 使用 {alt_fmt.get('format_id')} 的文件大小作为估算: {filesize / 1000000:.2f}MB"
+                            )
+                            break
+
             all_possible_formats.append(
                 VideoFormat(
                     format_id=c_fmt.get("format_id", ""),
@@ -309,28 +644,85 @@ async def get_video_info(request: VideoInfoRequest):
             best_audio_to_merge = max(audio_only_formats, key=lambda f: f.get("abr", 0))
 
             for v_fmt in video_only_formats:
-                video_size = v_fmt.get("filesize") or v_fmt.get("filesize_approx") or 0
-                audio_size = (
-                    best_audio_to_merge.get("filesize")
-                    or best_audio_to_merge.get("filesize_approx")
-                    or 0
-                )
-                total_size = video_size + audio_size
-
-                video_is_approx = not v_fmt.get("filesize") and v_fmt.get(
-                    "filesize_approx"
-                )
-                audio_is_approx = not best_audio_to_merge.get(
+                video_size = v_fmt.get("filesize") or v_fmt.get("filesize_approx")
+                audio_size = best_audio_to_merge.get(
                     "filesize"
-                ) and best_audio_to_merge.get("filesize_approx")
-                total_is_approx = bool(video_is_approx or audio_is_approx)
+                ) or best_audio_to_merge.get("filesize_approx")
+
+                # 如果mp4视频格式没有文件大小，尝试从同分辨率的其他格式估算
+                if video_size is None and v_fmt.get("ext") == "mp4":
+                    width = v_fmt.get("width")
+                    height = v_fmt.get("height")
+
+                    # 查找相同分辨率的其他视频格式作为估算参考
+                    # 优先级：mp4格式 > 其他格式
+                    candidate_formats = []
+                    for alt_fmt in video_data_raw.get(
+                        "formats", []
+                    ):  # 使用原始未过滤的格式列表
+                        if (
+                            alt_fmt.get("width") == width
+                            and alt_fmt.get("height") == height
+                            and alt_fmt.get("format_id") != v_fmt.get("format_id")
+                            and alt_fmt.get("vcodec") not in ("none", None)
+                        ):
+                            alt_video_size = alt_fmt.get("filesize") or alt_fmt.get(
+                                "filesize_approx"
+                            )
+                            if alt_video_size:
+                                candidate_formats.append(
+                                    {
+                                        "format": alt_fmt,
+                                        "size": alt_video_size,
+                                        "is_mp4": alt_fmt.get("ext") == "mp4",
+                                    }
+                                )
+
+                    if candidate_formats:
+                        # 优先选择mp4格式，如果没有mp4则选择第一个可用的格式
+                        mp4_candidates = [c for c in candidate_formats if c["is_mp4"]]
+                        if mp4_candidates:
+                            # 如果有mp4格式，选择第一个mp4格式
+                            best_candidate = mp4_candidates[0]
+                        else:
+                            # 如果没有mp4格式，选择第一个可用格式
+                            best_candidate = candidate_formats[0]
+
+                        video_size = best_candidate["size"]
+                        chosen_format = best_candidate["format"]
+                        format_type = (
+                            "mp4同格式"
+                            if best_candidate["is_mp4"]
+                            else f"{chosen_format.get('ext')}格式"
+                        )
+                        log.info(
+                            f"mp4视频格式 {v_fmt.get('format_id')} 使用 {chosen_format.get('format_id')} 的文件大小作为估算({format_type}): {video_size / 1000000:.2f}MB"
+                        )
+
+                # 只有当视频和音频都有文件大小时才计算总大小
+                if video_size is not None and audio_size is not None:
+                    total_size = video_size + audio_size
+                    # 计算是否为估算大小
+                    video_is_approx = not v_fmt.get("filesize") and (
+                        v_fmt.get("filesize_approx")
+                        or video_size
+                        != (v_fmt.get("filesize") or v_fmt.get("filesize_approx"))
+                    )
+                    audio_is_approx = not best_audio_to_merge.get(
+                        "filesize"
+                    ) and best_audio_to_merge.get("filesize_approx")
+                    total_is_approx = bool(video_is_approx or audio_is_approx)
+                else:
+                    # 如果任一格式没有文件大小信息，总大小设为None
+                    total_size = None
+                    total_is_approx = False
 
                 all_possible_formats.append(
                     VideoFormat(
                         format_id=f"{v_fmt['format_id']}+{best_audio_to_merge['format_id']}",
                         resolution=f"{v_fmt.get('width')}x{v_fmt.get('height')}",
                         ext="mp4",  # Merged format will be mp4
-                        filesize=total_size if total_size > 0 else None,
+                        filesize=total_size if total_size is not None else None,
                         filesize_is_approx=total_is_approx,
                         quality=f"{v_fmt.get('height')}p (需合并)",
                         vcodec=v_fmt.get("vcodec"),
@@ -350,7 +742,21 @@ async def get_video_info(request: VideoInfoRequest):
 
         final_formats = []
         for resolution, fmt_group in formats_by_resolution.items():
-            best_in_group = max(fmt_group, key=lambda f: f.filesize or 0)
+            # 改进选择逻辑：优先选择有文件大小的格式，然后按文件大小排序
+            # 将格式分为有文件大小和无文件大小两组
+            with_filesize = [f for f in fmt_group if f.filesize is not None]
+            without_filesize = [f for f in fmt_group if f.filesize is None]
+
+            if with_filesize:
+                # 如果有文件大小信息的格式，选择文件大小最大的
+                best_in_group = max(with_filesize, key=lambda f: f.filesize)
+            elif without_filesize:
+                # 如果都没有文件大小信息，选择第一个（通常是complete stream优先）
+                best_in_group = without_filesize[0]
+            else:
+                # 理论上不应该到这里，但为了安全起见
+                best_in_group = fmt_group[0]
+
             final_formats.append(best_in_group)
 
         # Part 4: Sort the final list by resolution height (descending)

@@ -4,6 +4,7 @@
 """
 
 import time
+from unittest.mock import patch
 
 import pytest
 from pathlib import Path
@@ -29,8 +30,18 @@ def create_test_files(base_path: Path):
     return len(test_files)
 
 
-@pytest.mark.e2e
-def test_lightweight_cleanup(client, tmp_path, monkeypatch):
+@pytest.mark.integration
+@patch("web.main.celery_app.control.revoke")
+@patch("web.main.cleanup_active_processes")
+@patch("web.main.reset_application_state")
+def test_lightweight_cleanup(
+    mock_reset_state,
+    mock_cleanup_processes,
+    mock_celery_revoke,
+    client,
+    tmp_path,
+    monkeypatch,
+):
     """
     测试 /downloads/cancel 端点是否能成功执行并清理临时文件。
 
@@ -40,6 +51,11 @@ def test_lightweight_cleanup(client, tmp_path, monkeypatch):
     3. API 响应中包含了正确的清理结果统计信息。
     """
     print("🧪 测试优化后的轻量级清理功能...")
+
+    # 配置mock对象
+    mock_celery_revoke.return_value = None
+    mock_cleanup_processes.return_value = None
+    mock_reset_state.return_value = None
 
     # 使用 monkeypatch 动态修改配置，让应用在测试时使用临时目录。
     from config_manager import config
