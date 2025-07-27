@@ -36,6 +36,7 @@ class CommandBuilder:
             "--no-warnings",
             "--no-color",
             "--force-overwrites",
+            "--force-ipv4",
         ]
 
         if self.proxy:
@@ -53,6 +54,20 @@ class CommandBuilder:
             ["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"]
         )
 
+        # 添加更激进的性能优化参数
+        cmd.extend(
+            [
+                "--no-check-certificate",  # 跳过SSL证书检查
+                "--prefer-insecure",  # 优先使用HTTP而非HTTPS
+                "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
+                "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
+                "--no-part",  # 不创建部分文件
+                "--no-mtime",  # 不设置修改时间
+                "--concurrent-fragments",
+                "4",  # 并发片段下载
+            ]
+        )
+
         return cmd
 
     def build_yt_dlp_base_cmd_no_progress(self) -> List[str]:
@@ -63,6 +78,7 @@ class CommandBuilder:
             "--no-warnings",
             "--no-color",
             "--force-overwrites",
+            "--force-ipv4",
         ]
 
         if self.proxy:
@@ -74,6 +90,20 @@ class CommandBuilder:
         # 添加健壮性参数
         cmd.extend(
             ["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"]
+        )
+
+        # 添加更激进的性能优化参数
+        cmd.extend(
+            [
+                "--no-check-certificate",  # 跳过SSL证书检查
+                "--prefer-insecure",  # 优先使用HTTP而非HTTPS
+                "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
+                "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
+                "--no-part",  # 不创建部分文件
+                "--no-mtime",  # 不设置修改时间
+                "--concurrent-fragments",
+                "4",  # 并发片段下载
+            ]
         )
 
         return cmd
