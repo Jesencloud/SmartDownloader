@@ -473,7 +473,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>`;
 
     document.querySelectorAll('.resolution-option').forEach(el => {
-        el.addEventListener('click', () => handleDownload(el.dataset.formatId));
+        el.addEventListener('click', (e) => {
+            // 检查是否有文字被选中，如果有则不触发下载
+            const selection = window.getSelection();
+            if (selection && selection.toString().length > 0) {
+                return; // 用户正在选择文字，不触发下载
+            }
+            
+            handleDownload(el.dataset.formatId);
+        });
     });
     
     // 检查是否有完整流格式或支持直接下载的格式，如果有则显示智能下载说明
