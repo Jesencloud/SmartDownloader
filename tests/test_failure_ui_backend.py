@@ -1,6 +1,5 @@
 # tests/test_failure_ui_backend.py
 
-import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 import time
