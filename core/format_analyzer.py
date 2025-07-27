@@ -305,7 +305,7 @@ class FormatAnalyzer:
                     strategy=DownloadStrategy.MERGE,
                     primary_format=target_format,
                     secondary_format=best_audio,
-                    reason=f"用户指定视频格式{target_format_id}，匹配音频流{best_audio.format_id}",
+                    reason=f"用户指定视频格式{target_format_id}，智能匹配音频流{best_audio.format_id}",
                 )
             elif target_format.stream_type == StreamType.AUDIO_ONLY:
                 # 用户指定音频格式，直接下载
@@ -501,16 +501,13 @@ class FormatAnalyzer:
         # 优先级4: 语言为主要语言（en、zh等）
         language = raw_format.get("language", "") or ""  # 处理None值
         if language and language.lower() in [
-            "en",
-            "eng",
-            "english",
-            "zh",
-            "zho",
-            "chi",
-            "chinese",
+            "en-US",
             "ja",
-            "jpn",
-            "japanese",
+            "ko",
+            "fr-FR",
+            "it",
+            "pl",
+            "de-DE",           
         ]:
             score += 10
             log.debug(f"音频流 {fmt.format_id} 检测到主要语言 '{language}'，加分10")
