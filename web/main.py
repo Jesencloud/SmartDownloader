@@ -22,6 +22,7 @@ from .tasks import download_video_task
 from config_manager import config
 from core.format_analyzer import FormatAnalyzer
 
+
 def get_unified_audio_formats(raw_formats):
     """
     统一的音频格式获取函数，确保视频模式和音频模式使用相同的音频格式列表
@@ -30,10 +31,9 @@ def get_unified_audio_formats(raw_formats):
     audio_only_formats = [
         f
         for f in raw_formats
-        if f.get("acodec") not in ("none", None)
-        and f.get("vcodec") in ("none", None)
+        if f.get("acodec") not in ("none", None) and f.get("vcodec") in ("none", None)
     ]
-    
+
     # 如果没有明确的audio-only格式，使用更广泛的音频格式筛选
     if not audio_only_formats:
         audio_only_formats = [
@@ -54,8 +54,9 @@ def get_unified_audio_formats(raw_formats):
                 not (f.get("width") and f.get("height"))
             )
         ]
-    
+
     return audio_only_formats
+
 
 def select_best_audio_with_analyzer(raw_formats):
     """
@@ -63,35 +64,39 @@ def select_best_audio_with_analyzer(raw_formats):
     """
     # 获取统一的音频格式列表
     audio_formats = get_unified_audio_formats(raw_formats)
-    
+
     if not audio_formats:
         return None
-        
+
     # 使用FormatAnalyzer进行智能音频选择
     analyzer = FormatAnalyzer()
-    
+
     # 将原始格式转换为FormatInfo对象
     from core.format_analyzer import FormatInfo, StreamType
+
     audio_format_infos = []
     for audio_fmt in audio_formats:
-        audio_format_infos.append(FormatInfo(
-            format_id=audio_fmt.get("format_id"),
-            ext=audio_fmt.get("ext"),
-            vcodec=audio_fmt.get("vcodec"),
-            acodec=audio_fmt.get("acodec"),
-            width=audio_fmt.get("width"),
-            height=audio_fmt.get("height"),
-            filesize=audio_fmt.get("filesize"),
-            tbr=audio_fmt.get("tbr"),
-            vbr=audio_fmt.get("vbr"),
-            abr=audio_fmt.get("abr"),
-            stream_type=StreamType.AUDIO_ONLY,
-            raw_format=audio_fmt
-        ))
-    
+        audio_format_infos.append(
+            FormatInfo(
+                format_id=audio_fmt.get("format_id"),
+                ext=audio_fmt.get("ext"),
+                vcodec=audio_fmt.get("vcodec"),
+                acodec=audio_fmt.get("acodec"),
+                width=audio_fmt.get("width"),
+                height=audio_fmt.get("height"),
+                filesize=audio_fmt.get("filesize"),
+                tbr=audio_fmt.get("tbr"),
+                vbr=audio_fmt.get("vbr"),
+                abr=audio_fmt.get("abr"),
+                stream_type=StreamType.AUDIO_ONLY,
+                raw_format=audio_fmt,
+            )
+        )
+
     # 使用智能算法选择最佳音频流
     best_audio_info = analyzer._select_best_audio_format(audio_format_infos)
     return best_audio_info.raw_format
+
 
 app = FastAPI(
     title="SmartDownloader API",
@@ -472,12 +477,16 @@ async def get_video_info(request: VideoInfoRequest):
 
         # 按分辨率高低排序，只保留前3个最高分辨率进行处理
         def resolution_score(resolution_key):
-            width, height = map(int, resolution_key.split('x'))
+            width, height = map(int, resolution_key.split("x"))
             return width * height
 
         # 获取前3个最高分辨率（按像素数量排序）
-        top_resolutions = sorted(mp4_by_resolution.keys(), key=resolution_score, reverse=True)[:3]
-        log.info(f"视频分辨率优化：从 {len(mp4_by_resolution)} 个不同分辨率中选择前3个最高分辨率: {top_resolutions}")
+        top_resolutions = sorted(
+            mp4_by_resolution.keys(), key=resolution_score, reverse=True
+        )[:3]
+        log.info(
+            f"视频分辨率优化：从 {len(mp4_by_resolution)} 个不同分辨率中选择前3个最高分辨率: {top_resolutions}"
+        )
 
         # 为选中的分辨率选择文件大小最小的mp4格式
         mp4_video_formats = []
@@ -610,11 +619,13 @@ async def get_video_info(request: VideoInfoRequest):
 
         # 使用统一的音频选择函数，确保与视频模式选择一致
         best_audio_format = select_best_audio_with_analyzer(raw_formats)
-        
+
         if best_audio_format:
             # 只保留统一选择的最佳音频流
             raw_formats = [best_audio_format]
-            log.info(f"音频模式统一优化：使用与视频模式相同的智能选择算法，选择最佳音频流: {best_audio_format.get('format_id')} ({best_audio_format.get('ext')})")
+            log.info(
+                f"音频模式统一优化：使用与视频模式相同的智能选择算法，选择最佳音频流: {best_audio_format.get('format_id')} ({best_audio_format.get('ext')})"
+            )
         else:
             # 如果没有优选格式，使用所有音频格式
             raw_formats = audio_formats
@@ -716,7 +727,9 @@ async def get_video_info(request: VideoInfoRequest):
             best_audio_to_merge = select_best_audio_with_analyzer(raw_formats)
             if not best_audio_to_merge:
                 log.warning("统一音频选择失败，回退到简单选择")
-                best_audio_to_merge = max(audio_only_formats, key=lambda f: f.get("abr", 0))
+                best_audio_to_merge = max(
+                    audio_only_formats, key=lambda f: f.get("abr", 0)
+                )
 
             for v_fmt in video_only_formats:
                 video_size = v_fmt.get("filesize") or v_fmt.get("filesize_approx")
@@ -794,7 +807,9 @@ async def get_video_info(request: VideoInfoRequest):
 
                 all_possible_formats.append(
                     VideoFormat(
-                        format_id=v_fmt['format_id'],  # 只使用视频format_id，让FormatAnalyzer智能选择音频
+                        format_id=v_fmt[
+                            "format_id"
+                        ],  # 只使用视频format_id，让FormatAnalyzer智能选择音频
                         resolution=f"{v_fmt.get('width')}x{v_fmt.get('height')}",
                         ext="mp4",  # Merged format will be mp4
                         filesize=total_size if total_size is not None else None,
@@ -847,7 +862,9 @@ async def get_video_info(request: VideoInfoRequest):
         if len(raw_formats) == 1:
             # We have already selected the best audio format using FormatAnalyzer
             best_audio_format_raw = raw_formats[0]
-            log.info(f"使用智能选择的音频格式: {best_audio_format_raw.get('format_id')}")
+            log.info(
+                f"使用智能选择的音频格式: {best_audio_format_raw.get('format_id')}"
+            )
         elif len(raw_formats) > 1:
             # Fallback: if we have multiple formats (shouldn't happen with smart selection), choose the best by ABR
             log.warning(f"意外情况：有 {len(raw_formats)} 个音频格式，使用ABR选择最佳")
@@ -859,8 +876,12 @@ async def get_video_info(request: VideoInfoRequest):
 
         # Create a single, standardized VideoFormat object for the frontend
         abr = best_audio_format_raw.get("abr")
-        filesize = best_audio_format_raw.get("filesize") or best_audio_format_raw.get("filesize_approx")
-        is_approx = not best_audio_format_raw.get("filesize") and best_audio_format_raw.get("filesize_approx")
+        filesize = best_audio_format_raw.get("filesize") or best_audio_format_raw.get(
+            "filesize_approx"
+        )
+        is_approx = not best_audio_format_raw.get(
+            "filesize"
+        ) and best_audio_format_raw.get("filesize_approx")
         quality_desc = (
             f"{int(abr)}k"
             if abr

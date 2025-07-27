@@ -507,7 +507,7 @@ class FormatAnalyzer:
             "fr-FR",
             "it",
             "pl",
-            "de-DE",           
+            "de-DE",
         ]:
             score += 10
             log.debug(f"音频流 {fmt.format_id} 检测到主要语言 '{language}'，加分10")
