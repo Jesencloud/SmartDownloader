@@ -36,14 +36,14 @@ function formatFileSize(bytes, is_approx = false) {
     // Explicitly check for non-truthy values or string representations of them
     // This handles null, undefined, "null", "undefined" from data attributes.
     if (!bytes || bytes === 'null' || bytes === 'undefined') {
-        return t.unknownSize;
+        return t.unknownSize || 'Unknown size';
     }
 
     const numericBytes = Number(bytes);
 
     // Check if the result is not a number (NaN) or if it's negative.
     if (isNaN(numericBytes) || numericBytes < 0) {
-        return t.unknownSize;
+        return t.unknownSize || 'Unknown size';
     }
 
     if (numericBytes === 0) return '0 Bytes';
@@ -118,10 +118,17 @@ async function switchLanguage(lang) {
         let newText = '';
 
         if (type === 'video') {
-            const displayText = option.dataset.displayText;
+            const resolution = option.dataset.resolution;
+            const filesize = option.dataset.filesize;
+            const filesizeIsApprox = option.dataset.filesizeIsApprox === 'true';
             const ext = option.dataset.ext;
             const isCompleteStream = option.dataset.isCompleteStream === 'true';
             const supportsBrowserDownload = option.dataset.supportsBrowserDownload === 'true';
+            
+            // 重新计算文件大小显示（会使用当前语言的翻译）
+            const formattedSize = formatFileSize(filesize, filesizeIsApprox);
+            const displayText = `${resolution} ${formattedSize}`;
+            
             // 智能标识：检测完整流并添加⚡️标识
             const streamIndicator = (isCompleteStream && supportsBrowserDownload) ? ' ⚡️' : '';
             newText = `${t.download} ${displayText} ${ext}${streamIndicator}`;

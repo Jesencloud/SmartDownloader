@@ -443,6 +443,110 @@
             background: #4b5563;
         }
 
+        /* URL历史记录下拉列表样式 */
+        .url-history {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            margin-top: 4px;
+        }
+
+        .url-history-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 14px;
+            color: #374151;
+            word-break: break-all;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .url-text {
+            flex: 1;
+            cursor: pointer;
+            padding-right: 0.5rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0; /* 允许flex项目收缩到比内容更小 */
+        }
+
+        .url-delete {
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 0.25rem;
+            border-radius: 0.25rem;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0; /* 防止删除按钮被压缩 */
+        }
+
+        .url-delete:hover {
+            color: #ef4444;
+            background-color: #fef2f2;
+        }
+
+        .url-history-item:last-child {
+            border-bottom: none;
+        }
+
+        .url-history-item:hover {
+            background-color: #f9fafb;
+        }
+
+        .url-history-empty {
+            padding: 1rem;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+
+        /* 暗黑模式下的历史记录样式 */
+        body.dark-mode .url-history {
+            background: #374151;
+            border-color: #4b5563;
+        }
+
+        body.dark-mode .url-history-item {
+            color: #ffffff;
+            border-bottom-color: #4b5563;
+        }
+
+        body.dark-mode .url-history-item:hover {
+            background-color: #4b5563;
+        }
+
+        body.dark-mode .url-history-empty {
+            color: #9ca3af;
+        }
+
+        body.dark-mode .url-delete {
+            color: #9ca3af;
+        }
+
+        body.dark-mode .url-delete:hover {
+            color: #ef4444;
+            background-color: #451f1f;
+        }
+
         div#message {
             color: red;
         }
@@ -763,8 +867,12 @@
             </div>
             
             <div class="input-group mb-6">
-                <div class="input-container">
+                <div class="input-container" style="position: relative;">
                     <input type="text" id="videoUrl" name="url" placeholder="粘贴视频或播放列表URL..." data-translate="urlPlaceholder" data-translate-placeholder="true" required autocomplete="off">
+                    <!-- 历史记录下拉列表 -->
+                    <div id="urlHistory" class="url-history" style="display: none;">
+                        <!-- 历史记录项目会在这里动态生成 -->
+                    </div>
                     <button class="clear-button" type="button" id="clearButton" style="display: none;" title="清除链接并重新粘贴">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 4L4 12m0-8l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

@@ -1684,6 +1684,131 @@ function pollTaskStatus(taskId, optionElement) {
     switchLanguage(lang);
 }
 
+    // --- URL History Management ---
+    const URL_HISTORY_KEY = 'smartDownloader_urlHistory';
+    const MAX_HISTORY_ITEMS = 10;
+
+    function saveUrlToHistory(url) {
+        if (!url || url.trim() === '') return;
+        
+        const history = getUrlHistory();
+        const cleanUrl = url.trim();
+        
+        // Remove if already exists (to move to top)
+        const filteredHistory = history.filter(item => item !== cleanUrl);
+        
+        // Add to beginning
+        filteredHistory.unshift(cleanUrl);
+        
+        // Keep only MAX_HISTORY_ITEMS
+        const newHistory = filteredHistory.slice(0, MAX_HISTORY_ITEMS);
+        
+        localStorage.setItem(URL_HISTORY_KEY, JSON.stringify(newHistory));
+    }
+
+    function getUrlHistory() {
+        try {
+            const history = localStorage.getItem(URL_HISTORY_KEY);
+            return history ? JSON.parse(history) : [];
+        } catch (error) {
+            console.error('Error loading URL history:', error);
+            return [];
+        }
+    }
+
+    function clearUrlHistory() {
+        localStorage.removeItem(URL_HISTORY_KEY);
+        hideUrlHistory();
+    }
+
+    function removeUrlFromHistory(urlToRemove) {
+        const history = getUrlHistory();
+        const newHistory = history.filter(url => url !== urlToRemove);
+        localStorage.setItem(URL_HISTORY_KEY, JSON.stringify(newHistory));
+        
+        // Refresh the history display
+        showUrlHistory();
+    }
+
+    function showUrlHistory() {
+        const historyContainer = document.getElementById('urlHistory');
+        if (!historyContainer) return;
+
+        const history = getUrlHistory();
+        const t = getTranslations();
+        
+        if (history.length === 0) {
+            historyContainer.innerHTML = `<div class="url-history-empty">${t.noHistoryRecord || '暂无历史记录'}</div>`;
+        } else {
+            historyContainer.innerHTML = history
+                .map(url => `
+                    <div class="url-history-item" data-url="${encodeURIComponent(url)}">
+                        <span class="url-text" title="${url}">${url}</span>
+                        <span class="url-delete" data-url="${encodeURIComponent(url)}">×</span>
+                    </div>
+                `).join('');
+            
+            // Add click handlers for history items (clicking on URL text)
+            historyContainer.querySelectorAll('.url-text').forEach(item => {
+                item.addEventListener('click', () => {
+                    const historyItem = item.closest('.url-history-item');
+                    const url = decodeURIComponent(historyItem.dataset.url);
+                    urlInput.value = url;
+                    hideUrlHistory();
+                    
+                    // Update paste/clear buttons
+                    if (url.length > 0) {
+                        pasteButton.style.display = 'none';
+                        clearButton.style.display = 'flex';
+                    }
+                });
+            });
+            
+            // Add click handlers for delete buttons
+            historyContainer.querySelectorAll('.url-delete').forEach(deleteBtn => {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent triggering the URL selection
+                    const url = decodeURIComponent(deleteBtn.dataset.url);
+                    removeUrlFromHistory(url);
+                });
+            });
+        }
+        
+        historyContainer.style.display = 'block';
+    }
+
+    function hideUrlHistory() {
+        const historyContainer = document.getElementById('urlHistory');
+        if (historyContainer) {
+            historyContainer.style.display = 'none';
+        }
+    }
+
+    // Add URL history event listeners
+    urlInput.addEventListener('focus', () => {
+        showUrlHistory();
+    });
+
+    urlInput.addEventListener('blur', (e) => {
+        // Delay hiding to allow clicking on history items
+        setTimeout(() => {
+            const historyContainer = document.getElementById('urlHistory');
+            if (historyContainer && !historyContainer.contains(e.relatedTarget)) {
+                hideUrlHistory();
+            }
+        }, 150);
+    });
+
+    // Save URL to history when analysis starts
+    const originalStartVideoAnalysis = startVideoAnalysis;
+    startVideoAnalysis = function(downloadType) {
+        const url = urlInput.value.trim();
+        if (url && url !== 'test-video' && url !== 'test-audio') {
+            saveUrlToHistory(url);
+        }
+        return originalStartVideoAnalysis(downloadType);
+    };
+
     // --- Clipboard and Input Handling ---
     function extractUrl(text) {
         const urlRegex = /(https?:\/\/[^\s]+)/;

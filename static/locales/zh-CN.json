@@ -79,5 +79,6 @@
     "smartDownloadInfoText": "⚡️ 支持直接下载",
     "downloading": "正在下载中",
     "retryButton": "重试",
-    "unknownError": "发生未知错误。"
+    "unknownError": "发生未知错误。",
+    "noHistoryRecord": "暂无历史记录"
 }

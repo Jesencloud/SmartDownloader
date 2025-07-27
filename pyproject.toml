@@ -1,6 +1,7 @@
 [tool.ruff.lint]
 # 针对特定文件忽略 E402 错误
-per-file-ignores = {"celery_monitor.py" = ["E402"], "web/tasks.py" = ["E402"]}
-
+# per-file-ignores = {"celery_monitor.py" = ["E402"], "web/tasks.py" = ["E402"]}
 # 或者全局忽略 E402（不推荐）
 # ignore = ["E402"]
+# 在这里可以添加其他需要全局忽略的规则，例如 E501 (line too long)
+# ignore = ["E501"]

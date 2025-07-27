@@ -79,5 +79,6 @@
     "smartDownloadInfoText": "⚡️ Direct download supported",
     "downloading": "Downloading",
     "retryButton": "Retry",
-    "unknownError": "An unknown error occurred."
+    "unknownError": "An unknown error occurred.",
+    "noHistoryRecord": "No history records"
 }
