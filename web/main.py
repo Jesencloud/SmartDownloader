@@ -1073,11 +1073,26 @@ async def download_stream(
                 )
 
                 async def log_stderr():
-                    while True:
-                        line = await process.stderr.readline()
-                        if not line:
+                    """Logs stderr from a process, handling continuous data without newlines."""
+                    while not process.stderr.at_eof():
+                        try:
+                            # Read a chunk of data to avoid readline() limitations with progress bars
+                            chunk = await process.stderr.read(4096)
+                            if not chunk:
+                                break
+                            
+                            # Decode and log the output, splitting by lines to handle \r correctly
+                            decoded_chunk = chunk.decode('utf-8', errors='replace')
+                            lines = decoded_chunk.replace('\r', '\n').split('\n')
+                            for line in lines:
+                                if line.strip():
+                                    log.debug(f"yt-dlp stderr: {line.strip()}")
+                        except asyncio.CancelledError:
+                            log.info("Stderr logging task was cancelled.")
                             break
-                        log.error(f"yt-dlp stderr: {line.decode().strip()}")
+                        except Exception as e:
+                            log.error(f"Error reading stderr: {e}")
+                            break
 
                 stderr_logger_task = asyncio.create_task(log_stderr())
 
