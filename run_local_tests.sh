@@ -45,7 +45,10 @@ docker-compose run --rm test-runner sh -c "ruff check . && ruff format --check .
 
 echo ""
 echo "2️⃣ Running All Tests (Unit & E2E) and Generating Report..."
-docker-compose run --rm test-runner pytest -v --html=test_report.html --self-contained-html
+# 运行测试，同时生成覆盖率报告 (htmlcov/) 和独立的测试结果报告 (test_report.html)
+docker-compose run --rm test-runner pytest -v \
+  --cov=core --cov=web --cov-report=html \
+  --html=test_report.html --self-contained-html
 
 echo ""
 echo "🎉 All local tests passed successfully!"

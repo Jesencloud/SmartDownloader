@@ -1,5 +1,33 @@
 // static/common.js
 
+// --- Translation System ---
+let translations = {};
+
+async function loadTranslations() {
+    try {
+        // 加载中文翻译
+        const zhResponse = await fetch('/static/locales/zh-CN.json');
+        const zhData = await zhResponse.json();
+        translations.zh = zhData;
+        
+        // 加载英文翻译
+        const enResponse = await fetch('/static/locales/en.json');
+        const enData = await enResponse.json();
+        translations.en = enData;
+        
+        console.log('Translation files loaded successfully');
+    } catch (error) {
+        console.error('Failed to load translation files:', error);
+        // Fallback empty translations
+        translations = { zh: {}, en: {} };
+    }
+}
+
+function getTranslations() {
+    const currentLang = localStorage.getItem('language') || 'zh';
+    return translations[currentLang] || translations.zh || {};
+}
+
 
 
 function formatFileSize(bytes, is_approx = false) {
@@ -29,7 +57,12 @@ function formatFileSize(bytes, is_approx = false) {
     return is_approx ? `≈ ${formattedString}` : formattedString;
 }
 
-function switchLanguage(lang) {
+async function switchLanguage(lang) {
+    // Ensure translations are loaded
+    if (Object.keys(translations).length === 0) {
+        await loadTranslations();
+    }
+    
     // Save language preference and set a global variable
     localStorage.setItem('language', lang);
     window.currentLanguage = lang;

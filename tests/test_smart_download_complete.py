@@ -369,3 +369,97 @@ def test_api_endpoints_exist():
             # 对于POST端点，发送空json，期望422（验证错误）而不是404
             response = client.post(endpoint, json={})
             assert response.status_code != 404, f"{desc} ({endpoint}) 不应返回 404"
+
+
+# --- 新增: 对 FormatAnalyzer.find_best_download_plan 的详细测试 ---
+
+
+def test_find_best_plan_prefers_complete_stream():
+    """
+    测试场景1: 自动选择时，应优先选择质量最佳的完整流。
+    """
+    # Arrange
+    analyzer = FormatAnalyzer()
+    formats = simulate_video_formats()
+
+    # Act
+    plan = analyzer.find_best_download_plan(formats)
+
+    # Assert
+    assert plan.strategy == DownloadStrategy.DIRECT
+    assert plan.primary_format.format_id == "22"  # 720p的完整流，得分高于360p
+    assert plan.secondary_format is None
+    log.info("✅ 测试通过: 自动选择最佳完整流 '22'")
+
+
+def test_find_best_plan_chooses_merge_when_no_complete():
+    """
+    测试场景2: 当没有完整流时，应选择最佳视频+音频组合进行合并。
+    """
+    # Arrange
+    analyzer = FormatAnalyzer()
+    # 从模拟数据中移除所有完整流
+    formats_without_complete = [
+        f
+        for f in simulate_video_formats()
+        if f["acodec"] == "none" or f["vcodec"] == "none"
+    ]
+
+    # Act
+    plan = analyzer.find_best_download_plan(formats_without_complete)
+
+    # Assert
+    assert plan.strategy == DownloadStrategy.MERGE
+    assert plan.primary_format.format_id == "137"  # 最佳视频 (1080p, avc1)
+    assert plan.secondary_format.format_id == "141"  # 最佳音频 (256k abr)
+    log.info("✅ 测试通过: 在无完整流时，正确选择合并策略 '137+141'")
+
+
+def test_find_best_plan_with_user_specified_video():
+    """
+    测试场景3: 用户指定一个视频流时，应自动匹配最佳音频进行合并。
+    """
+    # Arrange
+    analyzer = FormatAnalyzer()
+    formats = simulate_video_formats()
+
+    # Act
+    plan = analyzer.find_best_download_plan(formats, target_format_id="137")
+
+    # Assert
+    assert plan.strategy == DownloadStrategy.MERGE
+    assert plan.primary_format.format_id == "137"
+    assert plan.secondary_format.format_id == "141"  # 自动匹配了最佳音频
+    log.info("✅ 测试通过: 用户指定视频'137'，成功匹配最佳音频'141'")
+
+
+def test_find_best_plan_fallback_to_best_available():
+    """
+    测试场景4: 降级处理 - 在只有音频流的情况下，应选择最佳的音频流直接下载。
+    """
+    # Arrange
+    analyzer = FormatAnalyzer()
+    audio_only_formats = [f for f in simulate_video_formats() if f["vcodec"] == "none"]
+
+    # Act
+    plan = analyzer.find_best_download_plan(audio_only_formats)
+
+    # Assert
+    assert plan.strategy == DownloadStrategy.DIRECT
+    assert plan.primary_format.format_id == "141"  # 最佳可用格式
+    assert "降级使用最佳可用格式" in plan.reason
+    log.info("✅ 测试通过: 降级策略成功选择最佳可用音频'141'")
+
+
+def test_find_best_plan_raises_error_for_no_formats():
+    """
+    测试场景5: 异常处理 - 当没有提供任何格式时，应抛出 ValueError。
+    """
+    # Arrange
+    analyzer = FormatAnalyzer()
+    empty_formats = []
+
+    # Act & Assert
+    with pytest.raises(ValueError, match="没有找到任何可用的视频格式"):
+        analyzer.find_best_download_plan(empty_formats)
+    log.info("✅ 测试通过: 为空格式列表成功抛出 ValueError")

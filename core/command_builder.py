@@ -214,6 +214,9 @@ class CommandBuilder:
             # 默认使用 mp4 容器格式, yt-dlp 会选择最佳的视频和音频流
             combined_format = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
+        # 输出格式组合信息
+        log.info(f"🎬 视频音频组合: {combined_format}")
+
         # 添加格式选择
         cmd.extend(["-f", combined_format])
 
@@ -295,6 +298,9 @@ class CommandBuilder:
                 )
                 combined_format = f"{video_format_id}+{audio_format_id}"
 
+                # 输出视频音频组合信息
+                log.info(f"🎬 视频音频组合: {combined_format}")
+
                 return self._build_merge_download_cmd(
                     url, exact_output_path, combined_format, download_plan.strategy
                 )
@@ -343,6 +349,9 @@ class CommandBuilder:
     ) -> Tuple[List[str], str, Path, DownloadStrategy]:
         """构建合并下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
+
+        # 记录合并下载的格式组合
+        log.info(f"构建合并下载命令: 格式组合={combined_format}")
 
         cmd.extend(
             [

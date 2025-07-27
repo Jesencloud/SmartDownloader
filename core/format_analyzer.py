@@ -215,10 +215,20 @@ class FormatAnalyzer:
                 reason=f"需要合并视频流({best_video.format_id})和音频流({best_audio.format_id})",
             )
 
-        # 策略3: 降级处理，使用最佳可用格式
-        if analyzed_formats:
-            # 选择质量最好的格式，不管是什么类型
-            best_format = max(analyzed_formats, key=self._calculate_format_score)
+        # 策略3: 降级处理 (当无法合并时)。优先选择可用的最佳视频流。
+        if video_only_formats:
+            log.debug("降级策略：选择最佳视频流")
+            best_format = self._select_best_video_format(video_only_formats)
+            return DownloadPlan(
+                strategy=DownloadStrategy.DIRECT,
+                primary_format=best_format,
+                reason=f"降级使用最佳可用格式({best_format.format_id})",
+            )
+
+        # 如果没有视频流，则选择可用的最佳音频流
+        if audio_only_formats:
+            log.debug("降级策略：选择最佳音频流")
+            best_format = self._select_best_audio_format(audio_only_formats)
             return DownloadPlan(
                 strategy=DownloadStrategy.DIRECT,
                 primary_format=best_format,
@@ -245,6 +255,22 @@ class FormatAnalyzer:
             video_format = next(
                 (f for f in video_only_formats if f.format_id == video_id), None
             )
+
+            if video_format and audio_only_formats:
+                # 使用智能音频选择替代用户指定的音频格式
+                log.info(
+                    f"检测到用户指定组合格式 {video_id}+{audio_id}，使用智能音频选择替代音频部分"
+                )
+                best_audio = self._select_best_audio_format(audio_only_formats)
+
+                return DownloadPlan(
+                    strategy=DownloadStrategy.MERGE,
+                    primary_format=video_format,
+                    secondary_format=best_audio,
+                    reason=f"用户指定视频格式{video_id}，智能匹配音频流{best_audio.format_id}",
+                )
+
+            # 如果找不到视频格式或没有音频选项，回退到原来的逻辑
             audio_format = next(
                 (f for f in audio_only_formats if f.format_id == audio_id), None
             )
@@ -307,7 +333,56 @@ class FormatAnalyzer:
 
     def _select_best_audio_format(self, audio_formats: List[FormatInfo]) -> FormatInfo:
         """选择最佳音频格式"""
-        return max(audio_formats, key=self._calculate_audio_score)
+
+        # 为每个音频格式计算得分并记录详细信息
+        format_scores = []
+        for fmt in audio_formats:
+            score = self._calculate_audio_score(fmt)
+            format_scores.append((fmt, score))
+
+            # 记录详细的音频流信息用于调试
+            raw_format = fmt.raw_format
+            audio_info = {
+                "format_id": fmt.format_id,
+                "abr": fmt.abr,
+                "acodec": fmt.acodec,
+                "ext": fmt.ext,
+                "score": score,
+                "language": raw_format.get("language", ""),
+                "format_note": raw_format.get("format_note", ""),
+                "format": raw_format.get("format", ""),
+            }
+            log.debug(f"音频流评分: {audio_info}")
+
+        # 按得分排序，选择最高分的
+        format_scores.sort(key=lambda x: x[1], reverse=True)
+        best_format = format_scores[0][0]
+
+        log.info(
+            f"选择最佳音频流: {best_format.format_id} (得分: {format_scores[0][1]:.2f})"
+        )
+
+        # 如果最高分的格式包含"original (default)"，记录特别日志
+        raw_format = best_format.raw_format
+        fields_to_check = [
+            raw_format.get("format_note", ""),
+            raw_format.get("language", ""),
+            raw_format.get("format", ""),
+        ]
+        combined_info = " ".join(
+            str(field).lower() for field in fields_to_check if field
+        )
+
+        if "original" in combined_info and "default" in combined_info:
+            log.info(
+                f"✅ 成功选择了 'original (default)' 音频流: {best_format.format_id}"
+            )
+        elif "default" in combined_info:
+            log.info(f"✅ 选择了 'default' 音频流: {best_format.format_id}")
+        elif "original" in combined_info:
+            log.info(f"✅ 选择了 'original' 音频流: {best_format.format_id}")
+
+        return best_format
 
     def _calculate_format_score(self, fmt: FormatInfo) -> float:
         """计算格式综合得分"""
@@ -371,6 +446,7 @@ class FormatAnalyzer:
         """计算音频格式得分"""
         score = 0.0
 
+        # 基础音频质量分数
         if fmt.abr:
             score += fmt.abr / 10  # 音频比特率分数
         elif fmt.tbr:
@@ -387,6 +463,66 @@ class FormatAnalyzer:
             score += 5
         elif fmt.ext in ["mp3", "opus"]:
             score += 3
+
+        # === 新增：检查音轨标识符，优先选择 "original (default)" ===
+        raw_format = fmt.raw_format
+
+        # 检查MORE INFO字段或其他可能包含音轨信息的字段
+        fields_to_check = [
+            raw_format.get("format_note", "") or "",
+            raw_format.get("language", "") or "",
+            raw_format.get("format", "") or "",
+            str(raw_format.get("asr", "") or ""),  # 音频采样率信息
+            str(raw_format.get("audio_ext", "") or ""),  # 音频扩展信息
+        ]
+
+        # 将所有相关字段组合成一个字符串进行检查
+        combined_info = " ".join(
+            str(field).lower() for field in fields_to_check if field
+        )
+
+        # 优先级1: 明确标记为 "original (default)" 的音轨
+        if "original" in combined_info and "default" in combined_info:
+            score += 50  # 给予最高优先级
+            log.debug(
+                f"音频流 {fmt.format_id} 检测到 'original (default)' 标记，加分50"
+            )
+
+        # 优先级2: 标记为 "default" 的音轨
+        elif "default" in combined_info:
+            score += 30  # 给予高优先级
+            log.debug(f"音频流 {fmt.format_id} 检测到 'default' 标记，加分30")
+
+        # 优先级3: 标记为 "original" 的音轨
+        elif "original" in combined_info:
+            score += 20  # 给予中等优先级
+            log.debug(f"音频流 {fmt.format_id} 检测到 'original' 标记，加分20")
+
+        # 优先级4: 语言为主要语言（en、zh等）
+        language = raw_format.get("language", "") or ""  # 处理None值
+        if language and language.lower() in [
+            "en",
+            "eng",
+            "english",
+            "zh",
+            "zho",
+            "chi",
+            "chinese",
+            "ja",
+            "jpn",
+            "japanese",
+        ]:
+            score += 10
+            log.debug(f"音频流 {fmt.format_id} 检测到主要语言 '{language}'，加分10")
+
+        # 检查其他可能的标识符
+        # 如果format_note包含具体的音轨描述
+        format_note = raw_format.get("format_note", "").lower()
+        if any(
+            keyword in format_note for keyword in ["main", "primary", "first", "track"]
+        ):
+            score += 5
+            log.debug(f"音频流 {fmt.format_id} 检测到主要音轨标识，加分5")
 
         return score
 

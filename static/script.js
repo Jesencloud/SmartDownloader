@@ -33,6 +33,9 @@ async function reloadConfiguration() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // --- Load Translations First ---
+    await loadTranslations();
+    
     // --- Initialize Page Elements ---
     initializeDarkMode();
     initializeLanguageSelector();

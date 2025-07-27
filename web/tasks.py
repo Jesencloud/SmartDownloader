@@ -6,6 +6,7 @@ import asyncio
 import psutil
 from celery import Task
 from celery.signals import task_prerun, task_postrun, task_failure, task_revoked
+from celery.exceptions import Retry
 import time
 
 # Set up logging
@@ -20,6 +21,24 @@ if project_root not in sys.path:
 from downloader import Downloader  # noqa: E402
 from config_manager import config  # noqa: E402
 from .celery_app import celery_app  # noqa: E402
+
+
+# === Redis连接错误处理装饰器 ===
+def handle_redis_errors(func):
+    """处理Redis连接错误的装饰器"""
+
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (ConnectionError, TimeoutError) as e:
+            log.error(f"Redis连接错误: {e}")
+            # 可以选择重试或返回默认值
+            raise Retry(f"Redis连接失败，稍后重试: {e}", countdown=10, max_retries=3)
+        except Exception as e:
+            log.error(f"任务执行出错: {e}")
+            raise
+
+    return wrapper
 
 
 class BaseDownloadTask(Task):
@@ -191,6 +210,7 @@ def task_revoked_handler(
     acks_late=True,
     reject_on_worker_lost=True,
 )
+@handle_redis_errors
 def download_video_task(
     self,
     video_url: str,
@@ -268,8 +288,8 @@ def download_video_task(
             )
 
             if download_type == "video":
-                # 视频下载
-                output_file = await self.downloader.download_and_merge(
+                # 视频下载 - 使用智能策略
+                output_file = await self.downloader.download_with_smart_strategy(
                     video_url=video_url,
                     fallback_prefix=title or task_id,
                     format_id=format_id if format_id != "best" else None,

@@ -1,6 +1,11 @@
 # web/celery_app.py
 from celery import Celery
 import os
+import logging
+
+# 设置日志
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 # 从环境变量中获取Redis URL，并为本地开发提供默认值
 broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
@@ -8,6 +13,11 @@ backend_url = os.environ.get("CELERY_RESULT_BACKEND_URL", "redis://localhost:637
 
 # 检测是否在CI环境中
 is_ci_environment = os.environ.get("GITHUB_ACTIONS") == "true"
+
+# 检测是否禁用Redis重连（用于开发调试）
+disable_redis_retry = (
+    os.environ.get("CELERY_DISABLE_REDIS_RETRY", "false").lower() == "true"
+)
 
 # 第一个参数是当前模块的名称，这是Celery自动发现任务所必需的。
 # `broker` 指向消息代理（我们使用Redis）。
@@ -62,7 +72,37 @@ else:
             "connection_pool_kwargs": {
                 "max_connections": 20,  # 最大连接数
                 "retry_on_timeout": True,
+                "socket_keepalive": True,  # 启用socket keepalive
+                "socket_keepalive_options": {},
             }
+        },
+        # === Broker连接配置（Redis） ===
+        broker_connection_retry_on_startup=not disable_redis_retry,  # 可选择禁用启动重试
+        broker_connection_retry=not disable_redis_retry,  # 可选择禁用连接重试
+        broker_connection_max_retries=3 if not disable_redis_retry else 0,  # 可禁用重试
+        broker_heartbeat=60,  # 增加心跳间隔到60秒
+        broker_transport_options={
+            "visibility_timeout": 3600,  # 消息可见性超时
+            "fanout_prefix": True,
+            "fanout_patterns": True,
+            # Redis连接池配置
+            "connection_pool_kwargs": {
+                "max_connections": 10,  # 减少最大连接数
+                "retry_on_timeout": not disable_redis_retry,
+                "socket_keepalive": True,
+                "socket_keepalive_options": {},
+                "socket_connect_timeout": 3,  # 进一步减少连接超时到3秒
+                "socket_timeout": 3,  # 进一步减少socket超时到3秒
+            },
+            # 连接重试配置
+            "retry_policy": {
+                "timeout": 3.0,  # 减少重试超时到3秒
+                "interval_start": 10.0,  # 增加重试起始间隔到10秒
+                "interval_step": 5.0,  # 每次重试增加5秒
+                "interval_max": 60.0,  # 最大重试间隔60秒
+            }
+            if not disable_redis_retry
+            else {},
         },
         # === Worker配置 ===
         worker_concurrency=os.cpu_count() or 4,  # 基于CPU核心数设置并发
@@ -70,6 +110,9 @@ else:
         worker_disable_rate_limits=False,  # 启用速率限制
         worker_log_format="[%(asctime)s: %(levelname)s/%(processName)s] %(message)s",
         worker_task_log_format="[%(asctime)s: %(levelname)s/%(processName)s][%(task_name)s(%(task_id)s)] %(message)s",
+        # 优雅关闭配置
+        worker_proc_alive_timeout=60,  # worker进程存活检查超时
+        worker_max_memory_per_child=500000,  # 每个子进程最大内存限制(KB)
         # === 监控和健康检查 ===
         worker_send_task_events=True,  # 发送任务事件
         task_send_sent_event=True,  # 发送任务发送事件
@@ -87,10 +130,46 @@ else:
         # === 默认队列配置 ===
         task_default_queue="celery",  # 默认队列
         task_default_routing_key="default",
-        # === 安全配置 ===
-        broker_transport_options={
-            "visibility_timeout": 3600,  # 消息可见性超时
-            "fanout_prefix": True,
-            "fanout_patterns": True,
-        },
     )
+
+
+# === Redis连接健康检查 ===
+def check_redis_connection():
+    """检查Redis连接是否可用"""
+    try:
+        import redis
+
+        # 解析Redis URL
+        if broker_url.startswith("redis://"):
+            redis_client = redis.from_url(
+                broker_url, socket_connect_timeout=5, socket_timeout=5
+            )
+            redis_client.ping()
+            return True
+    except Exception as e:
+        log.warning(f"Redis连接检查失败: {e}")
+        return False
+
+
+# === Worker信号处理 ===
+from celery.signals import worker_ready, worker_shutdown, worker_process_init
+
+
+@worker_ready.connect
+def worker_ready_handler(sender=None, **kwargs):
+    """Worker启动时的处理"""
+    log.info("Celery worker已启动并准备接收任务")
+    if not check_redis_connection():
+        log.warning("Redis连接不可用，worker可能无法正常工作")
+
+
+@worker_shutdown.connect
+def worker_shutdown_handler(sender=None, **kwargs):
+    """Worker关闭时的处理"""
+    log.info("Celery worker正在关闭...")
+
+
+@worker_process_init.connect
+def worker_process_init_handler(sender=None, **kwargs):
+    """Worker进程初始化时的处理"""
+    log.debug("Worker进程已初始化")
