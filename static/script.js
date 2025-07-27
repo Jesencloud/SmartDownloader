@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeDarkMode();
     initializeLanguageSelector();
     const savedLang = localStorage.getItem('language') || 'zh';
-    switchLanguage(savedLang);
+    await switchLanguage(savedLang); // Wait for initial language to load
     
     // --- Load Configuration from Backend ---
     await loadConfiguration();
@@ -492,7 +492,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     function showTaskStatus(optionElement, status, message, icon, colorClass, borderClass) {
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
-        
+        const t = getTranslations();
+        const formatId = optionElement.dataset.formatId;
+    
         // 确定状态消息的翻译键
         let translateKey = '';
         if (message === '下载完成' || message === 'Download Complete') {
@@ -502,8 +504,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (message === '检查超时' || message === 'Check Timeout') {
             translateKey = 'download_timeout';
         }
-        
-        if (status === 'success') {
+    
+        if (status === 'failure') {
+            contentDiv.classList.add('hidden');
+            progressDiv.classList.remove('hidden');
+            progressDiv.innerHTML = `
+                <div class="flex items-center justify-between w-full">
+                    <div class="flex items-center">
+                        <div class="download-icon ${colorClass} mr-2">${icon}</div>
+                        <span class="font-semibold ${colorClass}" data-translate-dynamic="download_failed">${message}</span>
+                    </div>
+                    <button class="retry-button bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded-full text-sm" data-translate="retryButton">
+                        ${t.retryButton || 'Retry'}
+                    </button>
+                </div>
+            `;
+            optionElement.style.pointerEvents = 'auto';
+            optionElement.style.opacity = '1';
+    
+            const retryButton = progressDiv.querySelector('.retry-button');
+            retryButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                optionElement.classList.remove('border', borderClass);
+                // Restore original content before retrying
+                progressDiv.classList.add('hidden');
+                progressDiv.innerHTML = '';
+                contentDiv.classList.remove('hidden');
+                handleDownload(formatId);
+            });
+    
+        } else if (status === 'success') {
             progressDiv.classList.add('hidden');
             progressDiv.innerHTML = '';
             contentDiv.innerHTML = `
@@ -527,7 +557,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
             // Keep progressDiv visible to show the message
         }
-        
+    
         optionElement.classList.remove('hover:bg-gray-700');
         if (borderClass) {
             optionElement.classList.add('border', borderClass);
@@ -919,10 +949,8 @@ function pollTaskStatus(taskId, optionElement) {
                     showTaskStatus(optionElement, 'failure', failedMessage, errorIcon, 'text-red-400', 'border-red-500');
                     const errorMessage = data.result || t.unknownError;
                     
-                    // 显示失败统计信息
-                    const phaseInfo = pollingManager.getPhaseInfo();
-                    console.log(`下载失败 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
-                    alert(`${t.errorTitle}: ${errorMessage}\n\n轮询统计信息:\n- 阶段: ${phaseInfo.phase}\n- 耗时: ${phaseInfo.elapsed}秒\n- 尝试: ${phaseInfo.attempts}次`);
+                    // Log error to console for debugging
+                    console.error(`Download failed for task ${taskId}:`, errorMessage);
                     return;
                 } else if (data.status === 'PROGRESS') {
                     // 处理进度更新

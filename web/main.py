@@ -1080,10 +1080,10 @@ async def download_stream(
                             chunk = await process.stderr.read(4096)
                             if not chunk:
                                 break
-                            
+
                             # Decode and log the output, splitting by lines to handle \r correctly
-                            decoded_chunk = chunk.decode('utf-8', errors='replace')
-                            lines = decoded_chunk.replace('\r', '\n').split('\n')
+                            decoded_chunk = chunk.decode("utf-8", errors="replace")
+                            lines = decoded_chunk.replace("\r", "\n").split("\n")
                             for line in lines:
                                 if line.strip():
                                     log.debug(f"yt-dlp stderr: {line.strip()}")
