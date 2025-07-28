@@ -295,6 +295,17 @@ class SecurityConfig(BaseConfig):
     )
 
 
+class CeleryConfig(BaseConfig):
+    """Celery配置"""
+
+    broker_url: str = Field(
+        default="redis://localhost:6379/0", description="Celery消息代理URL"
+    )
+    result_backend: str = Field(
+        default="redis://localhost:6379/0", description="Celery结果后端URL"
+    )
+
+
 class AppConfig(BaseConfig):
     """应用完整配置"""
 
@@ -307,6 +318,7 @@ class AppConfig(BaseConfig):
     cookies: CookiesConfig = Field(default_factory=CookiesConfig)
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    celery: CeleryConfig = Field(default_factory=CeleryConfig)
 
 
 # ==================== 配置管理器 ====================

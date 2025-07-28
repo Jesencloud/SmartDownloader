@@ -729,6 +729,80 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 创建全局平滑进度管理器
     const smoothProgressManager = new SmoothProgressManager();
     
+    /**
+     * Triggers a browser download for the given URL.
+     * @param {string} downloadUrl - The URL to the file to be downloaded.
+     * @param {string} [filename] - An optional filename for the download.
+     */
+    function triggerBrowserDownload(downloadUrl, filename) {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        if (filename) {
+            link.download = filename; // The browser will use the Content-Disposition header if available
+        }
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log(`Triggered browser download for: ${downloadUrl}`);
+    }
+
+    /**
+     * Updates the UI for a completed task, showing a success message and re-download/delete buttons.
+     * @param {HTMLElement} optionElement - The original element that showed the progress.
+     * @param {string} taskId - The task ID for re-downloading.
+     */
+    function updateUIToCompleted(optionElement, taskId) {
+        const t = getTranslations();
+        const originalText = optionElement.dataset.displayText || t.downloadComplete;
+
+        // 使用HTML模板（如果已添加）或动态创建
+        const template = document.getElementById('completed-task-template');
+        let completedItem;
+
+        if (template) {
+            completedItem = template.content.cloneNode(true).firstElementChild;
+        } else {
+            // Fallback if template doesn't exist
+            completedItem = document.createElement('div');
+            completedItem.className = 'completed-task-item bg-gray-800 p-4 rounded-lg flex items-center justify-between';
+            completedItem.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span class="task-title font-semibold text-white"></span>
+                </div>
+                <div class="flex items-center">
+                    <button class="redownload-button button bg-blue-600 hover:bg-blue-700 text-xs py-1 px-3 mr-2" data-translate="redownloadButton">${t.redownloadButton || '重新下载'}</button>
+                    <button class="delete-button button bg-red-600 hover:bg-red-700 text-xs py-1 px-3" data-translate="deleteButton">${t.deleteButton || '删除'}</button>
+                </div>
+            `;
+        }
+
+        completedItem.querySelector('.task-title').textContent = originalText;
+        
+        // 为“重新下载”按钮添加事件监听
+        const redownloadButton = completedItem.querySelector('.redownload-button');
+        redownloadButton.addEventListener('click', () => {
+            const downloadUrl = `/download/file/${taskId}`;
+            triggerBrowserDownload(downloadUrl);
+        });
+
+        // 为“删除”按钮添加事件监听 (可选，但推荐)
+        const deleteButton = completedItem.querySelector('.delete-button');
+        deleteButton.addEventListener('click', (e) => {
+            // 这里可以调用一个后端的 /delete/{task_id} 接口来提前清理文件
+            // 清理成功后，从UI上移除这个项目
+            e.target.closest('.resolution-option').remove();
+        });
+
+        // 替换旧的UI
+        optionElement.innerHTML = ''; // 清空原内容
+        optionElement.appendChild(completedItem);
+        optionElement.style.pointerEvents = 'auto';
+        optionElement.style.opacity = '1';
+        optionElement.classList.remove('is-downloading');
+    }
+
     // 动态轮询间隔管理器
     class DynamicPollingManager {
         constructor() {
@@ -906,48 +980,29 @@ function pollTaskStatus(taskId, optionElement) {
     
                 if (data.status === 'SUCCESS') {
                     stopPolling();
-                    
-                    // 停止平滑动画
                     smoothProgressManager.stopAnimation(optionElement.dataset.formatId);
-                    
-                    // 显示成功统计信息
+
                     const phaseInfo = pollingManager.getPhaseInfo();
-                    console.log(`下载完成 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
-                    
-                    // 添加完成动画效果
-                    optionElement.style.animation = '';
-                    optionElement.classList.add('progress-complete-animation');
-                    
-                    // Use the downloaded file from Celery task result
-                    const result = data.result;
-                    if (result && result.relative_path) {
-                        // Use the complete relative_path from Celery result
-                        const actualFileName = result.relative_path;
-                        const downloadUrl = `/files/${encodeURIComponent(actualFileName)}`;
-                        const displayFileName = actualFileName.split('/').pop().split('\\').pop();
-                        
-                        // 触发浏览器下载
-                        triggerBrowserDownload(downloadUrl, displayFileName);
-                    } else {
-                        // Fallback to stream download if no cached file
-                        const formatId = optionElement.dataset.formatId;
-                        const resolution = optionElement.dataset.resolution || 'unknown';
-                        triggerStreamDownload(currentVideoData.original_url, currentVideoData.download_type, formatId, resolution, currentVideoData.title, optionElement);
+                    console.log(`后台任务完成 - 阶段: ${phaseInfo.phase}, 耗时: ${phaseInfo.elapsed}秒, 尝试: ${phaseInfo.attempts}次`);
+
+                    // 从Celery结果中获取任务ID，这是我们的下载凭证
+                    const taskId = optionElement.dataset.taskId;
+                    if (!taskId) {
+                        console.error("无法找到任务ID，无法触发下载。");
+                        // 显示错误状态
+                        const errorIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                        showTaskStatus(optionElement, 'failure', t.unknownError, errorIcon, 'text-red-400', 'border-red-500');
+                        return;
                     }
-                    
-                    // 延迟显示下载完成状态，让动画播放完毕
-                    setTimeout(() => {
-                        const successIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-                        const completedMessage = translateProgressMessage('下载完成', t);
-                        showTaskStatus(optionElement, 'success', completedMessage, successIcon, 'text-green-400', 'border-green-500');
-                        
-                        // 清理动画类
-                        optionElement.classList.remove('progress-complete-animation');
-                        optionElement.style.animation = '';
-                        optionElement.style.opacity = '1';
-                        optionElement.style.pointerEvents = 'auto';
-                    }, 600);
-                    return;
+
+                    // 1. 自动触发第一次下载
+                    const downloadUrl = `/download/file/${taskId}`;
+                    triggerBrowserDownload(downloadUrl);
+
+                    // 2. 更新UI为“已完成”状态，并提供“重新下载”按钮
+                    updateUIToCompleted(optionElement, taskId);
+
+                    return; // 确保在这里结束函数执行
                     
                 } else if (data.status === 'FAILURE') {
                     stopPolling();

@@ -8,6 +8,8 @@ from celery import Task
 from celery.signals import task_prerun, task_postrun, task_failure, task_revoked
 from celery.exceptions import Retry
 import time
+from datetime import datetime
+import redis
 
 # Set up logging
 log = logging.getLogger(__name__)
@@ -19,7 +21,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from downloader import Downloader  # noqa: E402
-from config_manager import config  # noqa: E402
+from config_manager import config_manager  # noqa: E402
 from .celery_app import celery_app  # noqa: E402
 
 
@@ -230,6 +232,11 @@ def download_video_task(
         resolution: 视频分辨率 (例如: '1080p60')
         custom_path: 自定义下载路径 (可选)
     """
+    # 在任务内部初始化 Redis 客户端，确保 config 已加载
+    redis_client = redis.Redis.from_url(
+        config_manager.config.celery.broker_url, decode_responses=True
+    )
+
     self.start_time = time.time()
     task_id = self.request.id
 
@@ -239,7 +246,9 @@ def download_video_task(
     async def _async_download():
         try:
             download_folder = (
-                Path(custom_path) if custom_path else Path(config.downloader.save_path)
+                Path(custom_path)
+                if custom_path
+                else Path(config_manager.config.downloader.save_path)
             )
 
             # 验证下载路径
@@ -322,6 +331,26 @@ def download_video_task(
             # 验证输出文件
             if not output_file or not output_file.exists():
                 raise FileNotFoundError("下载后未找到输出文件")
+
+            # --- 新增逻辑：注册下载凭证到 Redis ---
+            download_key = f"download:{task_id}"
+            file_info = {
+                "file_path": str(output_file.resolve()),
+                "filename": output_file.name,
+                "media_type": "video/mp4"
+                if download_type == "video"
+                else "audio/mpeg",  # 可以做得更精确
+                "created_at": datetime.utcnow().isoformat(),
+            }
+
+            # 使用 pipeline 保证原子性
+            pipe = redis_client.pipeline()
+            pipe.hset(download_key, mapping=file_info)
+            pipe.expire(download_key, 3600)  # 设置1小时的暂存期
+            pipe.execute()
+
+            log.info(f"已为任务 {task_id} 在 Redis 中注册下载凭证，有效期1小时。")
+            # --- 逻辑新增结束 ---
 
             # 准备完整的结果信息
             final_result = {

@@ -153,6 +153,7 @@ def check_redis_connection():
 
 # === Worker信号处理 ===
 from celery.signals import worker_ready, worker_shutdown, worker_process_init
+from config_manager import config_manager
 
 
 @worker_ready.connect
@@ -172,4 +173,6 @@ def worker_shutdown_handler(sender=None, **kwargs):
 @worker_process_init.connect
 def worker_process_init_handler(sender=None, **kwargs):
     """Worker进程初始化时的处理"""
-    log.debug("Worker进程已初始化")
+    log.debug("Worker进程已初始化，正在加载配置文件...")
+    config_manager.reload_config()
+    log.debug("配置文件加载完成。")

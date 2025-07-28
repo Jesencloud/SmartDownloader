@@ -19,7 +19,7 @@ import platform
 
 from .celery_app import celery_app
 from .tasks import download_video_task
-from config_manager import config
+from config_manager import config_manager
 from core.format_analyzer import FormatAnalyzer
 
 
@@ -363,7 +363,7 @@ async def get_video_info(request: VideoInfoRequest):
         raise HTTPException(status_code=400, detail=f"Invalid URL: {error_msg}")
 
     # --- Whitelist Enforcement ---
-    allowed_domains = config.security.allowed_domains
+    allowed_domains = config_manager.config.security.allowed_domains
     if allowed_domains:  # Only check if the list is not empty
         try:
             parsed_url = urlparse(request.url)
@@ -1310,10 +1310,10 @@ async def download_stream(
             title_str = title_str.strip()  # 只移除首尾空格
 
             # 使用配置文件中的长度限制
-            max_length = config.file_processing.filename_max_length
+            max_length = config_manager.config.file_processing.filename_max_length
             if len(title_str) > max_length:
                 # 改进的截断策略：优先保留前面的内容，因为通常标题的前半部分更重要
-                suffix = config.file_processing.filename_truncate_suffix
+                suffix = config_manager.config.file_processing.filename_truncate_suffix
 
                 # 计算可用的主要内容长度
                 available_length = max_length - len(suffix)
@@ -1365,7 +1365,7 @@ async def download_stream(
 
         # 添加文件名处理日志
         log.info(
-            f"文件名处理: '{title}' → '{clean_title}' (max_length: {config.file_processing.filename_max_length})"
+            f"文件名处理: '{title}' → '{clean_title}' (max_length: {config_manager.config.file_processing.filename_max_length})"
         )
 
         # If the cleaned title is empty or too short, use a default
@@ -1670,12 +1670,12 @@ async def cleanup_incomplete_downloads():
     cleanup_stats = {"cleaned_files": [], "total_size_mb": 0, "errors": []}
 
     try:
-        download_folder = Path(config.downloader.save_path)
+        download_folder = Path(config_manager.config.downloader.save_path)
         if not download_folder.exists():
             return cleanup_stats
 
         # 从配置中读取清理模式
-        incomplete_patterns = config.downloader.cleanup_patterns
+        incomplete_patterns = config_manager.config.downloader.cleanup_patterns
 
         total_size = 0
         for pattern in incomplete_patterns:
@@ -1756,7 +1756,7 @@ async def purge_old_celery_tasks():
 # Remove the old restart_server function since we're not using it anymore
 
 
-@app.get("/config")
+@app.get("/config_manager.config")
 async def get_config() -> Dict[str, Any]:
     """
     获取当前应用的主要配置项。
@@ -1764,10 +1764,10 @@ async def get_config() -> Dict[str, Any]:
     """
     # 返回整个配置，或选择性返回关键部分
     # 这里我们返回整个配置，因为前端或客户端可能需要访问任何部分
-    return config.model_dump()
+    return config_manager.config.model_dump()
 
 
-@app.post("/config")
+@app.post("/config_manager.config")
 async def update_config(update_request: Dict[str, Any]):
     """
     更新并保存应用配置。
@@ -1806,12 +1806,57 @@ async def update_config(update_request: Dict[str, Any]):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/download/file/{task_id}")
+async def download_file_by_task_id(task_id: str):
+    """
+    通过任务ID提供文件下载。
+    这是新的、有状态的下载接口。
+    """
+    # 在函数内部初始化 Redis 客户端
+    import redis
+
+    redis_client = redis.Redis.from_url(
+        config_manager.config.celery.broker_url, decode_responses=True
+    )
+
+    download_key = f"download:{task_id}"
+
+    # 1. 从 Redis 获取文件信息
+    file_info = redis_client.hgetall(download_key)
+
+    if not file_info:
+        raise HTTPException(
+            status_code=404, detail="下载链接已过期或无效。请重新发起下载。"
+        )
+
+    file_path_str = file_info.get("file_path")
+    filename = file_info.get("filename", "download")
+    media_type = file_info.get("media_type", "application/octet-stream")
+
+    if not file_path_str:
+        raise HTTPException(
+            status_code=500, detail="服务器内部错误：找不到文件路径记录。"
+        )
+
+    file_path = Path(file_path_str)
+
+    # 2. 安全检查：确保文件存在
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=404, detail="文件已从服务器清理，请重新发起下载。"
+        )
+
+    # 3. 使用 FileResponse 提供下载
+    # FileResponse 会自动设置 Content-Disposition 和 Content-Type
+    return FileResponse(path=file_path, filename=filename, media_type=media_type)
+
+
 @app.get("/downloads/list", response_class=JSONResponse)
 async def list_downloads():
     """
     Lists all downloaded files in the download directory.
     """
-    download_path = Path(config.downloader.save_path)
+    download_path = Path(config_manager.config.downloader.save_path)
     if not download_path.exists():
         return JSONResponse(content={"files": []})
 
@@ -1832,13 +1877,13 @@ async def get_downloaded_file(request: Request, file_name: str):
         decoded_file_name = unquote(file_name)
 
         # First try direct path (could be just filename or relative path)
-        file_path = Path(config.downloader.save_path) / decoded_file_name
+        file_path = Path(config_manager.config.downloader.save_path) / decoded_file_name
 
         if file_path.exists() and file_path.is_file():
             pass  # File found directly
         else:
             # If not found directly, search for the filename in the download directory and subdirectories
-            download_folder = Path(config.downloader.save_path)
+            download_folder = Path(config_manager.config.downloader.save_path)
             found_file = None
 
             if download_folder.exists():
@@ -1911,7 +1956,7 @@ async def get_downloaded_file(request: Request, file_name: str):
 
             return Response(headers=headers, media_type=media_type)
 
-        # Use a more explicit FileResponse configuration
+        # Use a more explicit FileResponse config_manager.configuration
         try:
             response = FileResponse(
                 path=str(file_path),
@@ -1950,7 +1995,7 @@ async def delete_downloaded_file(file_name: str):
     Deletes a specific downloaded file.
     """
     try:
-        file_path = Path(config.downloader.save_path) / file_name
+        file_path = Path(config_manager.config.downloader.save_path) / file_name
         if file_path.exists() and file_path.is_file():
             file_path.unlink()
             return {"message": f"File '{file_name}' deleted successfully."}
@@ -1966,7 +2011,7 @@ async def clear_all_downloads():
     Deletes all files in the download directory.
     """
     try:
-        download_path = Path(config.downloader.save_path)
+        download_path = Path(config_manager.config.downloader.save_path)
         if not download_path.exists():
             return {"message": "Download directory not found."}
 
