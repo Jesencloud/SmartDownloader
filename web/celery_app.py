@@ -126,10 +126,23 @@ else:
                 "queue": "maintenance_queue",  # 清理任务使用维护队列
                 "routing_key": "maintenance",
             },
+            "web.tasks.cleanup_expired_files": {
+                "queue": "maintenance_queue",  # 文件清理任务使用维护队列
+                "routing_key": "maintenance",
+            },
         },
         # === 默认队列配置 ===
         task_default_queue="celery",  # 默认队列
         task_default_routing_key="default",
+        # === 定时任务配置 ===
+        beat_schedule={
+            "cleanup-expired-files-every-30min": {
+                "task": "cleanup_expired_files",
+                "schedule": 30.0 * 60,  # 每30分钟运行一次
+                "options": {"queue": "maintenance_queue"},
+            },
+        },
+        beat_schedule_filename="celerybeat-schedule",
     )
 
 

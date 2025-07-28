@@ -349,8 +349,9 @@ def download_video_task(
             pipe.expire(download_key, 3600)  # 设置1小时的暂存期
             pipe.execute()
 
-            log.info(f"已为任务 {task_id} 在 Redis 中注册下载凭证，有效期1小时。")
-            # --- 逻辑新增结束 ---
+            log.info(
+                f"文件下载完成并注册到 Redis: {output_file.name} (凭证: {task_id})"
+            )
 
             # 准备完整的结果信息
             final_result = {
@@ -403,7 +404,131 @@ def download_video_task(
         self.cleanup_resources()
 
 
-# 添加清理任务
+# 添加文件清理任务
+@celery_app.task(
+    bind=True, name="cleanup_expired_files", soft_time_limit=300, time_limit=600
+)
+def cleanup_expired_files(self):
+    """
+    定期清理过期文件的任务
+    - 清理Redis中已过期的下载凭证对应的文件
+    - 清理孤立的文件（没有对应Redis记录的文件）
+    """
+    log.info("开始执行文件清理任务...")
+
+    # 初始化 Redis 客户端
+    redis_client = redis.Redis.from_url(
+        config_manager.config.celery.broker_url, decode_responses=True
+    )
+
+    download_folder = Path(config_manager.config.downloader.save_path)
+
+    cleanup_stats = {
+        "expired_files_deleted": [],
+        "orphaned_files_deleted": [],
+        "total_size_freed_mb": 0,
+        "errors": [],
+    }
+
+    try:
+        if not download_folder.exists():
+            log.info("下载目录不存在，跳过清理")
+            return cleanup_stats
+
+        # 1. 获取所有现存文件
+        existing_files = {}
+        for file_path in download_folder.iterdir():
+            if file_path.is_file() and not file_path.name.startswith("."):
+                existing_files[str(file_path)] = file_path
+
+        log.info(f"发现 {len(existing_files)} 个文件需要检查")
+
+        # 2. 获取所有Redis中的下载记录
+        active_download_keys = set()
+        valid_file_paths = set()
+
+        # 扫描Redis中所有以"download:"开头的键
+        for key in redis_client.scan_iter(match="download:*"):
+            try:
+                file_info = redis_client.hgetall(key)
+                if file_info and "file_path" in file_info:
+                    active_download_keys.add(key)
+                    valid_file_paths.add(file_info["file_path"])
+            except Exception as e:
+                log.error(f"检查Redis键 {key} 时出错: {e}")
+                cleanup_stats["errors"].append(f"Redis键检查错误: {key}")
+
+        log.info(f"Redis中有 {len(active_download_keys)} 个活跃的下载记录")
+
+        # 3. 清理孤立文件（存在于文件系统但没有Redis记录的文件）
+        for file_path_str, file_path in existing_files.items():
+            if file_path_str not in valid_file_paths:
+                try:
+                    # 检查文件是否超过1.5小时（90分钟），给一些缓冲时间
+                    file_age = time.time() - file_path.stat().st_mtime
+                    if file_age > 5400:  # 90分钟 = 5400秒
+                        file_size = file_path.stat().st_size
+                        file_path.unlink()
+                        cleanup_stats["orphaned_files_deleted"].append(file_path.name)
+                        cleanup_stats["total_size_freed_mb"] += file_size / (
+                            1024 * 1024
+                        )
+                        log.info(
+                            f"清理孤立文件: {file_path.name} ({file_size / (1024 * 1024):.2f}MB)"
+                        )
+                except Exception as e:
+                    cleanup_stats["errors"].append(
+                        f"删除孤立文件失败: {file_path.name} - {str(e)}"
+                    )
+                    log.error(f"删除孤立文件 {file_path.name} 失败: {e}")
+
+        # 4. 清理已过期的Redis记录对应的文件
+        for key in list(active_download_keys):
+            try:
+                # 检查键是否仍然存在（可能已被Redis自动过期）
+                if not redis_client.exists(key):
+                    # 键已过期，查找对应文件并删除
+                    task_id = key.replace("download:", "")
+                    # 尝试找到可能存在的对应文件
+                    for file_path_str, file_path in existing_files.items():
+                        if task_id in file_path.name or file_path.name in [
+                            f.get("filename", "")
+                            for f in [
+                                redis_client.hgetall(k)
+                                for k in active_download_keys
+                                if redis_client.exists(k)
+                            ]
+                        ]:
+                            continue  # 这个文件还有有效的Redis记录
+
+                    # 如果文件确实对应于过期的记录，删除它
+                    # 这里的逻辑可能需要根据实际的文件命名规则调整
+                    pass  # 暂时跳过，因为Redis自动过期已经处理了大部分情况
+
+            except Exception as e:
+                cleanup_stats["errors"].append(f"处理过期记录失败: {key} - {str(e)}")
+                log.error(f"处理过期记录 {key} 失败: {e}")
+
+        # 5. 记录清理结果
+        cleanup_stats["total_size_freed_mb"] = round(
+            cleanup_stats["total_size_freed_mb"], 2
+        )
+
+        log.info(
+            f"文件清理完成 - 孤立文件: {len(cleanup_stats['orphaned_files_deleted'])}个, "
+            f"释放空间: {cleanup_stats['total_size_freed_mb']}MB, "
+            f"错误: {len(cleanup_stats['errors'])}个"
+        )
+
+        return cleanup_stats
+
+    except Exception as e:
+        log.error(f"文件清理任务失败: {e}")
+        cleanup_stats["errors"].append(f"清理任务错误: {str(e)}")
+        raise e
+
+
+# 保留原有的清理任务
 @celery_app.task(bind=True, name="cleanup_task", soft_time_limit=60, time_limit=120)
 def cleanup_task(self):
     """定期清理任务"""

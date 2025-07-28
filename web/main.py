@@ -1806,6 +1806,80 @@ async def update_config(update_request: Dict[str, Any]):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.delete("/download/file/{task_id}")
+async def delete_file_by_task_id(task_id: str):
+    """
+    通过任务ID立即删除文件并清理相关记录。
+    这个接口支持delete按钮的立即删除功能。
+    """
+    # 在函数内部初始化 Redis 客户端
+    import redis
+
+    redis_client = redis.Redis.from_url(
+        config_manager.config.celery.broker_url, decode_responses=True
+    )
+
+    download_key = f"download:{task_id}"
+
+    try:
+        # 1. 从 Redis 获取文件信息
+        file_info = redis_client.hgetall(download_key)
+
+        if not file_info:
+            raise HTTPException(status_code=404, detail="下载记录不存在或已过期。")
+
+        file_path_str = file_info.get("file_path")
+        filename = file_info.get("filename", "unknown")
+
+        if not file_path_str:
+            raise HTTPException(
+                status_code=500, detail="服务器内部错误：找不到文件路径记录。"
+            )
+
+        file_path = Path(file_path_str)
+
+        # 2. 删除文件（如果存在）
+        file_deleted = False
+        file_size = 0
+        if file_path.is_file():
+            try:
+                file_size = file_path.stat().st_size
+                file_path.unlink()
+                file_deleted = True
+                log.info(
+                    f"成功删除文件: {filename} ({file_size / (1024 * 1024):.2f}MB)"
+                )
+            except Exception as e:
+                log.error(f"删除文件失败: {filename} - {e}")
+                raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
+
+        # 3. 清理 Redis 记录
+        redis_deleted = redis_client.delete(download_key)
+
+        # 4. 返回删除结果
+        result = {
+            "message": "文件删除成功",
+            "task_id": task_id,
+            "filename": filename,
+            "file_deleted": file_deleted,
+            "file_size_mb": round(file_size / (1024 * 1024), 2) if file_size > 0 else 0,
+            "redis_record_deleted": bool(redis_deleted),
+        }
+
+        log.info(
+            f"删除操作完成: 任务ID={task_id}, 文件={filename}, "
+            f"文件删除={file_deleted}, Redis记录删除={bool(redis_deleted)}"
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"删除文件时发生错误 (任务ID: {task_id}): {e}")
+        raise HTTPException(status_code=500, detail=f"删除操作失败: {str(e)}")
+
+
 @app.get("/download/file/{task_id}")
 async def download_file_by_task_id(task_id: str):
     """

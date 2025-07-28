@@ -817,12 +817,61 @@ document.addEventListener('DOMContentLoaded', async () => {
             triggerBrowserDownload(downloadUrl);
         });
 
-        // 为“删除”按钮添加事件监听 (可选，但推荐)
+        // 为"删除"按钮添加事件监听
         const deleteButton = completedItem.querySelector('.delete-button');
-        deleteButton.addEventListener('click', (e) => {
-            // 这里可以调用一个后端的 /delete/{task_id} 接口来提前清理文件
-            // 清理成功后，从UI上移除这个项目
-            e.target.closest('.resolution-option').remove();
+        deleteButton.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            
+            const t = getTranslations();
+            
+            // 获取任务ID
+            const taskId = optionElement.dataset.taskId;
+            if (!taskId) {
+                alert(t.errorTitle + ': 无法找到任务ID');
+                return;
+            }
+            
+            try {
+                // 显示删除进度
+                deleteButton.disabled = true;
+                deleteButton.textContent = t.deleting || '删除中...';
+                
+                // 调用删除API
+                const response = await fetch(`/download/file/${taskId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '删除失败');
+                }
+                
+                const result = await response.json();
+                console.log('文件删除成功:', result);
+                
+                // 恢复到下载前的状态
+                await restoreToPreDownloadState(optionElement, taskId);
+                
+                // 短暂显示成功消息
+                setTimeout(() => {
+                    const successMessage = t.fileDeletedSuccess || `文件删除成功`;
+                    if (result.file_size_mb > 0) {
+                        successMessage += ` (${result.file_size_mb}MB)`;
+                    }
+                    
+                    if (typeof showTemporaryMessage === 'function') {
+                        showTemporaryMessage(successMessage, 'success');
+                    }
+                }, 100);
+                
+            } catch (error) {
+                console.error('删除文件失败:', error);
+                alert(t.errorTitle + ': ' + error.message);
+                
+                // 恢复按钮状态
+                deleteButton.disabled = false;
+                deleteButton.textContent = t.deleteButton || 'Delete';
+            }
         });
 
         // 替换旧的UI
@@ -831,6 +880,97 @@ document.addEventListener('DOMContentLoaded', async () => {
         optionElement.style.pointerEvents = 'auto';
         optionElement.style.opacity = '1';
         optionElement.classList.remove('is-downloading');
+    }
+
+    /**
+     * 将已完成的任务恢复到下载前的状态
+     * @param {HTMLElement} optionElement - 选项元素
+     * @param {string} taskId - 任务ID
+     */
+    async function restoreToPreDownloadState(optionElement, taskId) {
+        try {
+            // 获取原始保存的文本
+            const originalText = optionElement.dataset.originalText;
+            
+            if (!originalText) {
+                console.error('无法找到原始文本，使用默认文本');
+                return;
+            }
+            
+            // 清空当前内容
+            optionElement.innerHTML = '';
+            
+            // 重建原始结构
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'option-content w-full grid grid-cols-[auto_1fr_auto] items-center gap-x-4';
+            
+            // 检查是否为音频格式（通过dataset判断）
+            const isAudio = optionElement.dataset.resolution === 'audio';
+            
+            if (isAudio) {
+                // 音频格式的原始结构
+                contentDiv.innerHTML = `
+                    <div class="w-6 h-6"></div>
+                    <div class="text-center">
+                        <span class="font-semibold">${originalText}</span>
+                    </div>
+                    <div class="download-icon justify-self-end">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                `;
+            } else {
+                // 视频格式的原始结构
+                contentDiv.innerHTML = `
+                    <div></div>
+                    <div class="text-center">
+                        <span class="font-semibold">${originalText}</span>
+                    </div>
+                    <div class="download-icon justify-self-end">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                `;
+            }
+            
+            // 添加进度条容器（隐藏状态）
+            const progressDiv = document.createElement('div');
+            progressDiv.className = 'option-progress w-full hidden';
+            
+            // 重新组装元素
+            optionElement.appendChild(contentDiv);
+            optionElement.appendChild(progressDiv);
+            
+            // 恢复原始样式和状态
+            optionElement.style.pointerEvents = 'auto';
+            optionElement.style.opacity = '1';
+            optionElement.style.animation = '';
+            optionElement.classList.remove('is-downloading', 'border', 'border-green-500');
+            
+            // 清理任务相关的dataset
+            delete optionElement.dataset.taskId;
+            delete optionElement.dataset.originalText;
+            
+            // 重新绑定点击事件
+            optionElement.addEventListener('click', (e) => {
+                // 检查是否有文字被选中，如果有则不触发下载
+                const selection = window.getSelection();
+                if (selection && selection.toString().length > 0) {
+                    return;
+                }
+                
+                handleDownload(optionElement.dataset.formatId);
+            });
+            
+            console.log('成功恢复下载选项到原始状态');
+            
+        } catch (error) {
+            console.error('恢复下载前状态失败:', error);
+            // 如果恢复失败，至少移除当前元素
+            optionElement.remove();
+        }
     }
 
     // 动态轮询间隔管理器

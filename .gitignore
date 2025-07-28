@@ -107,3 +107,10 @@ venv/
 nosetests.xml
 
 dump.rdb
+
+# celery beat定时器相关
+celerybeat-schedule
+celerybeat.pid
+celerybeat.sqlite3
+celerybeat-schedule-shm
+celerybeat-schedule-wal
