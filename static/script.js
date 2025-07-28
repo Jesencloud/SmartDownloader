@@ -378,11 +378,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         optionsHTML += `
             <div class="resolution-option ${audioColorClasses[0] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors"
                  data-format-id="${bestAudioFormat.format_id}" data-audio-format="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-abr="${audioBitrate || ''}" data-resolution="audio" data-is-complete-stream="${bestAudioFormat.is_complete_stream || false}" data-supports-browser-download="${bestAudioFormat.supports_browser_download || false}">
-                <div class="option-content w-full flex items-center">
-                    <div class="flex-grow text-center">
+                <div class="option-content w-full grid grid-cols-[auto_1fr_auto] items-center gap-x-4">
+                    <div class="w-6 h-6"></div>
+                    <div class="text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_lossless">${highBitrateText}${audioStreamIndicator}</span>
                     </div>
-                    <div class="download-icon">
+                    <div class="download-icon justify-self-end">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                 </div>
@@ -397,11 +398,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         optionsHTML += `
             <div class="resolution-option ${audioColorClasses[1] || defaultColorClass} p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
                  data-format-id="${mp3FormatId}" data-audio-format-original="${audioFormat}" data-filesize="${bestAudioFormat.filesize || ''}" data-filesize-is-approx="${bestAudioFormat.filesize_is_approx || false}" data-resolution="audio">
-                <div class="option-content w-full flex items-center">
-                    <div class="flex-grow text-center">
+                <div class="option-content w-full grid grid-cols-[auto_1fr_auto] items-center gap-x-4">
+                    <div class="w-6 h-6"></div>
+                    <div class="text-center">
                         <span class="font-semibold" data-translate-dynamic="audio_compatible">${compatibilityText}</span>
                     </div>
-                    <div class="download-icon">
+                    <div class="download-icon justify-self-end">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                 </div>
@@ -426,8 +428,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         optionsHTML = topFormats.map((format, index) => {
             const resolutionText = format.resolution;
             const formattedSize = formatFileSize(format.filesize, format.filesize_is_approx);
-            // 格式化显示文本为: {resolution} {filesize}
-            const displayText = `${resolutionText} ${formattedSize}`;
             
             // 智能标识系统：检测完整流并添加⚡️标识
             let streamTypeIndicator = '';
@@ -442,13 +442,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             return `
                 <div class="resolution-option ${colorClass} bg-opacity-70 p-4 rounded-lg flex items-center cursor-pointer transition-colors" 
-                     data-format-id="${format.format_id}" data-resolution="${resolutionText}" data-display-text="${displayText}" data-ext="${format.ext}" data-filesize="${format.filesize || ''}" data-filesize-is-approx="${format.filesize_is_approx || false}" data-is-complete-stream="${format.is_complete_stream || false}" data-supports-browser-download="${format.supports_browser_download || false}">
-                    <div class="option-content w-full flex items-center">
-                        <div class="flex-grow text-center">
-                            <!-- 显示格式: 下载 {resolution} {filesize} {ext} {⚡️标识} -->
-                            <span class="font-semibold" data-translate-dynamic="video">${t.download} ${displayText} ${format.ext}${streamTypeIndicator}</span>
+                     data-format-id="${format.format_id}" 
+                     data-resolution="${resolutionText}" 
+                     data-formatted-size="${formattedSize}" 
+                     data-ext="${format.ext}" 
+                     data-filesize="${format.filesize || ''}" 
+                     data-filesize-is-approx="${format.filesize_is_approx || false}" 
+                     data-is-complete-stream="${format.is_complete_stream || false}" 
+                     data-supports-browser-download="${format.supports_browser_download || false}">
+                    <div class="option-content w-full grid grid-cols-[1fr_auto_1fr] items-center gap-x-4">
+                        <div></div>
+                        <div class="text-center">
+                            <span class="font-semibold" data-translate-dynamic="video">${t.download} ${resolutionText} ${formattedSize} ${format.ext}${streamTypeIndicator}</span>
                         </div>
-                        <div class="download-icon">
+                        <div class="download-icon justify-self-end">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </div>
                     </div>
@@ -754,7 +761,9 @@ document.addEventListener('DOMContentLoaded', async () => {
      */
     function updateUIToCompleted(optionElement, taskId) {
         const t = getTranslations();
-        const originalText = optionElement.dataset.displayText || t.downloadComplete;
+        
+        // Simply restore the original text that was saved before the download started.
+        const titleText = optionElement.dataset.originalText || t.downloadComplete;
 
         // 使用HTML模板（如果已添加）或动态创建
         const template = document.getElementById('completed-task-template');
@@ -765,24 +774,45 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             // Fallback if template doesn't exist
             completedItem = document.createElement('div');
-            completedItem.className = 'completed-task-item bg-gray-800 p-4 rounded-lg flex items-center justify-between';
+            completedItem.className = "completed-task-item p-4 rounded-lg grid grid-cols-[1fr_auto_1fr] items-center w-full gap-x-4";
             completedItem.innerHTML = `
-                <div class="flex items-center">
-                    <svg class="w-6 h-6 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <!-- Left Spacer -->
+                <div></div>
+                <!-- Center Content: Text + Icon -->
+                <div class="text-center">
                     <span class="task-title font-semibold text-white"></span>
+                    <svg class="w-5 h-5 text-green-400 inline-block ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </div>
-                <div class="flex items-center">
-                    <button class="redownload-button button bg-blue-600 hover:bg-blue-700 text-xs py-1 px-3 mr-2" data-translate="redownloadButton">${t.redownloadButton || '重新下载'}</button>
-                    <button class="delete-button button bg-red-600 hover:bg-red-700 text-xs py-1 px-3" data-translate="deleteButton">${t.deleteButton || '删除'}</button>
+                <!-- Right Buttons -->
+                <div class="flex items-center justify-self-end">
+                    <button class="resave-button button bg-blue-600 hover:bg-blue-700 text-xs py-1 px-3 mr-2" data-translate="resaveButton"></button>
+                    <button class="delete-button button bg-red-600 hover:bg-red-700 text-xs py-1 px-3" data-translate="deleteButton"></button>
                 </div>
             `;
         }
 
-        completedItem.querySelector('.task-title').textContent = originalText;
+        const taskTitleSpan = completedItem.querySelector('.task-title');
+        taskTitleSpan.textContent = titleText;
+
+        // Set button text from translations
+        completedItem.querySelector('.resave-button').textContent = t.resaveButton || 'Resave';
+        completedItem.querySelector('.delete-button').textContent = t.deleteButton || 'Delete';
+
+        // Define variables from the original element's dataset to fix the ReferenceError
+        const resolution = optionElement.dataset.resolution;
+        const originalAudioFormat = optionElement.dataset.audioFormatOriginal;
+
+        // Add data attributes to the new span for future language switching.
+        if (resolution !== 'audio' && !originalAudioFormat) {
+            taskTitleSpan.setAttribute('data-translate-type', 'completed-video');
+            taskTitleSpan.setAttribute('data-resolution', resolution);
+            taskTitleSpan.setAttribute('data-formatted-size', optionElement.dataset.formattedSize);
+            taskTitleSpan.setAttribute('data-ext', optionElement.dataset.ext);
+        }
         
-        // 为“重新下载”按钮添加事件监听
-        const redownloadButton = completedItem.querySelector('.redownload-button');
-        redownloadButton.addEventListener('click', () => {
+        // 为“重新保存”按钮添加事件监听
+        const resaveButton = completedItem.querySelector('.resave-button');
+        resaveButton.addEventListener('click', () => {
             const downloadUrl = `/download/file/${taskId}`;
             triggerBrowserDownload(downloadUrl);
         });
@@ -1382,6 +1412,13 @@ function pollTaskStatus(taskId, optionElement) {
             return;
         }
         const optionElement = document.querySelector(`[data-format-id="${formatId}"]`);
+
+        // Save the original descriptive text before showing the progress bar
+        const textSpan = optionElement.querySelector('.option-content span');
+        if (textSpan) {
+            optionElement.dataset.originalText = textSpan.textContent.trim();
+        }
+
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
 
@@ -1488,14 +1525,18 @@ function pollTaskStatus(taskId, optionElement) {
     // 通用的下载完成状态显示函数
     function showDownloadComplete(contentDiv, progressDiv, originalText, optionElement) {
         progressDiv.classList.add('hidden');
-        contentDiv.innerHTML = `
-            <div class="flex-grow text-center">
-                <span class="font-semibold">${originalText}</span>
-            </div>
-            <div class="download-icon text-green-400">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-        `;
+        
+        // Instead of replacing the entire innerHTML, just update the icon.
+        // This preserves the grid layout and ensures text alignment remains correct.
+        const iconContainer = contentDiv.querySelector('.download-icon');
+        if (iconContainer) {
+            iconContainer.innerHTML = `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-green-400">
+                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            `;
+        }
+        
         contentDiv.classList.remove('hidden');
         optionElement.classList.remove('is-downloading');
         optionElement.classList.add('border', 'border-green-500');

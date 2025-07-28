@@ -1044,14 +1044,18 @@
     <!-- faq End -->
 
     <template id="completed-task-template">
-        <div class="completed-task-item bg-gray-800 p-4 rounded-lg flex items-center justify-between">
-            <div class="flex items-center">
-                <svg class="w-6 h-6 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <div class="completed-task-item p-4 rounded-lg grid grid-cols-[1fr_auto_1fr] items-center w-full gap-x-4">
+            <!-- Left Spacer -->
+            <div></div>
+            <!-- Center Content: Text + Icon -->
+            <div class="text-center">
                 <span class="task-title font-semibold text-white"></span>
+                <svg class="w-5 h-5 text-green-400 inline-block ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </div>
-            <div class="flex items-center">
-                <button class="redownload-button button bg-blue-600 hover:bg-blue-700 text-xs py-1 px-3 mr-2" data-translate="redownloadButton">重新下载</button>
-                <button class="delete-button button bg-red-600 hover:bg-red-700 text-xs py-1 px-3" data-translate="deleteButton">删除</button>
+            <!-- Right Buttons -->
+            <div class="flex items-center justify-self-end">
+                <button class="resave-button button bg-blue-600 hover:bg-blue-700 text-xs py-1 px-3 mr-2" data-translate="resaveButton"></button>
+                <button class="delete-button button bg-red-600 hover:bg-red-700 text-xs py-1 px-3" data-translate="deleteButton"></button>
             </div>
         </div>
     </template>

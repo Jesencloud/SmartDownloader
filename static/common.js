@@ -111,6 +111,18 @@ async function switchLanguage(lang) {
             return;
         }
 
+        // Handle completed items separately
+        const completedTitle = option.querySelector('.task-title[data-translate-type="completed-video"]');
+        if (completedTitle) {
+            const resolution = completedTitle.dataset.resolution;
+            const formattedSize = completedTitle.dataset.formattedSize;
+            const ext = completedTitle.dataset.ext;
+            if (resolution && formattedSize && ext) {
+                completedTitle.textContent = `${t.download} ${resolution} ${formattedSize} ${ext}`;
+            }
+            return; // Move to the next option
+        }
+
         const span = option.querySelector('[data-translate-dynamic]');
         if (!span) return;
 

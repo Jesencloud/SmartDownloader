@@ -80,5 +80,7 @@
     "downloading": "Downloading",
     "retryButton": "Retry",
     "unknownError": "An unknown error occurred.",
-    "noHistoryRecord": "No history records"
+    "noHistoryRecord": "No history records",
+    "resaveButton": "Resave",
+    "deleteButton": "Delete"
 }
