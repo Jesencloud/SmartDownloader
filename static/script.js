@@ -15,14 +15,14 @@ async function loadConfiguration() {
             appConfig = await response.json();
             console.log('Configuration loaded from backend:', appConfig.security?.allowed_domains);
         } else {
-            console.warn('Failed to load configuration from backend, using fallback');
-            // Fallback to hardcoded domains if backend config fails
-            appConfig.security.allowed_domains = ["x.com", "youtube.com", "bilibili.com", "youtu.be"];
+            console.warn('Failed to load configuration from backend, no fallback domains');
+            // No fallback domains - only use backend configuration
+            appConfig.security.allowed_domains = [];
         }
     } catch (error) {
         console.error('Error loading configuration:', error);
-        // Fallback to hardcoded domains if fetch fails
-        appConfig.security.allowed_domains = ["x.com", "youtube.com", "bilibili.com", "youtu.be"];
+        // No fallback domains - only use backend configuration
+        appConfig.security.allowed_domains = [];
     }
 }
 
@@ -1143,6 +1143,19 @@ function pollTaskStatus(taskId, optionElement) {
                 console.warn(`轮询任务状态失败 ${taskId}: ${response.status}`);
                 requestSuccess = false;
                 pollingManager.recordAttempt(false);
+                
+                // 如果是500错误（服务器内部错误），可能是 Celery 异常解析问题
+                if (response.status === 500) {
+                    console.error(`服务器内部错误，任务 ${taskId} 可能失败`);
+                    // 连续多次500错误后，停止轮询并显示错误
+                    if (pollingManager.consecutiveFailures >= 3) {
+                        stopPolling();
+                        const errorIcon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                        const failedMessage = translateProgressMessage('下载失败', t);
+                        showTaskStatus(optionElement, 'failure', failedMessage, errorIcon, 'text-red-400', 'border-red-500');
+                        return;
+                    }
+                }
                 // 继续下一次轮询而不是直接返回
             } else {
                 pollingManager.recordAttempt(true);

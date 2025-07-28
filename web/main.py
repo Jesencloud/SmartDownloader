@@ -1550,20 +1550,31 @@ async def debug_task_status(task_id: str):
 @app.get("/downloads/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
     task_result = AsyncResult(task_id, app=celery_app)
-    result = task_result.result
+    
+    # 安全地获取任务结果，避免异常信息解析错误
+    try:
+        result = task_result.result
+    except (ValueError, KeyError) as e:
+        # 处理 Celery 异常信息解析错误
+        log.error(f"Failed to get task result for {task_id}: {e}")
+        if task_result.status == "FAILURE":
+            # 对于失败的任务，尝试从其他来源获取错误信息
+            result = getattr(task_result, 'info', None) or str(e)
+        else:
+            result = None
 
     # 添加详细调试信息
     # log.info(f"=== TASK STATUS DEBUG ===")
     # log.info(f"Task ID: {task_id}")
     # log.info(f"Task status: {task_result.status}")
-    # log.info(f"Task result type: {type(task_result.result)}")
-    # log.info(f"Task result: {task_result.result}")
+    # log.info(f"Task result type: {type(result)}")
+    # log.info(f"Task result: {result}")
     # log.info(f"Task info: {getattr(task_result, 'info', 'No info')}")
     # log.info(f"========================")
 
     # Handle different result types
-    if isinstance(task_result.result, Exception):
-        result = str(task_result.result)
+    if isinstance(result, Exception):
+        result = str(result)
     elif task_result.status == "SUCCESS":
         # For successful tasks, check if result is available, otherwise use meta
         if result and isinstance(result, dict) and "relative_path" in result:

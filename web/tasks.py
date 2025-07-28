@@ -60,6 +60,20 @@ class BaseDownloadTask(Task):
         """任务失败回调"""
         duration = time.time() - self.start_time if self.start_time else 0
         log.error(f"Task {task_id} failed after {duration:.2f}s: {exc}")
+        
+        # 确保异常信息被正确记录到任务状态中
+        try:
+            self.update_state(
+                state="FAILURE",
+                meta={
+                    "status": f"Task failed: {str(exc)}",
+                    "progress": 0,
+                    "error": str(exc),
+                    "duration": duration
+                }
+            )
+        except Exception as e:
+            log.error(f"Failed to update task state on failure: {e}")
 
         # 清理资源
         self.cleanup_resources()
@@ -369,12 +383,14 @@ def download_video_task(
             return final_result
 
         except Exception as e:
-            # 更新失败状态
+            # 更新失败状态，提供更详细的错误信息
+            error_message = f"Download failed: {str(e)}"
             self.update_state(
                 state="FAILURE",
-                meta={"status": f"Download failed: {str(e)}", "progress": 0},
+                meta={"status": error_message, "progress": 0, "error": str(e)},
             )
-            raise e
+            # 确保异常信息格式正确，避免 Celery 解析错误
+            raise Exception(error_message) from e
 
     try:
         # 检查是否有足够的系统资源
@@ -395,9 +411,10 @@ def download_video_task(
             log.info(f"Retrying task {task_id} due to network error")
             raise self.retry(countdown=60, max_retries=3, exc=e)
 
-        # 创建清理的异常信息
-        clean_exception = type(e)(f"Task failed: {str(e)}")
-        raise clean_exception
+        # 确保异常信息格式正确，避免 Celery 解析错误
+        # 不要创建新的异常类型，而是使用标准的 Exception
+        error_message = f"Task failed: {str(e)}"
+        raise Exception(error_message)
 
     finally:
         # 清理资源
