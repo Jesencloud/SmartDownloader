@@ -1558,13 +1558,19 @@ async def debug_task_status(task_id: str):
 async def get_task_status(task_id: str):
     task_result = AsyncResult(task_id, app=celery_app)
 
-    # 安全地获取任务结果，避免异常信息解析错误
+    # 安全地获取任务结果和状态，避免异常信息解析错误
     try:
         result = task_result.result
+        status = task_result.status
     except (ValueError, KeyError) as e:
         # 处理 Celery 异常信息解析错误
         log.error(f"Failed to get task result for {task_id}: {e}")
-        if task_result.status == "FAILURE":
+        try:
+            status = task_result.status
+        except (ValueError, KeyError):
+            status = "FAILURE"
+
+        if status == "FAILURE":
             # 对于失败的任务，尝试从其他来源获取错误信息
             result = getattr(task_result, "info", None) or str(e)
         else:
@@ -1582,7 +1588,7 @@ async def get_task_status(task_id: str):
     # Handle different result types
     if isinstance(result, Exception):
         result = str(result)
-    elif task_result.status == "SUCCESS":
+    elif status == "SUCCESS":
         # For successful tasks, check if result is available, otherwise use meta
         if result and isinstance(result, dict) and "relative_path" in result:
             # Use the actual result if it contains file info
@@ -1599,7 +1605,7 @@ async def get_task_status(task_id: str):
             if not result:
                 result = {"status": "Completed"}
     elif (
-        task_result.status in ["PENDING", "PROGRESS"]
+        status in ["PENDING", "PROGRESS"]
         and hasattr(task_result, "info")
         and task_result.info
     ):
@@ -1608,9 +1614,9 @@ async def get_task_status(task_id: str):
     else:
         # For other cases, ensure we have a proper result format
         if not result:
-            result = {"status": task_result.status}
+            result = {"status": status}
 
-    return {"task_id": task_id, "status": task_result.status, "result": result}
+    return {"task_id": task_id, "status": status, "result": result}
 
 
 @app.post("/downloads/cancel", status_code=200)
