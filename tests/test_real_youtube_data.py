@@ -98,12 +98,9 @@ def test_real_data_selection():
     print(f"   语言: {best_audio.raw_format.get('language', 'N/A')}")
 
     # 验证结果
-    if best_audio.format_id == "140-10":
-        print("\n🎉 SUCCESS: 正确选择了140-10 (original default)!")
-        return True
-    else:
-        print(f"\n❌ FAILED: 期望选择140-10，但实际选择了{best_audio.format_id}")
-        return False
+    assert best_audio.format_id == "140-10", (
+        f"期望选择 '140-10', 但实际选择了 '{best_audio.format_id}'"
+    )
 
 
 def debug_scoring():

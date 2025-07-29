@@ -115,18 +115,9 @@ def test_audio_selection():
     raw_format = best_audio.raw_format
     format_note = raw_format.get("format_note", "").lower()
 
-    if "original" in format_note and "default" in format_note:
-        print("\n🎉 SUCCESS: 成功选择了 'original (default)' 音频流！")
-        return True
-    elif "default" in format_note:
-        print("\n⚠️  WARNING: 选择了 'default' 音频流，但不是 'original (default)'")
-        return False
-    elif "original" in format_note:
-        print("\n⚠️  WARNING: 选择了 'original' 音频流，但不是 'original (default)'")
-        return False
-    else:
-        print("\n❌ FAILED: 没有选择带有特殊标记的音频流")
-        return False
+    assert "original" in format_note and "default" in format_note, (
+        f"选择的音频备注 '{format_note}' 不包含 'original (default)'"
+    )
 
 
 def test_edge_cases():

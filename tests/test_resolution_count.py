@@ -13,8 +13,8 @@ BASE_URL = "http://localhost:8001"
 def test_video_resolution_count():
     """测试视频分辨率输出数量"""
     test_urls = [
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # 经典测试视频
-        "https://www.youtube.com/watch?v=9bZkp7q19f0",  # 另一个视频
+        "https://www.youtube.com/watch?v=pXIE9uksKqU&ab_channel=GuysAI",
+        "https://www.youtube.com/watch?v=j5c8t-GZ7_I&ab_channel=CelineDion",
     ]
 
     print("🧪 测试视频分辨率输出数量...")

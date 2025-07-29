@@ -13,7 +13,7 @@ BASE_URL = "http://localhost:8000"
 @pytest.mark.e2e
 def test_parsing_speed():
     """测试不同下载类型的解析速度"""
-    test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # 经典测试视频
+    test_url = "https://www.youtube.com/watch?v=j5c8t-GZ7_I&ab_channel=CelineDion"  # 经典测试视频
 
     print("🧪 测试解析速度优化效果...")
 

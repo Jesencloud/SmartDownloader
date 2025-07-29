@@ -18,7 +18,7 @@ def test_get_video_info_handles_runtime_error(client):
         # 2. 执行 (Act)
         response = client.post(
             "/video-info",
-            json={"url": "https://example.com/video", "download_type": "video"},
+            json={"url": "https://www.youtube.com/video", "download_type": "video"},
         )
 
         # 3. 验证 (Assert)
@@ -30,3 +30,38 @@ def test_get_video_info_handles_runtime_error(client):
         assert "detail" in json_response
         assert "yt-dlp crashed" in json_response["detail"]
         print(f"✅ 成功捕获并验证了预期的 500 错误: {json_response['detail']}")
+
+
+def test_get_video_info_rejects_non_whitelisted_domain(client):
+    """
+    测试: 当提供一个不在白名单中的URL时, /video-info 端点应返回 403 错误。
+    """
+    # 1. 准备 (Arrange)
+    # 无需 mock，因为白名单检查在调用 fetch_video_info_sync 之前发生
+
+    # 2. 执行 (Act)
+    response = client.post(
+        "/video-info",
+        json={
+            "url": "https://www.some-random-site.com/video",
+            "download_type": "video",
+        },
+    )
+
+    # 3. 验证 (Assert)
+    # 验证 HTTP 状态码是否为 403 (Forbidden)
+    assert response.status_code == 403
+
+    # 验证响应体是否包含了我们预期的错误信息
+    json_response = response.json()
+    assert "detail" in json_response
+    assert (
+        "Downloads from 'www.some-random-site.com' are not permitted"
+        in json_response["detail"]
+    )
+    # 确保不再显示白名单列表
+    assert (
+        "Only downloads from the following sites are permitted"
+        not in json_response["detail"]
+    )
+    print(f"✅ 成功捕获并验证了预期的 403 错误: {json_response['detail']}")

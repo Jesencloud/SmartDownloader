@@ -213,9 +213,7 @@ advanced:
 security:
   # 允许下载的网站域名白名单。如果列表为空，则允许所有网站。
   allowed_domains:
-    - "x.com"
     - "youtube.com"
     - "bilibili.com"
     - "youtu.be"
-    - "cn.pornhub.com"
-    - "pornhub.com"
+    - "x.com"

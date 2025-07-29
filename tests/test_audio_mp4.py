@@ -12,7 +12,7 @@ BASE_URL = "http://localhost:8001"
 @pytest.mark.e2e
 def test_audio_mp4_support():
     """测试音频mp4格式是否被正确识别和优先选择"""
-    test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    test_url = "https://www.youtube.com/watch?v=pXIE9uksKqU&ab_channel=GuysAI"
 
     print("🧪 测试音频mp4格式支持...")
 

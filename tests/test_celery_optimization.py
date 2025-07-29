@@ -20,7 +20,8 @@ class CeleryPerformanceTest:
         self.results = []
 
     def test_single_download(
-        self, test_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        self,
+        test_url="https://www.youtube.com/watch?v=j5c8t-GZ7_I&ab_channel=CelineDion",
     ):
         """测试单个下载任务"""
         print("🧪 测试单个下载任务...")

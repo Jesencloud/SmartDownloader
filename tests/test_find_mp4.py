@@ -15,10 +15,9 @@ def test_find_mp4_audio():
 
     # 测试更多可能有mp4音频的URL
     test_urls = [
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        "https://www.youtube.com/watch?v=9bZkp7q19f0",
-        "https://www.youtube.com/watch?v=jNQXAC9IVRw",  # Me at the zoo (first YouTube video)
-        "https://www.youtube.com/watch?v=kJQP7kiw5Fk",  # Despacito
+        "https://www.youtube.com/watch?v=pXIE9uksKqU&ab_channel=GuysAI",
+        "https://www.youtube.com/watch?v=j5c8t-GZ7_I&ab_channel=CelineDion",
+        "https://www.youtube.com/watch?v=jNQXAC9IVRw",
     ]
 
     print("🔍 寻找包含mp4音频格式的URL...")

@@ -10,7 +10,7 @@ let appConfig = {
 // --- Configuration Loading ---
 async function loadConfiguration() {
     try {
-        const response = await fetch('/config');
+        const response = await fetch('/config_manager.config');
         if (response.ok) {
             appConfig = await response.json();
             console.log('Configuration loaded from backend:', appConfig.security?.allowed_domains);
@@ -1421,29 +1421,42 @@ function pollTaskStatus(taskId, optionElement) {
         };
     }
     
-    // 域名白名单验证函数（保留原有逻辑）
+    // 域名白名单验证函数
     function validateDomainWhitelist(url) {
         const allowedDomains = appConfig.security?.allowed_domains || [];
-        
+
+        // 安全优先原则：如果白名单为空，则视为配置不完整并拒绝所有请求，
+        // 而不是允许所有请求。这是为了防止因配置加载失败而导致安全策略失效。
         if (allowedDomains.length === 0) {
-            return { valid: true, errors: [] };
+            console.warn("Frontend Validation: Whitelist is empty, denying URL. This is a security measure.");
+            return { 
+                valid: false, 
+                errors: ['The domain whitelist is not configured on the server. No domains are currently allowed.'] 
+            };
         }
-        
+
         try {
             const urlHostname = new URL(url).hostname.toLowerCase();
-            const isAllowed = allowedDomains.some(domain => urlHostname.endsWith(domain.toLowerCase()));
             
+            // 修正域名匹配逻辑：
+            // 确保精确匹配（如 youtube.com）或子域名匹配（如 music.youtube.com），
+            // 但避免部分匹配（如 myfakeyoutube.com）。
+            const isAllowed = allowedDomains.some(domain => {
+                const lowerDomain = domain.toLowerCase();
+                return urlHostname === lowerDomain || urlHostname.endsWith('.' + lowerDomain);
+            });
+
             if (!isAllowed) {
                 const domainList = allowedDomains.join(', ');
                 return {
                     valid: false,
-                    errors: [`不支持从 "${urlHostname}" 下载。只支持以下网站: ${domainList}`]
+                    errors: [`Downloads from the domain "${urlHostname}" are not allowed.`]
                 };
             }
-            
+
             return { valid: true, errors: [] };
         } catch (e) {
-            return { valid: false, errors: ['无法解析链接域名'] };
+            return { valid: false, errors: ['Could not parse domain from the provided URL.'] };
         }
     }
     

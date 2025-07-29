@@ -15,8 +15,8 @@ def test_audio_mp4_filtering():
 
     # 测试多个可能有mp4音频的URL
     test_urls = [
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        "https://www.youtube.com/watch?v=9bZkp7q19f0",
+        "https://www.youtube.com/watch?v=pXIE9uksKqU&ab_channel=GuysAI",
+        "https://www.youtube.com/watch?v=j5c8t-GZ7_I&ab_channel=CelineDion",
     ]
 
     print("🧪 测试音频mp4格式过滤调试...")

@@ -241,23 +241,6 @@ def download_video_task(
     title: str = "",
     custom_path: str = None,
 ):
-    """
-    优化的异步Celery下载任务
-
-    Args:
-        video_url: 要下载的视频URL
-        download_type: 下载类型 ('video' 或 'audio')
-        format_id: 视频格式ID
-        resolution: 视频分辨率 (例如: '1080p60')
-        custom_path: 自定义下载路径 (可选)
-    """
-    log.info("=== TASK START DEBUG ===")
-    log.info(f"Task ID: {self.request.id}")
-    log.info(f"Video URL: {video_url}")
-    log.info(f"Download type: {download_type}")
-    log.info(f"Format ID: {format_id}")
-    log.info("========================")
-
     # 在任务内部初始化 Redis 客户端，确保 config 已加载
     redis_client = redis.Redis.from_url(
         config_manager.config.celery.broker_url, decode_responses=True
@@ -410,63 +393,9 @@ def download_video_task(
             return final_result
 
         except Exception as e:
-            # 检查是否是下载失败，但文件可能已存在
-            output_file = None
-            if self.downloader:
-                try:
-                    # 尝试在所有策略失败后，最后再检查一次文件是否存在
-                    file_prefix = title or task_id
-                    final_check = await self.downloader._find_and_verify_output_file(
-                        file_prefix, (".mp4", ".mp3", ".m4a")
-                    )
-                    if final_check:
-                        log.warning(
-                            f"任务主流程异常，但在最终检查中找到了有效文件: {final_check.name}"
-                        )
-                        output_file = final_check
-                except Exception as find_err:
-                    log.error(f"最终文件检查失败: {find_err}")
-
-            if output_file:
-                # 如果找到了文件，视为成功
-                log.info("将任务标记为成功，因为找到了最终的输出文件。")
-                # 复用之前的成功逻辑
-                download_folder = (
-                    Path(custom_path)
-                    if custom_path
-                    else Path(config_manager.config.downloader.save_path)
-                )
-                final_result = {
-                    "status": "Completed with fallback",
-                    "result": str(output_file),
-                    "relative_path": str(output_file.relative_to(download_folder)),
-                    "download_folder": str(download_folder),
-                    "file_size": output_file.stat().st_size,
-                    "duration": time.time() - self.start_time,
-                }
-                try:
-                    self.update_state(state="SUCCESS", meta=final_result)
-                except Exception as update_error:
-                    log.error(
-                        f"Failed to update SUCCESS state on fallback, but download completed: {update_error}"
-                    )
-                return final_result
-
-            # 如果没有找到文件，则标记为失败
-            error_message = f"Download failed: {str(e)}"
-            try:
-                self.update_state(
-                    state="FAILURE",
-                    meta={
-                        "status": error_message,
-                        "progress": 0,
-                        "error": str(e),
-                        "timestamp": time.time(),
-                    },
-                )
-            except Exception as update_error:
-                log.error(f"Failed to update failure state: {update_error}")
-            raise Exception(error_message) from e
+            # 异常由 downloader 抛出，此处直接重新抛出，由外层统一处理
+            log.error(f"Async download process failed: {str(e)}", exc_info=True)
+            raise
 
     try:
         # 检查是否有足够的系统资源

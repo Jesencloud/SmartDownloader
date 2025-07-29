@@ -375,7 +375,15 @@ async def get_video_info(request: VideoInfoRequest):
         try:
             parsed_url = urlparse(request.url)
             domain = parsed_url.netloc.lower()
+        except Exception:
+            # If URL parsing fails, let it proceed. yt-dlp will handle the invalid URL.
+            # We log this as a warning for debugging purposes.
+            log.warning(
+                f"Could not parse URL '{request.url}' for domain validation. Skipping whitelist check."
+            )
+            domain = None  # Ensure domain is None if parsing fails
 
+        if domain:  # Only proceed with the check if domain parsing was successful
             # Check if the domain or any of its parent domains are in the whitelist
             # e.g., 'music.youtube.com' should match 'youtube.com'
             is_allowed = any(
@@ -385,11 +393,8 @@ async def get_video_info(request: VideoInfoRequest):
             if not is_allowed:
                 raise HTTPException(
                     status_code=403,  # 403 Forbidden is appropriate here
-                    detail=f"Downloads from '{parsed_url.netloc}' are not allowed. Only downloads from the following sites are permitted: {', '.join(allowed_domains)}",
+                    detail=f"Downloads from '{parsed_url.netloc}' are not permitted by the current configuration.",
                 )
-        except Exception:
-            # If URL parsing fails, let it proceed. yt-dlp will handle the invalid URL.
-            pass
     # --- End of Whitelist Enforcement ---
 
     try:
@@ -1587,13 +1592,13 @@ async def get_task_status(task_id: str):
         task_info = None
 
     # 添加详细调试信息
-    log.info("=== TASK STATUS DEBUG ===")
-    log.info(f"Task ID: {task_id}")
+    # log.info("=== TASK STATUS DEBUG ===")
+    # log.info(f"Task ID: {task_id}")
     log.info(f"Task status: {status}")
-    log.info(f"Task result type: {type(result)}")
-    log.info(f"Task result: {result}")
-    log.info(f"Task info: {task_info}")
-    log.info("========================")
+    # log.info(f"Task result type: {type(result)}")
+    # log.info(f"Task result: {result}")
+    # log.info(f"Task info: {task_info}")
+    # log.info("========================")
 
     # Handle different result types
     if isinstance(result, Exception):

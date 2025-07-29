@@ -16,7 +16,7 @@ def test_eta_progress():
     print("🧪 测试ETA信息传递...")
 
     # 测试URL
-    test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    test_url = "https://www.youtube.com/watch?v=j5c8t-GZ7_I&ab_channel=CelineDion"
 
     # 启动下载任务
     download_payload = {
