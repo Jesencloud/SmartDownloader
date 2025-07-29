@@ -80,8 +80,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         if (downloadingItems.length > 0) {
-            if (e) e.preventDefault(); // Prevent default link navigation
-
             // Show cleanup message
             const t = getTranslations();
             showCleanupMessage(t.cleaningUp);
@@ -181,12 +179,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- Attach cancellation handler to header links ---
     // This needs to be done at a higher level since the header is always present.
-    document.querySelector('.logo a').addEventListener('click', handleReturnHome);
+    const logoLink = document.querySelector('.logo a');
+    if (logoLink) {
+        logoLink.addEventListener('click', (e) => {
+            e.preventDefault(); // 阻止默认的页面跳转
+            handleReturnHome(e);
+        });
+    }
     
     // Attach cancellation handler to the Home button in header
     const homeButton = document.querySelector('a[data-translate="homeButton"]');
     if (homeButton) {
-        homeButton.addEventListener('click', handleReturnHome);
+        homeButton.addEventListener('click', (e) => {
+            e.preventDefault(); // 阻止默认的页面跳转
+            handleReturnHome(e);
+        });
     }
 
     // --- Core Functions ---

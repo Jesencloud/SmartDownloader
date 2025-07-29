@@ -1550,7 +1550,7 @@ async def debug_task_status(task_id: str):
 @app.get("/downloads/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
     task_result = AsyncResult(task_id, app=celery_app)
-    
+
     # 安全地获取任务结果，避免异常信息解析错误
     try:
         result = task_result.result
@@ -1559,7 +1559,7 @@ async def get_task_status(task_id: str):
         log.error(f"Failed to get task result for {task_id}: {e}")
         if task_result.status == "FAILURE":
             # 对于失败的任务，尝试从其他来源获取错误信息
-            result = getattr(task_result, 'info', None) or str(e)
+            result = getattr(task_result, "info", None) or str(e)
         else:
             result = None
 
@@ -2109,6 +2109,30 @@ async def clear_all_downloads():
         raise HTTPException(
             status_code=500, detail=f"Error clearing downloads: {str(e)}"
         )
+
+
+# --- Catch-all route for SPA ---
+# This must be the LAST route defined to avoid overriding other API endpoints.
+@app.get("/{full_path:path}", response_class=FileResponse, include_in_schema=False)
+async def catch_all_spa_route(full_path: str):
+    """
+    Catch-all route for SPA (Single Page Application) support.
+    Returns index.html for any unmatched routes to handle client-side routing.
+    """
+    # Check if the path looks like a static file request that was missed
+    if "." in full_path and full_path.split(".")[-1] in [
+        "js",
+        "css",
+        "ico",
+        "png",
+        "jpg",
+        "gif",
+        "svg",
+    ]:
+        raise HTTPException(status_code=404, detail="Static file not found")
+
+    # For all other paths, return index.html to support SPA routing
+    return FileResponse(BASE_DIR / "static" / "index.html")
 
 
 if __name__ == "__main__":

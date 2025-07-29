@@ -60,7 +60,7 @@ class BaseDownloadTask(Task):
         """任务失败回调"""
         duration = time.time() - self.start_time if self.start_time else 0
         log.error(f"Task {task_id} failed after {duration:.2f}s: {exc}")
-        
+
         # 确保异常信息被正确记录到任务状态中
         try:
             self.update_state(
@@ -69,8 +69,8 @@ class BaseDownloadTask(Task):
                     "status": f"Task failed: {str(exc)}",
                     "progress": 0,
                     "error": str(exc),
-                    "duration": duration
-                }
+                    "duration": duration,
+                },
             )
         except Exception as e:
             log.error(f"Failed to update task state on failure: {e}")
