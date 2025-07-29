@@ -59,3 +59,9 @@ class FFmpegException(DownloaderException):
     """当 ffmpeg 处理文件失败时抛出。"""
 
     pass
+
+
+class UnhandledException(DownloaderException):
+    """当一个操作在重试循环中因为一个非预期的、不应重试的错误而失败时抛出。"""
+
+    pass

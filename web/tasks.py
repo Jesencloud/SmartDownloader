@@ -63,17 +63,22 @@ class BaseDownloadTask(Task):
 
         # 确保异常信息被正确记录到任务状态中
         try:
+            # 创建安全的错误信息，避免复杂对象导致序列化问题
+            error_message = str(exc) if exc else "Unknown error"
             self.update_state(
                 state="FAILURE",
                 meta={
-                    "status": f"Task failed: {str(exc)}",
+                    "status": f"Task failed: {error_message}",
                     "progress": 0,
-                    "error": str(exc),
+                    "error": error_message,
                     "duration": duration,
+                    "timestamp": time.time(),
                 },
             )
-        except Exception as e:
-            log.error(f"Failed to update task state on failure: {e}")
+        except Exception as update_error:
+            # 如果更新状态失败，只记录日志，不再抛出异常
+            log.error(f"Failed to update task state on failure: {update_error}")
+            log.error(f"Original task failure: {exc}")
 
         # 清理资源
         self.cleanup_resources()
@@ -246,6 +251,13 @@ def download_video_task(
         resolution: 视频分辨率 (例如: '1080p60')
         custom_path: 自定义下载路径 (可选)
     """
+    log.info("=== TASK START DEBUG ===")
+    log.info(f"Task ID: {self.request.id}")
+    log.info(f"Video URL: {video_url}")
+    log.info(f"Download type: {download_type}")
+    log.info(f"Format ID: {format_id}")
+    log.info("========================")
+
     # 在任务内部初始化 Redis 客户端，确保 config 已加载
     redis_client = redis.Redis.from_url(
         config_manager.config.celery.broker_url, decode_responses=True
@@ -255,7 +267,12 @@ def download_video_task(
     task_id = self.request.id
 
     # 更新任务状态
-    self.update_state(state="PROGRESS", meta={"status": "正在下载中", "progress": 0})
+    try:
+        self.update_state(
+            state="PROGRESS", meta={"status": "正在下载中", "progress": 0}
+        )
+    except Exception as e:
+        log.error(f"Failed to update initial PROGRESS state: {e}")
 
     async def _async_download():
         try:
@@ -298,7 +315,11 @@ def download_video_task(
                 # 添加时间戳用于前端去重和排序
                 meta["timestamp"] = time.time()
 
-                self.update_state(state="PROGRESS", meta=meta)
+                try:
+                    self.update_state(state="PROGRESS", meta=meta)
+                except Exception as update_error:
+                    # 进度更新失败时只记录日志，不影响下载过程
+                    log.debug(f"Failed to update progress state: {update_error}")
 
                 # 记录详细的进度信息用于调试
                 log.debug(
@@ -378,18 +399,73 @@ def download_video_task(
             }
 
             # 更新最终状态，将完整结果放入 meta
-            self.update_state(state="SUCCESS", meta=final_result)
+            try:
+                self.update_state(state="SUCCESS", meta=final_result)
+            except Exception as update_error:
+                # 如果更新SUCCESS状态失败，只记录日志，但不改变结果
+                log.error(
+                    f"Failed to update SUCCESS state, but download completed: {update_error}"
+                )
 
             return final_result
 
         except Exception as e:
-            # 更新失败状态，提供更详细的错误信息
+            # 检查是否是下载失败，但文件可能已存在
+            output_file = None
+            if self.downloader:
+                try:
+                    # 尝试在所有策略失败后，最后再检查一次文件是否存在
+                    file_prefix = title or task_id
+                    final_check = await self.downloader._find_and_verify_output_file(
+                        file_prefix, (".mp4", ".mp3", ".m4a")
+                    )
+                    if final_check:
+                        log.warning(
+                            f"任务主流程异常，但在最终检查中找到了有效文件: {final_check.name}"
+                        )
+                        output_file = final_check
+                except Exception as find_err:
+                    log.error(f"最终文件检查失败: {find_err}")
+
+            if output_file:
+                # 如果找到了文件，视为成功
+                log.info("将任务标记为成功，因为找到了最终的输出文件。")
+                # 复用之前的成功逻辑
+                download_folder = (
+                    Path(custom_path)
+                    if custom_path
+                    else Path(config_manager.config.downloader.save_path)
+                )
+                final_result = {
+                    "status": "Completed with fallback",
+                    "result": str(output_file),
+                    "relative_path": str(output_file.relative_to(download_folder)),
+                    "download_folder": str(download_folder),
+                    "file_size": output_file.stat().st_size,
+                    "duration": time.time() - self.start_time,
+                }
+                try:
+                    self.update_state(state="SUCCESS", meta=final_result)
+                except Exception as update_error:
+                    log.error(
+                        f"Failed to update SUCCESS state on fallback, but download completed: {update_error}"
+                    )
+                return final_result
+
+            # 如果没有找到文件，则标记为失败
             error_message = f"Download failed: {str(e)}"
-            self.update_state(
-                state="FAILURE",
-                meta={"status": error_message, "progress": 0, "error": str(e)},
-            )
-            # 确保异常信息格式正确，避免 Celery 解析错误
+            try:
+                self.update_state(
+                    state="FAILURE",
+                    meta={
+                        "status": error_message,
+                        "progress": 0,
+                        "error": str(e),
+                        "timestamp": time.time(),
+                    },
+                )
+            except Exception as update_error:
+                log.error(f"Failed to update failure state: {update_error}")
             raise Exception(error_message) from e
 
     try:
@@ -399,8 +475,11 @@ def download_video_task(
             log.warning(f"High memory usage: {memory.percent}%")
             # 可以选择延迟任务或减少并发
 
+        log.info(f"Starting async download for task {task_id}")
         # 运行异步下载
-        return asyncio.run(_async_download())
+        result = asyncio.run(_async_download())
+        log.info(f"Async download completed for task {task_id}: {result}")
+        return result
 
     except Exception as e:
         # 记录详细错误信息

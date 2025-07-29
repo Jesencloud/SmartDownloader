@@ -662,9 +662,6 @@ class Downloader:
                     )
 
             # 查找视频文件
-            video_file = await self._find_output_file(
-                f"{file_prefix}.video", (".mp4", ".webm", ".mkv")
-            )
             video_file = await self._find_and_verify_output_file(
                 f"{file_prefix}.video", (".mp4", ".webm", ".mkv")
             )

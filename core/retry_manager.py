@@ -1,68 +1,45 @@
-#!/usr/bin/env python3
-"""
-重试管理器模块
-提供重试逻辑、熔断器管理和装饰器支持
-"""
-
 import asyncio
 import functools
 import logging
-import random
-import time
-from typing import Any, Callable, TypeVar
+from typing import Callable, Any, Type, Tuple, Optional
 
-from rich.console import Console
-
-from config_manager import config
-from .exceptions import (
-    CircuitBreakerState,
-    DownloaderException,
-    MaxRetriesExceededException,
-    DownloadStalledException,
-    ProxyException,
-    NetworkException,
-    AuthenticationException,
-)
+from .exceptions import UnhandledException
 
 log = logging.getLogger(__name__)
-console = Console()
-
-F = TypeVar("F", bound=Callable[..., Any])
 
 
 def with_retries(
-    max_retries: int = None,
-    base_delay: float = None,
-    max_delay: float = None,
-    backoff_factor: float = None,
-) -> Callable[[F], F]:
+    max_retries: int = 3,
+    initial_delay: int = 1,
+    backoff: int = 2,
+    retry_on: Optional[Tuple[Type[Exception], ...]] = None,
+):
     """
-    重试装饰器，为异步函数添加重试功能。
+    一个装饰器，为异步函数提供指数退避重试逻辑。
 
     Args:
-        max_retries: 最大重试次数，默认使用配置文件值
-        base_delay: 基础延迟时间，默认使用配置文件值
-        max_delay: 最大延迟时间，默认使用配置文件值
-        backoff_factor: 退避因子，默认使用配置文件值
-
-    Returns:
-        装饰后的函数
-
-    Usage:
-        @with_retries(max_retries=3, base_delay=5)
-        async def download_operation():
-            # 你的下载逻辑
-            pass
+        max_retries (int): 最大重试次数。
+        initial_delay (int): 初始延迟秒数。
+        backoff (int): 每次重试后延迟的乘数。
+        retry_on (Optional[Tuple[Type[Exception], ...]]):
+            一个异常类型的元组，应该触发重试。
+            如果为 None，则默认重试所有 Exception 的子类。
     """
+    if retry_on is None:
+        retry_on = (Exception,)
 
-    def decorator(func: F) -> F:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            """
+            包装函数，实现重试逻辑。
+            """
+            # 将 RetryManager 的实例化移到这里，确保每次调用都使用新的实例
             retry_manager = RetryManager(
                 max_retries=max_retries,
-                base_delay=base_delay,
-                max_delay=max_delay,
-                backoff_factor=backoff_factor,
+                initial_delay=initial_delay,
+                backoff=backoff,
+                retry_on=retry_on,
             )
             return await retry_manager.execute_with_retries(func, *args, **kwargs)
 
@@ -72,157 +49,83 @@ def with_retries(
 
 
 class RetryManager:
-    """负责重试逻辑和熔断器管理"""
+    """
+    管理具有指数退避策略的重试逻辑。
+    """
 
     def __init__(
         self,
-        max_retries: int = None,
-        base_delay: float = None,
-        max_delay: float = None,
-        backoff_factor: float = None,
+        max_retries: int = 3,
+        initial_delay: int = 1,
+        backoff: int = 2,
+        retry_on: Tuple[Type[Exception], ...] = (Exception,),
     ):
         """
-        初始化重试管理器。
+        初始化 RetryManager。
 
         Args:
-            max_retries: 最大重试次数，None则使用配置文件值
-            base_delay: 基础延迟时间，None则使用配置文件值
-            max_delay: 最大延迟时间，None则使用配置文件值
-            backoff_factor: 退避因子，None则使用配置文件值
+            max_retries (int): 最大重试次数。
+            initial_delay (int): 初始延迟秒数。
+            backoff (int): 每次重试后延迟的乘数。
+            retry_on (Tuple[Type[Exception], ...]):
+                应该触发重试的异常元组。
         """
-        # 从配置获取重试相关参数，支持参数覆盖
-        self.max_retries = (
-            max_retries if max_retries is not None else config.downloader.max_retries
-        )
-        self.base_delay = (
-            base_delay if base_delay is not None else config.downloader.base_delay
-        )
-        self.max_delay = (
-            max_delay if max_delay is not None else config.downloader.max_delay
-        )
-        self.backoff_factor = (
-            backoff_factor
-            if backoff_factor is not None
-            else config.downloader.backoff_factor
-        )
+        self.max_retries = max_retries
+        self.initial_delay = initial_delay
+        self.backoff = backoff
+        self.retry_on = retry_on
+        self.attempts = 0
+        self.delay = initial_delay
 
-        # 熔断器相关参数（这些不支持覆盖，始终使用配置文件值）
-        self.circuit_breaker_failure_threshold = (
-            config.downloader.circuit_breaker_failure_threshold
-        )
-        self.circuit_breaker_timeout = config.downloader.circuit_breaker_timeout
-
-        # 熔断器状态
-        self._circuit_breaker_state = CircuitBreakerState.CLOSED
-        self._failure_count = 0
-        self._last_failure_timestamp = 0
-
-    def _calculate_delay(self, attempt: int) -> int:
-        """计算指数退避延迟时间"""
-        delay = self.base_delay * (self.backoff_factor**attempt)
-        jitter = random.uniform(0.5, 1.5)
-        delay = min(delay * jitter, self.max_delay)
-        return int(delay)
-
-    def _check_circuit_breaker(self):
-        """检查熔断器状态，并根据需要转换状态。"""
-        if self._circuit_breaker_state == CircuitBreakerState.OPEN:
-            elapsed_time = time.time() - self._last_failure_timestamp
-            if elapsed_time > self.circuit_breaker_timeout:
-                self._circuit_breaker_state = CircuitBreakerState.HALF_OPEN
-                log.info("熔断器从 OPEN 转换为 HALF-OPEN 状态。")
-            else:
-                raise DownloaderException("熔断器处于 OPEN 状态，快速失败。")
-        elif self._circuit_breaker_state == CircuitBreakerState.HALF_OPEN:
-            log.info("熔断器处于 HALF-OPEN 状态，允许一次尝试。")
-
-    def _record_failure(self):
-        """记录一次失败，并根据阈值转换熔断器状态。"""
-        self._failure_count += 1
-        if self._circuit_breaker_state == CircuitBreakerState.HALF_OPEN:
-            self._circuit_breaker_state = CircuitBreakerState.OPEN
-            self._last_failure_timestamp = time.time()
-            self._failure_count = 0  # Reset failure count for OPEN state
-            log.warning("熔断器从 HALF-OPEN 转换为 OPEN 状态。")
-        elif (
-            self._circuit_breaker_state == CircuitBreakerState.CLOSED
-            and self._failure_count >= self.circuit_breaker_failure_threshold
-        ):
-            self._circuit_breaker_state = CircuitBreakerState.OPEN
-            self._last_failure_timestamp = time.time()
-            log.warning(
-                f"连续失败 {self._failure_count} 次，熔断器从 CLOSED 转换为 OPEN 状态。"
-            )
-
-    def _reset_circuit_breaker(self):
-        """重置熔断器到 CLOSED 状态。"""
-        if self._circuit_breaker_state != CircuitBreakerState.CLOSED:
-            log.info("熔断器重置为 CLOSED 状态。")
-        self._circuit_breaker_state = CircuitBreakerState.CLOSED
-        self._failure_count = 0
-        self._last_failure_timestamp = 0
-
-    async def execute_with_retries(self, operation, *args, **kwargs) -> Any:
+    async def execute_with_retries(
+        self, operation: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Any:
         """
-        执行操作并在失败时重试
+        执行一个操作，如果失败则根据策略重试。
 
         Args:
-            operation: 要执行的异步操作
-            *args, **kwargs: 传递给操作的参数
+            operation: 要执行的异步函数。
+            *args: 传递给操作的位置参数。
+            **kwargs: 传递给操作的关键字参数。
 
         Returns:
-            操作的结果
+            操作成功时的返回值。
 
         Raises:
-            MaxRetriesExceededException: 当所有重试都失败时
+            Exception: 如果所有重试都失败，则重新引发最后的异常。
         """
-        attempt = 0
-        while attempt <= self.max_retries:
-            self._check_circuit_breaker()
-
+        while self.attempts < self.max_retries:
+            self.attempts += 1
             try:
-                if attempt > 0:
-                    delay = self._calculate_delay(attempt - 1)
-                    console.print(
-                        f"♾️ 第 {attempt + 1} 次尝试，等待 {delay} 秒...",
-                        style="bold yellow",
-                    )
-                    await asyncio.sleep(delay)
-
                 result = await operation(*args, **kwargs)
-                self._reset_circuit_breaker()  # 成功时重置熔断器
+                if self.attempts > 1:
+                    log.info(f"操作在第 {self.attempts} 次尝试时成功。")
                 return result
-
-            except (DownloadStalledException, ProxyException, NetworkException) as e:
-                log.warning(f"操作中遇到问题: {e}", exc_info=True)
-                self._record_failure()
-
-                attempt += 1
-                if attempt > self.max_retries:
-                    raise MaxRetriesExceededException(
-                        f"操作在 {self.max_retries + 1} 次尝试后失败。"
+            except self.retry_on as e:
+                if self.attempts >= self.max_retries:
+                    log.error(
+                        f"操作失败，已达到最大重试次数 ({self.max_retries})。最后一次错误: {e}",
+                        exc_info=True,
                     )
-                continue
+                    raise e
 
-            except KeyboardInterrupt:
-                raise
-            except AuthenticationException:
-                # 认证异常直接传播，不包装在DownloaderException中
-                raise
+                log.warning(
+                    f"操作失败 (尝试 {self.attempts}/{self.max_retries}): {e}。"
+                    f"将在 {self.delay:.2f} 秒后重试..."
+                )
+
+                # 在重试前执行异步延迟
+                await asyncio.sleep(self.delay)
+
+                # 更新下一次重试的延迟
+                self.delay *= self.backoff
             except Exception as e:
-                log.error(f"未知错误: {e}", exc_info=True)
-                raise
+                # 捕获不应重试的异常
+                log.warning(f"捕获到未处理的异常，将立即失败: {e}", exc_info=False)
+                # 将其包装在一个特定的异常类型中，以便上层可以识别它
+                raise UnhandledException(f"操作失败，出现非重试错误: {e}") from e
 
-        raise MaxRetriesExceededException(
-            f"操作在 {self.max_retries + 1} 次尝试后失败。"
+        # 如果循环结束但没有成功，这是个意外情况
+        raise RuntimeError(
+            "重试逻辑出现意外错误，所有尝试均已用尽但未成功也未引发异常。"
         )
-
-    def should_retry(self, error_output: str) -> bool:
-        """判断是否应该重试"""
-        error_lower = error_output.lower()
-        return any(p.lower() in error_lower for p in config.downloader.retry_patterns)
-
-    def is_proxy_error(self, error_output: str) -> bool:
-        """判断是否是代理错误"""
-        error_lower = error_output.lower()
-        return any(p.lower() in error_lower for p in config.downloader.proxy_patterns)

@@ -1572,18 +1572,28 @@ async def get_task_status(task_id: str):
 
         if status == "FAILURE":
             # 对于失败的任务，尝试从其他来源获取错误信息
-            result = getattr(task_result, "info", None) or str(e)
+            try:
+                result = getattr(task_result, "info", None) or str(e)
+            except (ValueError, KeyError):
+                result = str(e)
         else:
             result = None
 
+    # 安全地获取任务info信息
+    task_info = None
+    try:
+        task_info = task_result.info if hasattr(task_result, "info") else None
+    except (ValueError, KeyError):
+        task_info = None
+
     # 添加详细调试信息
-    # log.info(f"=== TASK STATUS DEBUG ===")
-    # log.info(f"Task ID: {task_id}")
-    # log.info(f"Task status: {task_result.status}")
-    # log.info(f"Task result type: {type(result)}")
-    # log.info(f"Task result: {result}")
-    # log.info(f"Task info: {getattr(task_result, 'info', 'No info')}")
-    # log.info(f"========================")
+    log.info("=== TASK STATUS DEBUG ===")
+    log.info(f"Task ID: {task_id}")
+    log.info(f"Task status: {status}")
+    log.info(f"Task result type: {type(result)}")
+    log.info(f"Task result: {result}")
+    log.info(f"Task info: {task_info}")
+    log.info("========================")
 
     # Handle different result types
     if isinstance(result, Exception):
@@ -1593,28 +1603,46 @@ async def get_task_status(task_id: str):
         if result and isinstance(result, dict) and "relative_path" in result:
             # Use the actual result if it contains file info
             pass
-        elif (
-            hasattr(task_result, "info")
-            and task_result.info
-            and isinstance(task_result.info, dict)
-        ):
+        elif task_info and isinstance(task_info, dict):
             # Use meta info if it contains the file information
-            result = task_result.info
+            result = task_info
         else:
             # Fallback to whatever result we have
             if not result:
                 result = {"status": "Completed"}
-    elif (
-        status in ["PENDING", "PROGRESS"]
-        and hasattr(task_result, "info")
-        and task_result.info
-    ):
+    elif status in ["PENDING", "PROGRESS"] and task_info:
         # For in-progress tasks, use the meta info
-        result = task_result.info
+        result = task_info
     else:
         # For other cases, ensure we have a proper result format
         if not result:
             result = {"status": status}
+
+    # 后备检查：如果状态是FAILURE，但Redis中有下载记录，可能是状态更新异常
+    if status == "FAILURE":
+        try:
+            import redis
+
+            redis_client = redis.Redis.from_url(
+                config_manager.config.celery.broker_url, decode_responses=True
+            )
+            download_key = f"download:{task_id}"
+            if redis_client.exists(download_key):
+                file_info = redis_client.hgetall(download_key)
+                if file_info and "relative_path" in file_info:
+                    log.info(
+                        f"Found successful download in Redis despite FAILURE status: {task_id}"
+                    )
+                    # 覆盖状态和结果
+                    status = "SUCCESS"
+                    result = {
+                        "status": "Completed",
+                        "relative_path": file_info["relative_path"],
+                        "file_size": int(file_info.get("file_size", 0)),
+                        "download_folder": file_info.get("download_folder", ""),
+                    }
+        except Exception as redis_check_error:
+            log.debug(f"Redis fallback check failed: {redis_check_error}")
 
     return {"task_id": task_id, "status": status, "result": result}
 
