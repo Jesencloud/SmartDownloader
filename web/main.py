@@ -351,6 +351,13 @@ async def read_index():
     return FileResponse(BASE_DIR / "static" / "index.html")
 
 
+@app.get("/service-worker.js", response_class=FileResponse)
+async def get_service_worker():
+    return FileResponse(
+        BASE_DIR / "static" / "service-worker.js", media_type="application/javascript"
+    )
+
+
 @app.post("/video-info", response_model=VideoInfo)
 async def get_video_info(request: VideoInfoRequest):
     """

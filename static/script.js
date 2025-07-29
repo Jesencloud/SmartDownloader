@@ -39,11 +39,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Initialize Page Elements ---
     initializeDarkMode();
     initializeLanguageSelector();
-    const savedLang = localStorage.getItem('language') || 'zh';
-    await switchLanguage(savedLang); // Wait for initial language to load
     
     // --- Load Configuration from Backend ---
     await loadConfiguration();
+    
+    // --- Apply language switch after translations are loaded ---
+    const savedLang = localStorage.getItem('language') || 'zh';
+    await switchLanguage(savedLang);
+    
+    // --- Ensure FOUC protection is removed ---
+    document.body.classList.remove('fouc-hidden');
 
     // --- Get DOM Elements ---
     const urlInput = document.getElementById('videoUrl');
@@ -2167,18 +2172,21 @@ function getMockAudioData() {
 // --- Helper functions for dark mode and language ---
 function initializeDarkMode() {
     const darkModeToggle = document.getElementById('darkModeToggle');
+    const html = document.documentElement;
     const body = document.body;
     if (!darkModeToggle) return;
     const currentTheme = localStorage.getItem('theme') || 'light';
     if (currentTheme === 'dark') {
+        html.classList.add('dark-mode');
         body.classList.add('dark-mode');
         darkModeToggle.textContent = '☀️';
     } else {
         darkModeToggle.textContent = '🌙';
     }
     darkModeToggle.addEventListener('click', () => {
+        html.classList.toggle('dark-mode');
         body.classList.toggle('dark-mode');
-        if (body.classList.contains('dark-mode')) {
+        if (html.classList.contains('dark-mode')) {
             darkModeToggle.textContent = '☀️';
             localStorage.setItem('theme', 'dark');
         } else {

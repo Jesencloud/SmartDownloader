@@ -7,6 +7,40 @@
     <meta name="keywords" content="智能下载器, 视频下载, 音频下载, 播放列表下载" />
     <meta name="description" content="Smart Downloader 允许您快速下载高质量的视频和音频。粘贴URL即可开始下载。" />
 
+    <!-- 立即应用主题和语言，避免闪烁 -->
+    <script>
+        (function() {
+            // 立即应用保存的主题
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark-mode');
+                document.body.classList.add('dark-mode');
+            }
+            
+            // 立即应用保存的语言
+            const savedLang = localStorage.getItem('language') || 'zh';
+            if (savedLang === 'en') {
+                document.documentElement.setAttribute('lang', 'en-US');
+                // 只更新页面标题，避免内联翻译
+                document.title = 'Smart Downloader';
+            }
+            
+            // 预加载翻译文件以避免后续闪烁
+            const preloadLinks = [
+                '/static/locales/zh-CN.json',
+                '/static/locales/en.json'
+            ];
+            
+            preloadLinks.forEach(url => {
+                const link = document.createElement('link');
+                link.rel = 'preload';
+                link.as = 'fetch';
+                link.href = url;
+                document.head.appendChild(link);
+            });
+        })();
+    </script>
+
     <meta content="#" property="og:url" />
     <meta content="Smart Downloader" property="og:title" />
     <meta property="og:site_name" content="Smart Downloader" />
@@ -15,6 +49,17 @@
     <link rel="canonical" href="#">
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 防止页面闪烁 */
+        .fouc-hidden {
+            visibility: hidden !important;
+        }
+        
+        /* 确保页面在完全加载前不可见 */
+        .fouc-hidden * {
+            visibility: hidden !important;
+        }
+    </style>
     <style>
         /* Basic reset and styling */
         * {
@@ -31,31 +76,43 @@
         }
 
         /* Dark mode styles */
+        html.dark-mode,
         body.dark-mode {
             background-color: #1a1a1a !important;
             color: #ffffff !important;
         }
+        
+        html.dark-mode body,
+        body.dark-mode body {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+        }
 
+        html.dark-mode header,
         body.dark-mode header {
-            background-color: #2d2d2d;
-            border-bottom: 1px solid #404040;
+            background-color: #2d2d2d !important;
+            border-bottom: 1px solid #404040 !important;
         }
 
+        html.dark-mode .logo a,
         body.dark-mode .logo a {
-            color: #ffffff;
+            color: #ffffff !important;
         }
 
+        html.dark-mode .header-right a,
         body.dark-mode .header-right a {
-            color: #ffffff;
+            color: #ffffff !important;
         }
 
+        html.dark-mode .container,
         body.dark-mode .container {
-            background-color: #1a1a1a;
-            color: #ffffff;
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
         }
 
+        html.dark-mode h1, html.dark-mode h2, html.dark-mode h3,
         body.dark-mode h1, body.dark-mode h2, body.dark-mode h3 {
-            color: #ffffff;
+            color: #ffffff !important;
         }
 
         body.dark-mode input[type="text"] {
@@ -132,19 +189,24 @@
             color: #cccccc;
         }
 
+        html.dark-mode footer,
         body.dark-mode footer {
-            background-color: #2d2d2d;
-            border-top: 1px solid #404040;
+            background-color: #2d2d2d !important;
+            border-top: 1px solid #404040 !important;
         }
 
+        html.dark-mode .footer-left a,
         body.dark-mode .footer-left a,
+        html.dark-mode .footer-right a,
         body.dark-mode .footer-right a {
-            color: #cccccc;
+            color: #cccccc !important;
         }
 
+        html.dark-mode .footer-left a:hover,
         body.dark-mode .footer-left a:hover,
+        html.dark-mode .footer-right a:hover,
         body.dark-mode .footer-right a:hover {
-            color: #ffffff;
+            color: #ffffff !important;
         }
 
         /* Dark mode toggle button */
@@ -838,7 +900,7 @@
     </style>
 </head>
 
-<body>
+<body class="fouc-hidden">
     <!-- Header Start -->
     <header class="bg-gray-100 border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
