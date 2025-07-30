@@ -3,15 +3,15 @@
 测试音频流选择优化 - 验证 "original (default)" 优先级
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
+
+from core.format_analyzer import FormatAnalyzer, StreamType
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
-
-from core.format_analyzer import FormatAnalyzer, StreamType
 
 # 设置详细日志
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(name)s: %(message)s")
@@ -90,9 +90,7 @@ def test_audio_selection():
     analyzed_formats = analyzer.analyze_formats(mock_formats)
 
     # 过滤出音频格式
-    audio_formats = [
-        f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY
-    ]
+    audio_formats = [f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY]
 
     print(f"📊 找到 {len(audio_formats)} 个音频流:")
     for fmt in audio_formats:

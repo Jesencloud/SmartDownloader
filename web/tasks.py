@@ -1,18 +1,21 @@
 # web/tasks.py
-import sys
-import logging
-from pathlib import Path
 import asyncio
-import psutil
-from celery import Task
-from celery.signals import task_prerun, task_postrun, task_failure, task_revoked
-from celery.exceptions import Retry
+import logging
+import sys
 import time
 from datetime import datetime
-import redis
+from pathlib import Path
 
-# Set up logging
-log = logging.getLogger(__name__)
+import psutil
+import redis
+from celery import Task
+from celery.exceptions import Retry
+from celery.signals import task_failure, task_postrun, task_prerun, task_revoked
+
+from config_manager import config_manager
+from downloader import Downloader
+
+from .celery_app import celery_app
 
 # 这是一个常见的模式，以确保当Celery worker在不同环境中启动时，
 # 它仍然可以找到项目根目录下的模块（如`downloader`, `core`等）。
@@ -20,9 +23,8 @@ project_root = str(Path(__file__).resolve().parents[1])
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from downloader import Downloader  # noqa: E402
-from config_manager import config_manager  # noqa: E402
-from .celery_app import celery_app  # noqa: E402
+# Set up logging
+log = logging.getLogger(__name__)
 
 
 # === Redis连接错误处理装饰器 ===
@@ -149,23 +151,13 @@ class BaseDownloadTask(Task):
 @task_prerun.connect
 def task_prerun_handler(task_id, task, *args, **kwargs):
     """任务开始前的处理"""
-    log.info(f"Starting task {task_id}: {task.name}")
-
-    # 记录系统资源使用情况
-    process = psutil.Process()
-    memory_info = process.memory_info()
-    log.info(f"Memory usage before task: {memory_info.rss / 1024 / 1024:.2f} MB")
+    log.debug(f"Starting task {task_id}: {task.name}")
 
 
 @task_postrun.connect
 def task_postrun_handler(task_id, task, *args, **kwargs):
     """任务完成后的处理"""
-    log.info(f"Finished task {task_id}: {task.name}")
-
-    # 记录系统资源使用情况
-    process = psutil.Process()
-    memory_info = process.memory_info()
-    log.info(f"Memory usage after task: {memory_info.rss / 1024 / 1024:.2f} MB")
+    log.debug(f"Finished task {task_id}: {task.name}")
 
 
 @task_failure.connect
@@ -185,9 +177,7 @@ def task_revoked_handler(
     **kwargs,
 ):
     """任务被撤销时的处理"""
-    log.info(
-        f"Task {task_id} revoked - reason: {reason}, terminated: {terminated}, signum: {signum}"
-    )
+    log.info(f"Task {task_id} revoked - reason: {reason}, terminated: {terminated}, signum: {signum}")
 
     # 强制清理相关进程
     try:
@@ -205,9 +195,7 @@ def task_revoked_handler(
                 elif proc.info["cmdline"]:
                     cmdline = " ".join(proc.info["cmdline"])
                     if "yt-dlp" in cmdline:
-                        log.info(
-                            f"Terminating yt-dlp process {proc.info['pid']} via cmdline"
-                        )
+                        log.info(f"Terminating yt-dlp process {proc.info['pid']} via cmdline")
                         proc.terminate()
                         try:
                             proc.wait(timeout=3)
@@ -242,28 +230,20 @@ def download_video_task(
     custom_path: str = None,
 ):
     # 在任务内部初始化 Redis 客户端，确保 config 已加载
-    redis_client = redis.Redis.from_url(
-        config_manager.config.celery.broker_url, decode_responses=True
-    )
+    redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
 
     self.start_time = time.time()
     task_id = self.request.id
 
     # 更新任务状态
     try:
-        self.update_state(
-            state="PROGRESS", meta={"status": "正在下载中", "progress": 0}
-        )
+        self.update_state(state="PROGRESS", meta={"status": "正在下载中", "progress": 0})
     except Exception as e:
         log.error(f"Failed to update initial PROGRESS state: {e}")
 
     async def _async_download():
         try:
-            download_folder = (
-                Path(custom_path)
-                if custom_path
-                else Path(config_manager.config.downloader.save_path)
-            )
+            download_folder = Path(custom_path) if custom_path else Path(config_manager.config.downloader.save_path)
 
             # 验证下载路径
             if not download_folder.exists():
@@ -272,14 +252,10 @@ def download_video_task(
             # 检查磁盘空间（至少需要1GB）
             free_space = psutil.disk_usage(download_folder).free
             if free_space < 1024 * 1024 * 1024:  # 1GB
-                raise Exception(
-                    f"Insufficient disk space: {free_space / 1024 / 1024:.2f} MB available"
-                )
+                raise Exception(f"Insufficient disk space: {free_space / 1024 / 1024:.2f} MB available")
 
             # 定义进度回调函数
-            def progress_callback(
-                message: str, progress: int, eta_seconds: int = 0, speed: str = ""
-            ):
+            def progress_callback(message: str, progress: int, eta_seconds: int = 0, speed: str = ""):
                 """进度回调函数，更新Celery任务状态"""
                 # 确保进度值在合理范围内
                 progress = max(0, min(100, progress))
@@ -305,14 +281,10 @@ def download_video_task(
                     log.debug(f"Failed to update progress state: {update_error}")
 
                 # 记录详细的进度信息用于调试
-                log.debug(
-                    f"进度回调: {progress}% - {message} (ETA: {eta_seconds}s, 速度: {speed})"
-                )
+                log.debug(f"进度回调: {progress}% - {message} (ETA: {eta_seconds}s, 速度: {speed})")
 
             # 初始化下载器，传入进度回调
-            self.downloader = Downloader(
-                download_folder=download_folder, progress_callback=progress_callback
-            )
+            self.downloader = Downloader(download_folder=download_folder, progress_callback=progress_callback)
 
             if download_type == "video":
                 # 视频下载 - 使用智能策略
@@ -334,9 +306,7 @@ def download_video_task(
                     )
                 else:
                     audio_format = format_id
-                    log.info(
-                        f"直接音频下载任务: url={video_url}, 使用原始format_id='{audio_format}'"
-                    )
+                    log.info(f"直接音频下载任务: url={video_url}, 使用原始format_id='{audio_format}'")
 
                 output_file = await self.downloader.download_audio(
                     video_url=video_url,
@@ -355,9 +325,7 @@ def download_video_task(
             file_info = {
                 "file_path": str(output_file.resolve()),
                 "filename": output_file.name,
-                "media_type": "video/mp4"
-                if download_type == "video"
-                else "audio/mpeg",  # 可以做得更精确
+                "media_type": "video/mp4" if download_type == "video" else "audio/mpeg",  # 可以做得更精确
                 "created_at": datetime.utcnow().isoformat(),
             }
 
@@ -367,9 +335,7 @@ def download_video_task(
             pipe.expire(download_key, 3600)  # 设置1小时的暂存期
             pipe.execute()
 
-            log.info(
-                f"文件下载完成并注册到 Redis: {output_file.name} (凭证: {task_id})"
-            )
+            log.info(f"文件下载完成并注册到 Redis: {output_file.name} (凭证: {task_id})")
 
             # 准备完整的结果信息
             final_result = {
@@ -386,9 +352,7 @@ def download_video_task(
                 self.update_state(state="SUCCESS", meta=final_result)
             except Exception as update_error:
                 # 如果更新SUCCESS状态失败，只记录日志，但不改变结果
-                log.error(
-                    f"Failed to update SUCCESS state, but download completed: {update_error}"
-                )
+                log.error(f"Failed to update SUCCESS state, but download completed: {update_error}")
 
             return final_result
 
@@ -404,10 +368,10 @@ def download_video_task(
             log.warning(f"High memory usage: {memory.percent}%")
             # 可以选择延迟任务或减少并发
 
-        log.info(f"Starting async download for task {task_id}")
+        # log.info(f"Starting async download for task {task_id}")
         # 运行异步下载
         result = asyncio.run(_async_download())
-        log.info(f"Async download completed for task {task_id}: {result}")
+        # log.info(f"Async download completed for task {task_id}: {result}")
         return result
 
     except Exception as e:
@@ -430,9 +394,7 @@ def download_video_task(
 
 
 # 添加文件清理任务
-@celery_app.task(
-    bind=True, name="cleanup_expired_files", soft_time_limit=300, time_limit=600
-)
+@celery_app.task(bind=True, name="cleanup_expired_files", soft_time_limit=300, time_limit=600)
 def cleanup_expired_files(self):
     """
     定期清理过期文件的任务
@@ -442,9 +404,7 @@ def cleanup_expired_files(self):
     log.info("开始执行文件清理任务...")
 
     # 初始化 Redis 客户端
-    redis_client = redis.Redis.from_url(
-        config_manager.config.celery.broker_url, decode_responses=True
-    )
+    redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
 
     download_folder = Path(config_manager.config.downloader.save_path)
 
@@ -495,16 +455,10 @@ def cleanup_expired_files(self):
                         file_size = file_path.stat().st_size
                         file_path.unlink()
                         cleanup_stats["orphaned_files_deleted"].append(file_path.name)
-                        cleanup_stats["total_size_freed_mb"] += file_size / (
-                            1024 * 1024
-                        )
-                        log.info(
-                            f"清理孤立文件: {file_path.name} ({file_size / (1024 * 1024):.2f}MB)"
-                        )
+                        cleanup_stats["total_size_freed_mb"] += file_size / (1024 * 1024)
+                        log.info(f"清理孤立文件: {file_path.name} ({file_size / (1024 * 1024):.2f}MB)")
                 except Exception as e:
-                    cleanup_stats["errors"].append(
-                        f"删除孤立文件失败: {file_path.name} - {str(e)}"
-                    )
+                    cleanup_stats["errors"].append(f"删除孤立文件失败: {file_path.name} - {str(e)}")
                     log.error(f"删除孤立文件 {file_path.name} 失败: {e}")
 
         # 4. 清理已过期的Redis记录对应的文件
@@ -518,11 +472,7 @@ def cleanup_expired_files(self):
                     for file_path_str, file_path in existing_files.items():
                         if task_id in file_path.name or file_path.name in [
                             f.get("filename", "")
-                            for f in [
-                                redis_client.hgetall(k)
-                                for k in active_download_keys
-                                if redis_client.exists(k)
-                            ]
+                            for f in [redis_client.hgetall(k) for k in active_download_keys if redis_client.exists(k)]
                         ]:
                             continue  # 这个文件还有有效的Redis记录
 
@@ -535,9 +485,7 @@ def cleanup_expired_files(self):
                 log.error(f"处理过期记录 {key} 失败: {e}")
 
         # 5. 记录清理结果
-        cleanup_stats["total_size_freed_mb"] = round(
-            cleanup_stats["total_size_freed_mb"], 2
-        )
+        cleanup_stats["total_size_freed_mb"] = round(cleanup_stats["total_size_freed_mb"], 2)
 
         log.info(
             f"文件清理完成 - 孤立文件: {len(cleanup_stats['orphaned_files_deleted'])}个, "

@@ -3,11 +3,11 @@
 Web服务器启动脚本 (简化版)
 """
 
-from pathlib import Path
 import os
-import subprocess
 import signal
+import subprocess
 import sys
+from pathlib import Path
 
 # 全局变量来持有子进程
 uvicorn_process = None

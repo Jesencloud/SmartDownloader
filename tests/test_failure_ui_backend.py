@@ -1,8 +1,9 @@
 # tests/test_failure_ui_backend.py
 
-from fastapi.testclient import TestClient
-from unittest.mock import patch
 import time
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
 
 # The 'client' fixture is provided by conftest.py and is an instance of TestClient.
 
@@ -44,9 +45,7 @@ def test_download_failure_flow(client: TestClient):
         }
         response = client.post("/downloads", json=download_request)
 
-        assert response.status_code == 202, (
-            "The API should accept the initial download request."
-        )
+        assert response.status_code == 202, "The API should accept the initial download request."
         task_id = response.json()["task_id"]
         assert task_id == "test-failure-task-id-123"
         print(f"   - Task started successfully with ID: {task_id}")
@@ -64,9 +63,7 @@ def test_download_failure_flow(client: TestClient):
         for i in range(5):  # Poll up to 5 times
             time.sleep(0.1)  # A short delay to simulate a real-world polling interval.
             status_response = client.get(f"/downloads/{task_id}")
-            assert status_response.status_code == 200, (
-                "The status endpoint should always be available."
-            )
+            assert status_response.status_code == 200, "The status endpoint should always be available."
 
             status_data = status_response.json()
             final_status = status_data["status"]
@@ -74,17 +71,13 @@ def test_download_failure_flow(client: TestClient):
 
             if final_status == "FAILURE":
                 print("   - ✅ Correctly received 'FAILURE' status from the API.")
-                assert "Simulated yt-dlp crash" in final_result, (
-                    "The failure reason should be in the result."
-                )
+                assert "Simulated yt-dlp crash" in final_result, "The failure reason should be in the result."
                 print("   - ✅ Failure reason was correctly reported by the API.")
                 break
 
         # Stop the patcher for AsyncResult to clean up.
         mock_async_result_patcher.stop()
 
-        assert final_status == "FAILURE", (
-            f"Expected status to be 'FAILURE', but it ended as '{final_status}'."
-        )
+        assert final_status == "FAILURE", f"Expected status to be 'FAILURE', but it ended as '{final_status}'."
 
     print("✅ Backend test for failure UI support passed.")

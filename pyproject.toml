@@ -1,7 +1,27 @@
+# pyproject.toml
+
+[tool.ruff]
+# 设置每行最大长度，与你的 .pylintrc 保持一致
+line-length = 120
+
+# 指定 Ruff 在格式化时要处理的文件或目录
+src = ["."]
+
 [tool.ruff.lint]
-# 针对特定文件忽略 E402 错误
-# per-file-ignores = {"celery_monitor.py" = ["E402"], "web/tasks.py" = ["E402"]}
-# 或者全局忽略 E402（不推荐）
-ignore = ["E402"]
-# 在这里可以添加其他需要全局忽略的规则，例如 E501 (line too long)
-# ignore = ["E501"]
+# 选择要启用的规则集。
+# E: pycodestyle (Errors)
+# F: Pyflakes
+# W: pycodestyle (Warnings)
+# I: isort (import sorting)
+# PLW: Pylint Warnings (W1203 就在这里)
+select = ["E", "F", "W", "I", "PLW"]
+
+# 忽略某些规则。E501 (line-too-long) 由 ruff format 处理。
+# E501: line-too-long (handled by ruff format)
+# PLW1509: `preexec_fn` argument is unsafe when using threads
+# PLW0602: Using global for a variable but no assignment is done
+# W291: Trailing whitespace
+ignore = ["E501", "PLW1509", "PLW0602", "W291"]
+
+# 允许使用下划线开头的未使用变量（例如 `_` 或 `__`）
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"

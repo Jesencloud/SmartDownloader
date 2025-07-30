@@ -8,20 +8,20 @@ Celery Worker和Beat启动脚本（带Redis连接检查）
 - 智能Redis连接检查和重试机制
 """
 
-import os
-import sys
-import time
 import logging
+import os
 import subprocess
+import sys
 import threading
+import time
 from pathlib import Path
+
 import redis
+
 from web.celery_app import broker_url
 
 # 设置日志
-logging.basicConfig(
-    level=logging.INFO, format="[%(asctime)s: %(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s: %(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
 
@@ -29,17 +29,13 @@ def check_redis_connection(max_attempts=5, delay=2):
     """检查Redis连接，带重试机制"""
     for attempt in range(max_attempts):
         try:
-            redis_client = redis.from_url(
-                broker_url, socket_connect_timeout=5, socket_timeout=5
-            )
+            redis_client = redis.from_url(broker_url, socket_connect_timeout=5, socket_timeout=5)
             redis_client.ping()
             log.info("✅ Redis连接成功")
             return True
         except Exception as e:
             if attempt < max_attempts - 1:
-                log.warning(
-                    f"❌ Redis连接失败 (尝试 {attempt + 1}/{max_attempts}): {e}"
-                )
+                log.warning(f"❌ Redis连接失败 (尝试 {attempt + 1}/{max_attempts}): {e}")
                 log.info(f"⏳ {delay}秒后重试...")
                 time.sleep(delay)
             else:
@@ -228,9 +224,7 @@ def main():
 
         # 询问是否继续
         try:
-            response = input(
-                "\n❓ 是否要在Redis不可用的情况下继续启动? (y/N): "
-            ).lower()
+            response = input("\n❓ 是否要在Redis不可用的情况下继续启动? (y/N): ").lower()
             if response not in ["y", "yes"]:
                 log.info("🚪 退出程序")
                 sys.exit(1)

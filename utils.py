@@ -1,10 +1,10 @@
 import argparse
 import asyncio
 import logging
-import sys
 import re
+import sys
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -23,9 +23,7 @@ class CustomConsoleHandler(RichHandler):
         self.console_keywords = config.logging.console_keywords
 
     def emit(self, record):
-        if record.levelno >= logging.ERROR or any(
-            keyword in record.getMessage() for keyword in self.console_keywords
-        ):
+        if record.levelno >= logging.ERROR or any(keyword in record.getMessage() for keyword in self.console_keywords):
             super().emit(record)
 
 
@@ -47,9 +45,7 @@ def setup_logging(log_folder: Path) -> None:
         format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s",
         handlers=[
             logging.FileHandler(log_file_path, encoding="utf-8"),
-            CustomConsoleHandler(
-                rich_tracebacks=True, show_path=False, show_time=False
-            ),
+            CustomConsoleHandler(rich_tracebacks=True, show_path=False, show_time=False),
         ],
         force=True,  # 强制重新配置，即使之前已经配置过
     )
@@ -70,20 +66,20 @@ def get_inputs(args: argparse.Namespace) -> List[str]:
         log.info("模式: 从文件批量读取URL")
         try:
             with open(args.inputs[0], "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
+                for original_line in f:
+                    line = original_line.strip()
+                    if not line or line.startswith("#"):  # 使用处理过的行进行判断
                         continue
 
                     # 提取以 https://www. 开头的URL
                     url_match = re.search(r"https://www\.[^\s]+", line)
                     if url_match:
                         inputs.append(url_match.group(0))
-                    elif line.startswith("http"):
+                    elif line.startswith("http"):  # 使用处理过的行进行判断
                         # 如果整行就是URL
                         inputs.append(line)
                     else:
-                        log.warning(f"跳过无法识别的行: {line}")
+                        log.warning(f"跳过无法识别的行: {line}")  # 记录处理过的行
         except FileNotFoundError:
             log.error(f"错误: 找不到文件 '{args.inputs[0]}'，已跳过。")
     else:
@@ -127,9 +123,7 @@ async def extract_audio_if_needed(media_path: Path, output_dir: Path) -> Optiona
         str(audio_path),
     ]
 
-    process = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
+    process = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     _, stderr = await process.communicate()
 
     if process.returncode != 0:

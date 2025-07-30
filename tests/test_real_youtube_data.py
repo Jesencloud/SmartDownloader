@@ -3,15 +3,15 @@
 使用真实YouTube数据测试音频流选择算法
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
+
+from core.format_analyzer import FormatAnalyzer, StreamType
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
-
-from core.format_analyzer import FormatAnalyzer, StreamType
 
 # 设置详细日志
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(name)s: %(message)s")
@@ -74,17 +74,13 @@ def test_real_data_selection():
 
     print("📊 测试数据:")
     for fmt in real_formats:
-        print(
-            f"  - {fmt['format_id']}: {fmt['format_note']} (language: {fmt['language']})"
-        )
+        print(f"  - {fmt['format_id']}: {fmt['format_note']} (language: {fmt['language']})")
 
     # 分析格式
     analyzed_formats = analyzer.analyze_formats(real_formats)
 
     # 过滤音频格式
-    audio_formats = [
-        f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY
-    ]
+    audio_formats = [f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY]
 
     print(f"\n🎯 找到 {len(audio_formats)} 个音频流")
     print("开始选择最佳音频流...")
@@ -98,9 +94,7 @@ def test_real_data_selection():
     print(f"   语言: {best_audio.raw_format.get('language', 'N/A')}")
 
     # 验证结果
-    assert best_audio.format_id == "140-10", (
-        f"期望选择 '140-10', 但实际选择了 '{best_audio.format_id}'"
-    )
+    assert best_audio.format_id == "140-10", f"期望选择 '140-10', 但实际选择了 '{best_audio.format_id}'"
 
 
 def debug_scoring():
@@ -111,9 +105,7 @@ def debug_scoring():
     analyzer = FormatAnalyzer()
     real_formats = create_real_youtube_formats()
     analyzed_formats = analyzer.analyze_formats(real_formats)
-    audio_formats = [
-        f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY
-    ]
+    audio_formats = [f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY]
 
     print("各格式详细评分:")
     for fmt in audio_formats:
@@ -132,9 +124,7 @@ def debug_scoring():
             raw.get("language", "") or "",
             raw.get("format", "") or "",
         ]
-        combined_info = " ".join(
-            str(field).lower() for field in fields_to_check if field
-        )
+        combined_info = " ".join(str(field).lower() for field in fields_to_check if field)
         print(f"  检查字段: '{combined_info}'")
 
         if "original" in combined_info and "default" in combined_info:

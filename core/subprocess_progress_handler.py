@@ -8,6 +8,7 @@ import re
 from rich.progress import Progress, TaskID
 
 from config_manager import config
+
 from .exceptions import DownloadStalledException
 
 log = logging.getLogger(__name__)
@@ -62,9 +63,7 @@ class SubprocessProgressHandler:
                     log.debug(f"成功解析大小: '{original_size_str}' -> {result} bytes")
                     return result
                 except ValueError as e:
-                    log.debug(
-                        f"无法解析大小字符串数值部分: '{original_size_str}' (数值部分: '{numeric_part}') - {e}"
-                    )
+                    log.debug(f"无法解析大小字符串数值部分: '{original_size_str}' (数值部分: '{numeric_part}') - {e}")
                     # 对于解析失败的情况，如果包含数字，尝试提取并使用默认单位
                     try:
                         import re
@@ -111,9 +110,7 @@ class SubprocessProgressHandler:
 
         return 0
 
-    def _handle_json_progress_data(
-        self, progress_data: dict, progress: Progress, task_id: TaskID
-    ) -> bool:
+    def _handle_json_progress_data(self, progress_data: dict, progress: Progress, task_id: TaskID) -> bool:
         """
         处理JSON格式的进度数据
 
@@ -126,25 +123,17 @@ class SubprocessProgressHandler:
             downloaded_bytes = progress_data.get("downloaded_bytes")
             filename = progress_data.get("filename", "")
 
-            if (
-                percentage is not None
-                and total_bytes is not None
-                and downloaded_bytes is not None
-            ):
+            if percentage is not None and total_bytes is not None and downloaded_bytes is not None:
                 # 检测是否是组合下载（文件名包含不同格式）
                 self._detect_combined_download(filename, total_bytes, downloaded_bytes)
 
                 # 计算显示的进度
-                display_total, display_completed = self._calculate_combined_progress(
-                    total_bytes, downloaded_bytes
-                )
+                display_total, display_completed = self._calculate_combined_progress(total_bytes, downloaded_bytes)
 
                 # 确保任务可见后再更新进度
                 if not progress.tasks[task_id].visible:
                     progress.update(task_id, visible=True)
-                progress.update(
-                    task_id, completed=display_completed, total=display_total
-                )
+                progress.update(task_id, completed=display_completed, total=display_total)
                 return True
 
         elif progress_data.get("status") == "finished":
@@ -158,16 +147,12 @@ class SubprocessProgressHandler:
             # 如果是组合下载，显示总进度
             if self.combined_download_state["is_combined_download"]:
                 total_combined = (
-                    self.combined_download_state["video_total"]
-                    + self.combined_download_state["audio_total"]
+                    self.combined_download_state["video_total"] + self.combined_download_state["audio_total"]
                 )
                 completed_combined = (
-                    self.combined_download_state["video_completed"]
-                    + self.combined_download_state["audio_completed"]
+                    self.combined_download_state["video_completed"] + self.combined_download_state["audio_completed"]
                 )
-                progress.update(
-                    task_id, completed=completed_combined, total=total_combined
-                )
+                progress.update(task_id, completed=completed_combined, total=total_combined)
             else:
                 progress.update(
                     task_id,
@@ -177,9 +162,7 @@ class SubprocessProgressHandler:
             return True
         return False
 
-    def _detect_combined_download(
-        self, filename: str, total_bytes: int, downloaded_bytes: int
-    ):
+    def _detect_combined_download(self, filename: str, total_bytes: int, downloaded_bytes: int):
         """检测组合下载并更新状态"""
         if not filename:
             return
@@ -224,8 +207,7 @@ class SubprocessProgressHandler:
                 "f137",
             ]
         ) and not any(
-            audio_indicator in filename_lower
-            for audio_indicator in ["audio", "Audio", "AUDIO", "f251", "f140"]
+            audio_indicator in filename_lower for audio_indicator in ["audio", "Audio", "AUDIO", "f251", "f140"]
         )
 
         # 基于文件名和大小的综合判断
@@ -311,25 +293,15 @@ class SubprocessProgressHandler:
 
         # 检测视频格式标识符
         is_video_format = any(
-            indicator in filename_lower
-            for indicator in ["hls-", "dash-", "webm-", "mp4-", ".mp4", ".webm", ".mkv"]
-        ) and not any(
-            audio_indicator in filename_lower
-            for audio_indicator in ["audio", "Audio", "AUDIO"]
-        )
+            indicator in filename_lower for indicator in ["hls-", "dash-", "webm-", "mp4-", ".mp4", ".webm", ".mkv"]
+        ) and not any(audio_indicator in filename_lower for audio_indicator in ["audio", "Audio", "AUDIO"])
 
         if is_audio_format:
-            self.combined_download_state["audio_completed"] = (
-                self.combined_download_state["audio_total"]
-            )
+            self.combined_download_state["audio_completed"] = self.combined_download_state["audio_total"]
         elif is_video_format:
-            self.combined_download_state["video_completed"] = (
-                self.combined_download_state["video_total"]
-            )
+            self.combined_download_state["video_completed"] = self.combined_download_state["video_total"]
 
-    def _handle_text_progress_data(
-        self, line: str, progress: Progress, task_id: TaskID
-    ) -> bool:
+    def _handle_text_progress_data(self, line: str, progress: Progress, task_id: TaskID) -> bool:
         """
         处理文本格式的进度数据
 
@@ -431,35 +403,25 @@ class SubprocessProgressHandler:
                 break
 
             try:
-                line_bytes = await asyncio.wait_for(
-                    process.stdout.readline(), self.network_timeout
-                )
+                line_bytes = await asyncio.wait_for(process.stdout.readline(), self.network_timeout)
                 if not line_bytes:
                     break
 
                 line = line_bytes.decode("utf-8", errors="ignore")
 
                 # Only add error lines to error_output
-                if (
-                    "error" in line.lower()
-                    or "failed" in line.lower()
-                    or "exception" in line.lower()
-                ):
+                if "error" in line.lower() or "failed" in line.lower() or "exception" in line.lower():
                     error_output += line
 
                 # 处理这一行的进度数据
                 self._process_line(line, progress, task_id)
 
             except asyncio.TimeoutError:
-                raise DownloadStalledException(
-                    f"下载超时 ({self.network_timeout}s 无进度更新)"
-                )
+                raise DownloadStalledException(f"下载超时 ({self.network_timeout}s 无进度更新)")
 
         return error_output
 
-    def _finalize_progress(
-        self, process: asyncio.subprocess.Process, progress: Progress, task_id: TaskID
-    ) -> None:
+    def _finalize_progress(self, process: asyncio.subprocess.Process, progress: Progress, task_id: TaskID) -> None:
         """
         完成进度处理
         """

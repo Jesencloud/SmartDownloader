@@ -1,26 +1,28 @@
 # web/main.py
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
-from celery.result import AsyncResult
-from typing import Literal, Dict, Any, List, Optional, Union, Tuple
-from pathlib import Path
-from urllib.parse import urlparse
-import subprocess
-import json
 import asyncio
-from cachetools import TTLCache, cached
-import sys
-import os
-import psutil
+import json
 import logging
+import os
 import platform
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from urllib.parse import urlparse
+
+import psutil
+from cachetools import TTLCache, cached
+from celery.result import AsyncResult
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from config_manager import config_manager
+from core.format_analyzer import FormatAnalyzer
 
 from .celery_app import celery_app
 from .tasks import download_video_task
-from config_manager import config_manager
-from core.format_analyzer import FormatAnalyzer
 
 
 def get_unified_audio_formats(raw_formats):
@@ -29,9 +31,7 @@ def get_unified_audio_formats(raw_formats):
     """
     # 使用与视频模式相同的音频格式筛选逻辑
     audio_only_formats = [
-        f
-        for f in raw_formats
-        if f.get("acodec") not in ("none", None) and f.get("vcodec") in ("none", None)
+        f for f in raw_formats if f.get("acodec") not in ("none", None) and f.get("vcodec") in ("none", None)
     ]
 
     # 如果没有明确的audio-only格式，使用更广泛的音频格式筛选
@@ -126,13 +126,9 @@ video_info_cache = TTLCache(maxsize=512, ttl=3600)  # 1小时缓存
 
 class DownloadRequest(BaseModel):
     url: str = Field(..., description="The URL of the video to download.")
-    download_type: Literal["video", "audio"] = Field(
-        "video", description="The type of content to download."
-    )
+    download_type: Literal["video", "audio"] = Field("video", description="The type of content to download.")
     format_id: str = Field(..., description="The specific format ID to download.")
-    resolution: str = Field(
-        "", description="The resolution of the video (e.g., '1080p60')."
-    )
+    resolution: str = Field("", description="The resolution of the video (e.g., '1080p60').")
     title: str = Field("", description="The title of the video/audio.")
 
 
@@ -148,9 +144,7 @@ class DownloadResponse(BaseModel):
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: str
-    result: Optional[Union[Dict[str, Any], str]] = Field(
-        None, description="Task result or error message."
-    )
+    result: Optional[Union[Dict[str, Any], str]] = Field(None, description="Task result or error message.")
 
 
 class VideoFormat(BaseModel):
@@ -163,9 +157,7 @@ class VideoFormat(BaseModel):
     vcodec: Optional[str]
     acodec: Optional[str]
     abr: Optional[int] = None
-    needs_merge: bool = Field(
-        default=False, description="Indicates if this format requires merging."
-    )
+    needs_merge: bool = Field(default=False, description="Indicates if this format requires merging.")
     is_complete_stream: bool = Field(
         default=False,
         description="Indicates if this format contains both video and audio.",
@@ -336,9 +328,7 @@ def fetch_video_info_sync(url: str, download_type: str = "all") -> dict:
         # Raise standard exceptions to be handled by the endpoint
         raise TimeoutError("Request to video service timed out.")
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(
-            f"Failed to get video info: yt-dlp returned an error. Stderr: {e.stderr}"
-        )
+        raise RuntimeError(f"Failed to get video info: yt-dlp returned an error. Stderr: {e.stderr}")
     except json.JSONDecodeError:
         raise ValueError("Failed to parse video information from the service.")
 
@@ -353,9 +343,7 @@ async def read_index():
 
 @app.get("/service-worker.js", response_class=FileResponse)
 async def get_service_worker():
-    return FileResponse(
-        BASE_DIR / "static" / "service-worker.js", media_type="application/javascript"
-    )
+    return FileResponse(BASE_DIR / "static" / "service-worker.js", media_type="application/javascript")
 
 
 @app.post("/video-info", response_model=VideoInfo)
@@ -378,17 +366,13 @@ async def get_video_info(request: VideoInfoRequest):
         except Exception:
             # If URL parsing fails, let it proceed. yt-dlp will handle the invalid URL.
             # We log this as a warning for debugging purposes.
-            log.warning(
-                f"Could not parse URL '{request.url}' for domain validation. Skipping whitelist check."
-            )
+            log.warning(f"Could not parse URL '{request.url}' for domain validation. Skipping whitelist check.")
             domain = None  # Ensure domain is None if parsing fails
 
         if domain:  # Only proceed with the check if domain parsing was successful
             # Check if the domain or any of its parent domains are in the whitelist
             # e.g., 'music.youtube.com' should match 'youtube.com'
-            is_allowed = any(
-                domain.endswith(allowed_domain) for allowed_domain in allowed_domains
-            )
+            is_allowed = any(domain.endswith(allowed_domain) for allowed_domain in allowed_domains)
 
             if not is_allowed:
                 raise HTTPException(
@@ -406,17 +390,13 @@ async def get_video_info(request: VideoInfoRequest):
             video_data_raw = cached_data
         else:
             # 缓存未命中，获取新数据
-            log.info(
-                f"缓存未命中，获取新的视频信息: {request.url} ({request.download_type})"
-            )
+            log.info(f"缓存未命中，获取新的视频信息: {request.url} ({request.download_type})")
 
             # Run the synchronous, cached function in a separate thread to avoid
             # blocking the main FastAPI event loop.
             # Provide backward compatibility for Python < 3.9
             if sys.version_info >= (3, 9):
-                video_data_raw = await asyncio.to_thread(
-                    fetch_video_info_sync, request.url, request.download_type
-                )
+                video_data_raw = await asyncio.to_thread(fetch_video_info_sync, request.url, request.download_type)
             else:
                 loop = asyncio.get_running_loop()
                 video_data_raw = await loop.run_in_executor(
@@ -456,27 +436,22 @@ async def get_video_info(request: VideoInfoRequest):
             for f in raw_formats
             if (
                 # 保留有视频内容的格式
-                f.get("vcodec") not in ("none", None, "audio only")
-                or (f.get("width") and f.get("height"))
+                f.get("vcodec") not in ("none", None, "audio only") or (f.get("width") and f.get("height"))
             )
             or (
                 # 也保留纯音频格式（用于合并）
-                f.get("acodec") not in ("none", None, "video only")
-                and f.get("vcodec") in ("none", None, "audio only")
+                f.get("acodec") not in ("none", None, "video only") and f.get("vcodec") in ("none", None, "audio only")
             )
         ]
 
         # 第二步：优先选择mp4相关格式，并在每个分辨率中选择文件大小最小的
         mp4_video_formats_raw = [
-            f
-            for f in video_audio_formats
-            if f.get("ext") == "mp4" and f.get("width") and f.get("height")
+            f for f in video_audio_formats if f.get("ext") == "mp4" and f.get("width") and f.get("height")
         ]
         mp4_audio_formats = [
             f
             for f in video_audio_formats
-            if f.get("ext") in ["mp4", "m4a"]
-            and not (f.get("width") and f.get("height"))
+            if f.get("ext") in ["mp4", "m4a"] and not (f.get("width") and f.get("height"))
         ]
 
         # 对mp4视频格式按分辨率分组，并在每组中选择文件大小最小的格式
@@ -493,26 +468,16 @@ async def get_video_info(request: VideoInfoRequest):
             return width * height
 
         # 获取前3个最高分辨率（按像素数量排序）
-        top_resolutions = sorted(
-            mp4_by_resolution.keys(), key=resolution_score, reverse=True
-        )[:3]
-        log.info(
-            f"视频分辨率优化：从 {len(mp4_by_resolution)} 个不同分辨率中选择前3个最高分辨率: {top_resolutions}"
-        )
+        top_resolutions = sorted(mp4_by_resolution.keys(), key=resolution_score, reverse=True)[:3]
+        log.info(f"视频分辨率优化：从 {len(mp4_by_resolution)} 个不同分辨率中选择前3个最高分辨率: {top_resolutions}")
 
         # 为选中的分辨率选择文件大小最小的mp4格式
         mp4_video_formats = []
         for resolution in top_resolutions:
             formats = mp4_by_resolution[resolution]
             # 将格式分为有文件大小和无文件大小两组
-            with_filesize = [
-                f for f in formats if f.get("filesize") or f.get("filesize_approx")
-            ]
-            without_filesize = [
-                f
-                for f in formats
-                if not (f.get("filesize") or f.get("filesize_approx"))
-            ]
+            with_filesize = [f for f in formats if f.get("filesize") or f.get("filesize_approx")]
+            without_filesize = [f for f in formats if not (f.get("filesize") or f.get("filesize_approx"))]
 
             if with_filesize:
                 # 选择文件大小最小的格式
@@ -523,9 +488,7 @@ async def get_video_info(request: VideoInfoRequest):
                 mp4_video_formats.append(best_format)
 
                 # 记录选择的格式信息
-                filesize = best_format.get("filesize") or best_format.get(
-                    "filesize_approx"
-                )
+                filesize = best_format.get("filesize") or best_format.get("filesize_approx")
                 log.info(
                     f"分辨率 {resolution} 选择最小文件大小的mp4格式: {best_format.get('format_id')} ({filesize / 1000000:.2f}MB)"
                 )
@@ -534,12 +497,8 @@ async def get_video_info(request: VideoInfoRequest):
                 if len(with_filesize) > 1:
                     skipped_formats = [f for f in with_filesize if f != best_format]
                     for skipped in skipped_formats:
-                        skipped_size = skipped.get("filesize") or skipped.get(
-                            "filesize_approx"
-                        )
-                        log.info(
-                            f"  跳过较大格式: {skipped.get('format_id')} ({skipped_size / 1000000:.2f}MB)"
-                        )
+                        skipped_size = skipped.get("filesize") or skipped.get("filesize_approx")
+                        log.info(f"  跳过较大格式: {skipped.get('format_id')} ({skipped_size / 1000000:.2f}MB)")
             elif without_filesize:
                 # 如果都没有文件大小信息，选择第一个
                 mp4_video_formats.append(without_filesize[0])
@@ -595,16 +554,10 @@ async def get_video_info(request: VideoInfoRequest):
                 (not f.get("width") or not f.get("height"))
                 or
                 # 或者是mp4格式的音频（某些网站的mp4音频可能有尺寸信息但实际是音频）
-                (
-                    f.get("ext") == "mp4"
-                    and (not f.get("vcodec") or f.get("vcodec") == "unknown")
-                )
+                (f.get("ext") == "mp4" and (not f.get("vcodec") or f.get("vcodec") == "unknown"))
                 or
                 # 或者是其他明确的音频格式
-                (
-                    f.get("ext") in ["m4a", "aac", "opus", "mp3", "ogg", "webm"]
-                    and f.get("acodec")
-                )
+                (f.get("ext") in ["m4a", "aac", "opus", "mp3", "ogg", "webm"] and f.get("acodec"))
                 or
                 # 用户提示：resolution为audio only的是音频
                 f.get("resolution") == "audio only"
@@ -617,9 +570,7 @@ async def get_video_info(request: VideoInfoRequest):
             )
         ]
 
-        log.info(
-            f"音频模式: 从 {original_count} 个原始格式过滤到 {len(audio_formats)} 个音频格式"
-        )
+        log.info(f"音频模式: 从 {original_count} 个原始格式过滤到 {len(audio_formats)} 个音频格式")
 
         # Debug: 显示过滤后的音频格式分布
         if audio_formats:
@@ -650,9 +601,7 @@ async def get_video_info(request: VideoInfoRequest):
         # Part 1: Process pre-merged (complete) MP4 formats with improved Unknown/Null codec support
         complete_formats_raw = []
         for f in raw_formats:
-            if (
-                f.get("ext") == "mp4" and f.get("width") and f.get("height")
-            ):  # 必须有分辨率信息
+            if f.get("ext") == "mp4" and f.get("width") and f.get("height"):  # 必须有分辨率信息
                 vcodec = f.get("vcodec")
                 acodec = f.get("acodec")
 
@@ -662,10 +611,7 @@ async def get_video_info(request: VideoInfoRequest):
                 # 3. null编解码器但有分辨率（X.com等平台的完整流）
                 # 4. 排除明确标记为单一类型的流
                 if (
-                    (
-                        vcodec not in ("none", None, "")
-                        and acodec not in ("none", None, "")
-                    )
+                    (vcodec not in ("none", None, "") and acodec not in ("none", None, ""))
                     or (vcodec == "unknown" and acodec == "unknown")
                     or (vcodec is None and acodec is None)
                 ):  # 处理null编解码器的完整流
@@ -683,17 +629,13 @@ async def get_video_info(request: VideoInfoRequest):
                 height = c_fmt.get("height")
 
                 # 查找相同分辨率的其他格式作为文件大小估算参考
-                for alt_fmt in video_data_raw.get(
-                    "formats", []
-                ):  # 使用原始未过滤的格式列表
+                for alt_fmt in video_data_raw.get("formats", []):  # 使用原始未过滤的格式列表
                     if (
                         alt_fmt.get("width") == width
                         and alt_fmt.get("height") == height
                         and alt_fmt.get("format_id") != c_fmt.get("format_id")
                     ):
-                        alt_filesize = alt_fmt.get("filesize") or alt_fmt.get(
-                            "filesize_approx"
-                        )
+                        alt_filesize = alt_fmt.get("filesize") or alt_fmt.get("filesize_approx")
                         if alt_filesize:
                             filesize = alt_filesize
                             is_approx = True  # 标记为估算值
@@ -728,10 +670,7 @@ async def get_video_info(request: VideoInfoRequest):
             and f.get("height")
         ]
         audio_only_formats = [
-            f
-            for f in raw_formats
-            if f.get("acodec") not in ("none", None)
-            and f.get("vcodec") in ("none", None)
+            f for f in raw_formats if f.get("acodec") not in ("none", None) and f.get("vcodec") in ("none", None)
         ]
 
         if video_only_formats and audio_only_formats:
@@ -739,15 +678,11 @@ async def get_video_info(request: VideoInfoRequest):
             best_audio_to_merge = select_best_audio_with_analyzer(raw_formats)
             if not best_audio_to_merge:
                 log.warning("统一音频选择失败，回退到简单选择")
-                best_audio_to_merge = max(
-                    audio_only_formats, key=lambda f: f.get("abr", 0)
-                )
+                best_audio_to_merge = max(audio_only_formats, key=lambda f: f.get("abr", 0))
 
             for v_fmt in video_only_formats:
                 video_size = v_fmt.get("filesize") or v_fmt.get("filesize_approx")
-                audio_size = best_audio_to_merge.get(
-                    "filesize"
-                ) or best_audio_to_merge.get("filesize_approx")
+                audio_size = best_audio_to_merge.get("filesize") or best_audio_to_merge.get("filesize_approx")
 
                 # 如果mp4视频格式没有文件大小，尝试从同分辨率的其他格式估算
                 if video_size is None and v_fmt.get("ext") == "mp4":
@@ -757,18 +692,14 @@ async def get_video_info(request: VideoInfoRequest):
                     # 查找相同分辨率的其他视频格式作为估算参考
                     # 优先级：mp4格式 > 其他格式
                     candidate_formats = []
-                    for alt_fmt in video_data_raw.get(
-                        "formats", []
-                    ):  # 使用原始未过滤的格式列表
+                    for alt_fmt in video_data_raw.get("formats", []):  # 使用原始未过滤的格式列表
                         if (
                             alt_fmt.get("width") == width
                             and alt_fmt.get("height") == height
                             and alt_fmt.get("format_id") != v_fmt.get("format_id")
                             and alt_fmt.get("vcodec") not in ("none", None)
                         ):
-                            alt_video_size = alt_fmt.get("filesize") or alt_fmt.get(
-                                "filesize_approx"
-                            )
+                            alt_video_size = alt_fmt.get("filesize") or alt_fmt.get("filesize_approx")
                             if alt_video_size:
                                 candidate_formats.append(
                                     {
@@ -790,11 +721,7 @@ async def get_video_info(request: VideoInfoRequest):
 
                         video_size = best_candidate["size"]
                         chosen_format = best_candidate["format"]
-                        format_type = (
-                            "mp4同格式"
-                            if best_candidate["is_mp4"]
-                            else f"{chosen_format.get('ext')}格式"
-                        )
+                        format_type = "mp4同格式" if best_candidate["is_mp4"] else f"{chosen_format.get('ext')}格式"
                         log.info(
                             f"mp4视频格式 {v_fmt.get('format_id')} 使用 {chosen_format.get('format_id')} 的文件大小作为估算({format_type}): {video_size / 1000000:.2f}MB"
                         )
@@ -805,12 +732,11 @@ async def get_video_info(request: VideoInfoRequest):
                     # 计算是否为估算大小
                     video_is_approx = not v_fmt.get("filesize") and (
                         v_fmt.get("filesize_approx")
-                        or video_size
-                        != (v_fmt.get("filesize") or v_fmt.get("filesize_approx"))
+                        or video_size != (v_fmt.get("filesize") or v_fmt.get("filesize_approx"))
                     )
-                    audio_is_approx = not best_audio_to_merge.get(
-                        "filesize"
-                    ) and best_audio_to_merge.get("filesize_approx")
+                    audio_is_approx = not best_audio_to_merge.get("filesize") and best_audio_to_merge.get(
+                        "filesize_approx"
+                    )
                     total_is_approx = bool(video_is_approx or audio_is_approx)
                 else:
                     # 如果任一格式没有文件大小信息，总大小设为None
@@ -819,9 +745,7 @@ async def get_video_info(request: VideoInfoRequest):
 
                 all_possible_formats.append(
                     VideoFormat(
-                        format_id=v_fmt[
-                            "format_id"
-                        ],  # 只使用视频format_id，让FormatAnalyzer智能选择音频
+                        format_id=v_fmt["format_id"],  # 只使用视频format_id，让FormatAnalyzer智能选择音频
                         resolution=f"{v_fmt.get('width')}x{v_fmt.get('height')}",
                         ext="mp4",  # Merged format will be mp4
                         filesize=total_size if total_size is not None else None,
@@ -874,9 +798,7 @@ async def get_video_info(request: VideoInfoRequest):
         if len(raw_formats) == 1:
             # We have already selected the best audio format using FormatAnalyzer
             best_audio_format_raw = raw_formats[0]
-            log.info(
-                f"使用智能选择的音频格式: {best_audio_format_raw.get('format_id')}"
-            )
+            log.info(f"使用智能选择的音频格式: {best_audio_format_raw.get('format_id')}")
         elif len(raw_formats) > 1:
             # Fallback: if we have multiple formats (shouldn't happen with smart selection), choose the best by ABR
             log.warning(f"意外情况：有 {len(raw_formats)} 个音频格式，使用ABR选择最佳")
@@ -888,17 +810,9 @@ async def get_video_info(request: VideoInfoRequest):
 
         # Create a single, standardized VideoFormat object for the frontend
         abr = best_audio_format_raw.get("abr")
-        filesize = best_audio_format_raw.get("filesize") or best_audio_format_raw.get(
-            "filesize_approx"
-        )
-        is_approx = not best_audio_format_raw.get(
-            "filesize"
-        ) and best_audio_format_raw.get("filesize_approx")
-        quality_desc = (
-            f"{int(abr)}k"
-            if abr
-            else best_audio_format_raw.get("format_note", "Unknown")
-        )
+        filesize = best_audio_format_raw.get("filesize") or best_audio_format_raw.get("filesize_approx")
+        is_approx = not best_audio_format_raw.get("filesize") and best_audio_format_raw.get("filesize_approx")
+        quality_desc = f"{int(abr)}k" if abr else best_audio_format_raw.get("format_note", "Unknown")
 
         formats = [
             VideoFormat(
@@ -1107,15 +1021,11 @@ async def start_download(request: DownloadRequest):
     # 验证格式ID
     format_valid, format_error = validate_format_id(request.format_id)
     if not format_valid:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid format ID: {format_error}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid format ID: {format_error}")
 
     # 验证下载类型
     if request.download_type not in ["video", "audio"]:
-        raise HTTPException(
-            status_code=400, detail="Invalid download type. Must be 'video' or 'audio'"
-        )
+        raise HTTPException(status_code=400, detail="Invalid download type. Must be 'video' or 'audio'")
 
     task = download_video_task.delay(
         video_url=request.url,
@@ -1149,15 +1059,11 @@ async def download_stream(
     # 验证格式ID
     format_valid, format_error = validate_format_id(format_id)
     if not format_valid:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid format ID: {format_error}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid format ID: {format_error}")
 
     # 验证下载类型
     if download_type not in ["video", "audio"]:
-        raise HTTPException(
-            status_code=400, detail="Invalid download type. Must be 'video' or 'audio'"
-        )
+        raise HTTPException(status_code=400, detail="Invalid download type. Must be 'video' or 'audio'")
 
     try:
 
@@ -1207,17 +1113,13 @@ async def download_stream(
                     while True:
                         # More frequent disconnection check
                         if await request.is_disconnected():
-                            log.warning(
-                                "Client disconnected, terminating download process."
-                            )
+                            log.warning("Client disconnected, terminating download process.")
                             await terminate_process_tree(process)
                             break
 
                         try:
                             # Use asyncio.wait_for to add timeout for reads
-                            chunk = await asyncio.wait_for(
-                                process.stdout.read(8192), timeout=1.0
-                            )
+                            chunk = await asyncio.wait_for(process.stdout.read(8192), timeout=1.0)
                         except asyncio.TimeoutError:
                             # Check disconnection on timeout and continue
                             continue
@@ -1235,9 +1137,7 @@ async def download_stream(
 
                     await stderr_logger_task  # Wait for stderr logger to finish
                     await process.wait()
-                    log.info(
-                        f"Process {process.pid} finished with code {process.returncode}."
-                    )
+                    log.info(f"Process {process.pid} finished with code {process.returncode}.")
 
             except Exception as e:
                 log.error(f"Error in stream_downloader: {e}")
@@ -1312,9 +1212,7 @@ async def download_stream(
 
             # 只移除控制字符（保留换行符和制表符转为空格）
             title_str = "".join(
-                " " if char in "\n\t\r" else char
-                for char in title_str
-                if ord(char) >= 32 or char in "\n\t\r"
+                " " if char in "\n\t\r" else char for char in title_str if ord(char) >= 32 or char in "\n\t\r"
             )
 
             # 清理多余的空格但保留标点
@@ -1463,9 +1361,7 @@ async def download_stream(
         except UnicodeEncodeError:
             # 包含非ASCII字符，生成ASCII兼容的备用文件名
             safe_filename = create_ascii_safe_filename(filename)
-            log.info(
-                f"文件名包含Unicode字符，生成ASCII备用: '{filename}' → '{safe_filename}'"
-            )
+            log.info(f"文件名包含Unicode字符，生成ASCII备用: '{filename}' → '{safe_filename}'")
 
         # 构建完整的Content-Disposition头，支持Unicode
         content_disposition = f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{encoded_filename}"
@@ -1510,9 +1406,7 @@ async def terminate_process_tree(process):
                 await asyncio.wait_for(process.wait(), timeout=5.0)
             except asyncio.TimeoutError:
                 # Force kill if graceful termination fails
-                log.warning(
-                    f"Process {process.pid} didn't terminate gracefully, force killing"
-                )
+                log.warning(f"Process {process.pid} didn't terminate gracefully, force killing")
                 process.kill()
                 await process.wait()
 
@@ -1628,16 +1522,12 @@ async def get_task_status(task_id: str):
         try:
             import redis
 
-            redis_client = redis.Redis.from_url(
-                config_manager.config.celery.broker_url, decode_responses=True
-            )
+            redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
             download_key = f"download:{task_id}"
             if redis_client.exists(download_key):
                 file_info = redis_client.hgetall(download_key)
                 if file_info and "relative_path" in file_info:
-                    log.info(
-                        f"Found successful download in Redis despite FAILURE status: {task_id}"
-                    )
+                    log.info(f"Found successful download in Redis despite FAILURE status: {task_id}")
                     # 覆盖状态和结果
                     status = "SUCCESS"
                     result = {
@@ -1662,9 +1552,7 @@ async def cancel_downloads(request: CancelRequest):
 
     # 1. Revoke Celery tasks first
     for task_id in request.task_ids:
-        celery_app.control.revoke(
-            task_id, terminate=True, signal="SIGKILL"
-        )  # Use SIGKILL for force termination
+        celery_app.control.revoke(task_id, terminate=True, signal="SIGKILL")  # Use SIGKILL for force termination
         cancelled_tasks.append(task_id)
 
     # 2. Clean up any active streaming processes
@@ -1689,9 +1577,7 @@ async def cleanup_active_processes():
     """
     try:
         active_processes = getattr(app.state, "active_processes", set())
-        for (
-            pid
-        ) in active_processes.copy():  # Use copy to avoid modification during iteration
+        for pid in active_processes.copy():  # Use copy to avoid modification during iteration
             try:
                 process = psutil.Process(pid)
                 if process.is_running():
@@ -1744,17 +1630,13 @@ async def cleanup_incomplete_downloads():
                         cleanup_stats["cleaned_files"].append(str(file_path.name))
                         total_size += file_size
                 except Exception as e:
-                    cleanup_stats["errors"].append(
-                        f"Failed to delete {file_path.name}: {str(e)}"
-                    )
+                    cleanup_stats["errors"].append(f"Failed to delete {file_path.name}: {str(e)}")
                     log.warning(f"Failed to delete {file_path}: {e}")
 
         cleanup_stats["total_size_mb"] = round(total_size / (1000 * 1000), 2)
 
         if cleanup_stats["cleaned_files"]:
-            log.info(
-                f"Cleaned up {len(cleanup_stats['cleaned_files'])} files ({cleanup_stats['total_size_mb']}MB)"
-            )
+            log.info(f"Cleaned up {len(cleanup_stats['cleaned_files'])} files ({cleanup_stats['total_size_mb']}MB)")
 
     except Exception as e:
         cleanup_stats["errors"].append(f"Cleanup error: {str(e)}")
@@ -1802,9 +1684,7 @@ async def purge_old_celery_tasks():
         scheduled_count = sum(len(tasks) for tasks in (scheduled or {}).values())
         reserved_count = sum(len(tasks) for tasks in (reserved or {}).values())
 
-        log.info(
-            f"Current tasks - Active: {active_count}, Scheduled: {scheduled_count}, Reserved: {reserved_count}"
-        )
+        log.info(f"Current tasks - Active: {active_count}, Scheduled: {scheduled_count}, Reserved: {reserved_count}")
 
     except Exception as e:
         log.warning(f"Could not purge old Celery tasks: {e}")
@@ -1830,7 +1710,7 @@ async def update_config(update_request: Dict[str, Any]):
     更新并保存应用配置。
     支持部分更新，例如只更新 downloader.max_retries。
     """
-    from config_manager import config_manager, AppConfig, ValidationError
+    from config_manager import AppConfig, ValidationError, config_manager
 
     try:
         # 1. 获取当前配置的字典表示
@@ -1839,11 +1719,7 @@ async def update_config(update_request: Dict[str, Any]):
         # 2. 深度合并传入的更新
         def deep_update(source: dict, updates: dict) -> dict:
             for key, value in updates.items():
-                if (
-                    isinstance(value, dict)
-                    and key in source
-                    and isinstance(source[key], dict)
-                ):
+                if isinstance(value, dict) and key in source and isinstance(source[key], dict):
                     source[key] = deep_update(source[key], value)
                 else:
                     source[key] = value
@@ -1872,9 +1748,7 @@ async def delete_file_by_task_id(task_id: str):
     # 在函数内部初始化 Redis 客户端
     import redis
 
-    redis_client = redis.Redis.from_url(
-        config_manager.config.celery.broker_url, decode_responses=True
-    )
+    redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
 
     download_key = f"download:{task_id}"
 
@@ -1889,9 +1763,7 @@ async def delete_file_by_task_id(task_id: str):
         filename = file_info.get("filename", "unknown")
 
         if not file_path_str:
-            raise HTTPException(
-                status_code=500, detail="服务器内部错误：找不到文件路径记录。"
-            )
+            raise HTTPException(status_code=500, detail="服务器内部错误：找不到文件路径记录。")
 
         file_path = Path(file_path_str)
 
@@ -1903,9 +1775,7 @@ async def delete_file_by_task_id(task_id: str):
                 file_size = file_path.stat().st_size
                 file_path.unlink()
                 file_deleted = True
-                log.info(
-                    f"成功删除文件: {filename} ({file_size / (1024 * 1024):.2f}MB)"
-                )
+                log.info(f"成功删除文件: {filename} ({file_size / (1024 * 1024):.2f}MB)")
             except Exception as e:
                 log.error(f"删除文件失败: {filename} - {e}")
                 raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
@@ -1946,9 +1816,7 @@ async def download_file_by_task_id(task_id: str):
     # 在函数内部初始化 Redis 客户端
     import redis
 
-    redis_client = redis.Redis.from_url(
-        config_manager.config.celery.broker_url, decode_responses=True
-    )
+    redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
 
     download_key = f"download:{task_id}"
 
@@ -1956,26 +1824,20 @@ async def download_file_by_task_id(task_id: str):
     file_info = redis_client.hgetall(download_key)
 
     if not file_info:
-        raise HTTPException(
-            status_code=404, detail="下载链接已过期或无效。请重新发起下载。"
-        )
+        raise HTTPException(status_code=404, detail="下载链接已过期或无效。请重新发起下载。")
 
     file_path_str = file_info.get("file_path")
     filename = file_info.get("filename", "download")
     media_type = file_info.get("media_type", "application/octet-stream")
 
     if not file_path_str:
-        raise HTTPException(
-            status_code=500, detail="服务器内部错误：找不到文件路径记录。"
-        )
+        raise HTTPException(status_code=500, detail="服务器内部错误：找不到文件路径记录。")
 
     file_path = Path(file_path_str)
 
     # 2. 安全检查：确保文件存在
     if not file_path.is_file():
-        raise HTTPException(
-            status_code=404, detail="文件已从服务器清理，请重新发起下载。"
-        )
+        raise HTTPException(status_code=404, detail="文件已从服务器清理，请重新发起下载。")
 
     # 3. 使用 FileResponse 提供下载
     # FileResponse 会自动设置 Content-Disposition 和 Content-Type
@@ -2020,37 +1882,25 @@ async def get_downloaded_file(request: Request, file_name: str):
             if download_folder.exists():
                 # Search recursively for the file
                 for file_candidate in download_folder.rglob("*"):
-                    if (
-                        file_candidate.is_file()
-                        and file_candidate.name == decoded_file_name
-                    ):
+                    if file_candidate.is_file() and file_candidate.name == decoded_file_name:
                         found_file = file_candidate
                         break
 
                 # If still not found, try case-insensitive search
                 if not found_file:
                     for file_candidate in download_folder.rglob("*"):
-                        if (
-                            file_candidate.is_file()
-                            and file_candidate.name.lower() == decoded_file_name.lower()
-                        ):
+                        if file_candidate.is_file() and file_candidate.name.lower() == decoded_file_name.lower():
                             found_file = file_candidate
                             break
 
                 if found_file:
                     file_path = found_file
                 else:
-                    log.error(
-                        f"File '{decoded_file_name}' not found in {download_folder}"
-                    )
-                    raise HTTPException(
-                        status_code=404, detail=f"File '{decoded_file_name}' not found."
-                    )
+                    log.error(f"File '{decoded_file_name}' not found in {download_folder}")
+                    raise HTTPException(status_code=404, detail=f"File '{decoded_file_name}' not found.")
             else:
                 log.error(f"Download directory does not exist: {download_folder}")
-                raise HTTPException(
-                    status_code=404, detail="Download directory not found."
-                )
+                raise HTTPException(status_code=404, detail="Download directory not found.")
 
         # Generate proper filename for download
         clean_filename = file_path.name
@@ -2107,17 +1957,13 @@ async def get_downloaded_file(request: Request, file_name: str):
 
         except Exception as e:
             log.error(f"Error creating FileResponse: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to serve file: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Failed to serve file: {str(e)}")
 
     except HTTPException:
         raise
     except Exception as e:
         log.error(f"Error serving file '{file_name}': {e}")
-        raise HTTPException(
-            status_code=500, detail="Internal server error while serving file."
-        )
+        raise HTTPException(status_code=500, detail="Internal server error while serving file.")
 
 
 @app.delete("/files/{file_name}", status_code=200)
@@ -2152,9 +1998,7 @@ async def clear_all_downloads():
 
         return {"message": "All downloaded files have been cleared."}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error clearing downloads: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error clearing downloads: {str(e)}")
 
 
 # --- Catch-all route for SPA ---

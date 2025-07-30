@@ -21,7 +21,7 @@ def test_yt_dlp_raw_output():
     try:
         cmd = ["yt-dlp", "--print-json", "--no-download", "--no-warnings", url]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=30)
 
         if result.returncode == 0:
             try:
@@ -153,9 +153,7 @@ def test_web_api_processing():
         # Part 1: Process pre-merged (complete) MP4 formats
         complete_formats_raw = []
         for f in raw_formats:
-            if (
-                f.get("ext") == "mp4" and f.get("width") and f.get("height")
-            ):  # 必须有分辨率信息
+            if f.get("ext") == "mp4" and f.get("width") and f.get("height"):  # 必须有分辨率信息
                 vcodec = f.get("vcodec")
                 acodec = f.get("acodec")
 
@@ -165,10 +163,7 @@ def test_web_api_processing():
                 # 3. null编解码器但有分辨率（X.com等平台的完整流）
                 # 4. 排除明确标记为单一类型的流
                 if (
-                    (
-                        vcodec not in ("none", None, "")
-                        and acodec not in ("none", None, "")
-                    )
+                    (vcodec not in ("none", None, "") and acodec not in ("none", None, ""))
                     or (vcodec == "unknown" and acodec == "unknown")
                     or (vcodec is None and acodec is None)
                 ):  # 处理null编解码器的完整流
@@ -178,12 +173,8 @@ def test_web_api_processing():
 
         print(f"🚀 筛选出的完整流: {len(complete_formats_raw)}")
         for fmt in complete_formats_raw:
-            vcodec_str = (
-                str(fmt.get("vcodec")) if fmt.get("vcodec") is not None else "null"
-            )
-            acodec_str = (
-                str(fmt.get("acodec")) if fmt.get("acodec") is not None else "null"
-            )
+            vcodec_str = str(fmt.get("vcodec")) if fmt.get("vcodec") is not None else "null"
+            acodec_str = str(fmt.get("acodec")) if fmt.get("acodec") is not None else "null"
             print(
                 f"  - {fmt.get('format_id'):>15} | {vcodec_str:>12} | {acodec_str:>12} | {fmt.get('width')}x{fmt.get('height')}"
             )
@@ -198,10 +189,7 @@ def test_web_api_processing():
             and f.get("height")
         ]
         audio_only_formats = [
-            f
-            for f in raw_formats
-            if f.get("acodec") not in ("none", None)
-            and f.get("vcodec") in ("none", None)
+            f for f in raw_formats if f.get("acodec") not in ("none", None) and f.get("vcodec") in ("none", None)
         ]
 
         print(f"⚡ 视频流: {len(video_only_formats)}")
@@ -210,9 +198,7 @@ def test_web_api_processing():
         # 计算最终格式数量
         final_format_count = len(complete_formats_raw)
         if video_only_formats and audio_only_formats:
-            final_format_count += len(
-                video_only_formats
-            )  # 每个视频流都会与最佳音频流配对
+            final_format_count += len(video_only_formats)  # 每个视频流都会与最佳音频流配对
 
         print(f"📊 最终格式数量: {final_format_count}")
 
@@ -319,9 +305,7 @@ def test_format_filtering_issue():
     # 测试完整流筛选 - 更新后的逻辑
     complete_formats = []
     for f in mock_formats:
-        if (
-            f.get("ext") == "mp4" and f.get("width") and f.get("height")
-        ):  # 必须有分辨率信息
+        if f.get("ext") == "mp4" and f.get("width") and f.get("height"):  # 必须有分辨率信息
             vcodec = f.get("vcodec")
             acodec = f.get("acodec")
 
@@ -353,9 +337,7 @@ def test_format_filtering_issue():
         and f.get("height")
     ]
     audio_only = [
-        f
-        for f in mock_formats
-        if f.get("acodec") not in ("none", None) and f.get("vcodec") in ("none", None)
+        f for f in mock_formats if f.get("acodec") not in ("none", None) and f.get("vcodec") in ("none", None)
     ]
 
     print(f"视频流: {len(video_only)}")

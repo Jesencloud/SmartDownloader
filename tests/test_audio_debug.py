@@ -3,8 +3,8 @@
 测试音频mp4格式过滤调试
 """
 
-import requests
 import pytest
+import requests
 
 BASE_URL = "http://localhost:8001"
 

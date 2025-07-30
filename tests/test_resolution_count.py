@@ -43,16 +43,10 @@ def test_video_resolution_count():
                         filesize = fmt.get("filesize", 0)
                         needs_merge = fmt.get("needs_merge", False)
 
-                        size_mb = (
-                            round(filesize / (1024 * 1024), 1)
-                            if filesize
-                            else "unknown"
-                        )
+                        size_mb = round(filesize / (1024 * 1024), 1) if filesize else "unknown"
                         merge_status = "(需合并)" if needs_merge else "(直接下载)"
 
-                        print(
-                            f"     {j}. {quality} ({resolution}) - {ext} - {size_mb}MB {merge_status}"
-                        )
+                        print(f"     {j}. {quality} ({resolution}) - {ext} - {size_mb}MB {merge_status}")
 
                 # 分析分辨率多样性
                 resolutions = [f.get("resolution") for f in formats]
@@ -72,9 +66,7 @@ def test_video_resolution_count():
                 if response.status_code != 200:
                     try:
                         error_data = response.json()
-                        print(
-                            f"   错误详情: {error_data.get('detail', 'Unknown error')}"
-                        )
+                        print(f"   错误详情: {error_data.get('detail', 'Unknown error')}")
                     except Exception:
                         pass
 

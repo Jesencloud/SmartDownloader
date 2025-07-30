@@ -6,19 +6,18 @@ SmartDownloader主程序
 
 import argparse
 import asyncio
-import sys
 import logging
+import sys
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 from rich.console import Console
 
-from config_manager import config_manager, config
+from config_manager import config, config_manager
 from downloader import Downloader
+from handlers import process_download_phase, process_local_file, process_metadata_phase
 from subtitles import SubtitleProcessor
-from utils import setup_logging, get_inputs, sanitize
-from handlers import process_local_file, process_metadata_phase, process_download_phase
-
+from utils import get_inputs, sanitize, setup_logging
 
 console = Console(file=sys.stdout)
 log = logging.getLogger(__name__)
@@ -59,9 +58,7 @@ def handle_manual_cookies(manual_cookies_file: str) -> Optional[str]:
         return None
 
 
-def try_auto_extract_cookies(
-    first_url: str, browser_type: str, cookies_config
-) -> Optional[str]:
+def try_auto_extract_cookies(first_url: str, browser_type: str, cookies_config) -> Optional[str]:
     """尝试自动提取cookies。
 
     Args:
@@ -92,14 +89,10 @@ def try_auto_extract_cookies(
             console.print(f"✅ 成功自动获取cookies: {cookies}", style="bold green")
             return cookies
         else:
-            console.print(
-                "⚠️ 无法自动获取cookies，将在无cookies情况下继续", style="yellow"
-            )
+            console.print("⚠️ 无法自动获取cookies，将在无cookies情况下继续", style="yellow")
             return None
     except ImportError as e:
-        console.print(
-            f"⚠️ 自动cookies模块不可用，请手动放置cookies.txt文件: {e}", style="yellow"
-        )
+        console.print(f"⚠️ 自动cookies模块不可用，请手动放置cookies.txt文件: {e}", style="yellow")
         return None
     except Exception as e:
         console.print(f"⚠️ 自动获取cookies时发生未知错误: {e}", style="yellow")
@@ -136,9 +129,7 @@ def handle_browser_mode_cookies(
     return None
 
 
-def handle_cache_cookies(
-    cookies_config, inputs: List[str], browser_type: str
-) -> Optional[str]:
+def handle_cache_cookies(cookies_config, inputs: List[str], browser_type: str) -> Optional[str]:
     """处理缓存cookies。
 
     Args:
@@ -168,9 +159,7 @@ def handle_cache_cookies(
             console.print(f"🍪 使用有效的cookies缓存: {cookies}", style="green")
             return cookies
         else:
-            console.print(
-                "⚠️ cookies缓存已过期，尝试自动获取新cookies...", style="yellow"
-            )
+            console.print("⚠️ cookies缓存已过期，尝试自动获取新cookies...", style="yellow")
             if cookies_config.auto_extract_enabled and inputs:
                 first_url = inputs[0]
                 return try_auto_extract_cookies(first_url, browser_type, cookies_config)
@@ -183,9 +172,7 @@ def handle_cache_cookies(
         return None
 
 
-def handle_auto_mode_cookies(
-    inputs: List[str], browser_type: str, cookies_config
-) -> Optional[str]:
+def handle_auto_mode_cookies(inputs: List[str], browser_type: str, cookies_config) -> Optional[str]:
     """处理自动模式cookies。
 
     Args:
@@ -249,17 +236,13 @@ def get_cookies(inputs: List[str]) -> Optional[str]:
     if cookies_mode == "manual":
         return handle_manual_cookies(manual_cookies_file)
     elif cookies_mode == "browser" or force_refresh:
-        return handle_browser_mode_cookies(
-            inputs, browser_type, cookies_config, force_refresh
-        )
+        return handle_browser_mode_cookies(inputs, browser_type, cookies_config, force_refresh)
     else:
         # auto模式
         return handle_auto_mode_cookies(inputs, browser_type, cookies_config)
 
 
-def process_x_com_urls(
-    current_url_tasks: List[tuple], video_count: int, url: str
-) -> List[tuple]:
+def process_x_com_urls(current_url_tasks: List[tuple], video_count: int, url: str) -> List[tuple]:
     """处理X.com多视频链接情况。
 
     Args:
@@ -272,9 +255,7 @@ def process_x_com_urls(
     """
     if video_count > 1 and ("x.com" in url or "twitter.com" in url):
         console.print("⚠️  不支持一个链接🔗里包含多个视频下载哦～", style="bold red")
-        console.print(
-            f"🔗 当前链接包含 {video_count} 个视频，仅支持单视频链接", style="yellow"
-        )
+        console.print(f"🔗 当前链接包含 {video_count} 个视频，仅支持单视频链接", style="yellow")
         console.print("💡 建议：请分别获取每个视频的单独链接进行下载", style="cyan")
         console.print("📥 将仅下载第一个视频...", style="bold yellow")
 
@@ -284,9 +265,7 @@ def process_x_com_urls(
     return current_url_tasks
 
 
-async def collect_task_metadata(
-    downloader: Downloader, inputs: List[str]
-) -> List[tuple]:
+async def collect_task_metadata(downloader: Downloader, inputs: List[str]) -> List[tuple]:
     """收集所有任务的元数据。
 
     Args:
@@ -333,27 +312,21 @@ async def collect_task_metadata(
     return task_metadata
 
 
-async def process_subtitle_tasks(
-    sub_processor: SubtitleProcessor, inputs: List[str]
-) -> None:
+async def process_subtitle_tasks(sub_processor: SubtitleProcessor, inputs: List[str]) -> None:
     """处理字幕任务。
 
     Args:
         sub_processor (SubtitleProcessor): 字幕处理器实例。
         inputs (List[str]): 输入文件路径列表。
     """
-    console.print(
-        f"🧠 AI字幕生成模式启动，将并发处理 {len(inputs)} 个文件", style="bold cyan"
-    )
+    console.print(f"🧠 AI字幕生成模式启动，将并发处理 {len(inputs)} 个文件", style="bold cyan")
 
     tasks = []
     for file_path in inputs:
         if sub_processor is not None:
             tasks.append(process_local_file(sub_processor, file_path))
         else:
-            log.error(
-                "Subtitle processor is not initialized, cannot process local file for subtitles."
-            )
+            log.error("Subtitle processor is not initialized, cannot process local file for subtitles.")
 
     if tasks:
         await asyncio.gather(*tasks)
@@ -373,9 +346,7 @@ async def process_download_tasks(
         inputs (List[str]): 输入URL列表。
         args (argparse.Namespace): 命令行参数。
     """
-    console.print(
-        f"🚀 下载模式启动，将并发处理 {len(inputs)} 个URL/播放列表", style="bold cyan"
-    )
+    console.print(f"🚀 下载模式启动，将并发处理 {len(inputs)} 个URL/播放列表", style="bold cyan")
 
     # 收集所有任务的元数据
     task_metadata = await collect_task_metadata(downloader, inputs)
@@ -383,17 +354,13 @@ async def process_download_tasks(
     # 阶段1：并发处理所有元数据
     metadata_tasks = []
     for url, prefix, meta in task_metadata:
-        metadata_tasks.append(
-            process_metadata_phase(downloader, meta.get("url", url), prefix)
-        )
+        metadata_tasks.append(process_metadata_phase(downloader, meta.get("url", url), prefix))
 
     await asyncio.gather(*metadata_tasks)
 
     # 阶段2：顺序处理所有下载任务
     for url, prefix, meta in task_metadata:
-        await process_download_phase(
-            downloader, sub_processor, meta.get("url", url), prefix, args
-        )
+        await process_download_phase(downloader, sub_processor, meta.get("url", url), prefix, args)
 
 
 async def main() -> None:
@@ -415,12 +382,8 @@ async def main() -> None:
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="智能媒体下载与处理工具")
     parser.add_argument("inputs", nargs="+", help="URL或文件路径")
-    parser.add_argument(
-        "-b", "--batch-file", action="store_true", help="批量处理文件中的URL"
-    )
-    parser.add_argument(
-        "-m", "--mode", choices=["video", "both", "audio", "subtitle"], default="video"
-    )
+    parser.add_argument("-b", "--batch-file", action="store_true", help="批量处理文件中的URL")
+    parser.add_argument("-m", "--mode", choices=["video", "both", "audio", "subtitle"], default="video")
     parser.add_argument("-p", "--proxy", type=str, default=None)
     parser.add_argument("--ai-subs", action="store_true", help="自动生成AI字幕")
     args = parser.parse_args()
@@ -436,11 +399,7 @@ async def main() -> None:
 
     # 初始化下载器和字幕处理器
     downloader = Downloader(dl_folder, cookies, args.proxy)
-    sub_processor = (
-        SubtitleProcessor(dl_folder, args.proxy)
-        if (args.ai_subs or args.mode == "subtitle")
-        else None
-    )
+    sub_processor = SubtitleProcessor(dl_folder, args.proxy) if (args.ai_subs or args.mode == "subtitle") else None
 
     # 根据模式处理任务
     if args.mode == "subtitle":

@@ -11,15 +11,15 @@ from typing import Optional
 import aiofiles
 import aiofiles.os as aos
 
-from downloader import Downloader
 from core import (
     DownloaderException,
-    NonRecoverableErrorException,
-    MaxRetriesExceededException,
     FFmpegException,
+    MaxRetriesExceededException,
+    NonRecoverableErrorException,
 )
+from downloader import Downloader
 from subtitles import SubtitleProcessor
-from utils import is_media_file, extract_audio_if_needed, sanitize, console, log
+from utils import console, extract_audio_if_needed, is_media_file, log, sanitize
 
 
 async def process_local_file(sub_proc: SubtitleProcessor, file_path: str) -> None:
@@ -110,9 +110,7 @@ async def save_info(folder: Path, prefix: str, url: str, dlr) -> None:
                 # 添加描述信息（如果存在）
                 description = info.get("description", "")
                 if description:
-                    await f.write(
-                        f"\n简介:\n{description[:500]}{'...' if len(description) > 500 else ''}\n"
-                    )
+                    await f.write(f"\n简介:\n{description[:500]}{'...' if len(description) > 500 else ''}\n")
 
             console.print(f"📄 信息文件已生成: {txt_path.name}", style="bold cyan")
         else:

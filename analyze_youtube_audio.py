@@ -3,9 +3,9 @@
 分析具体YouTube视频的音频流信息
 """
 
-import sys
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 # 添加项目根目录到路径
@@ -32,7 +32,7 @@ def get_video_formats(url):
         cmd = [str(yt_dlp_path), "--dump-json", "--no-download", url]
 
         print(f"执行命令: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60)
 
         if result.returncode != 0:
             print(f"❌ yt-dlp执行失败: {result.stderr}")
@@ -74,12 +74,7 @@ def analyze_audio_streams(video_info):
         format_id = fmt.get("format_id", "")
 
         # 检查是否是音频流（特别关注140开头的格式）
-        if (
-            fmt.get("vcodec") == "none"
-            or fmt.get("acodec")
-            and fmt.get("acodec") != "none"
-            and not fmt.get("vcodec")
-        ):
+        if fmt.get("vcodec") == "none" or fmt.get("acodec") and fmt.get("acodec") != "none" and not fmt.get("vcodec"):
             audio_formats.append(fmt)
 
     # 按format_id排序
@@ -120,10 +115,7 @@ def analyze_audio_streams(video_info):
         for key, value in fmt.items():
             if value and isinstance(value, str):
                 value_lower = value.lower()
-                if any(
-                    keyword in value_lower
-                    for keyword in ["original", "default", "main", "primary"]
-                ):
+                if any(keyword in value_lower for keyword in ["original", "default", "main", "primary"]):
                     print(f"    🎯 {key}: {value}")
 
     return target_formats

@@ -4,10 +4,10 @@ import logging
 from dataclasses import dataclass
 
 try:
-    from typing import Optional, Dict, List, Tuple, Any
+    from typing import Any, Dict, List, Optional, Tuple
 except ImportError:
     # Python 3.8兼容性
-    from typing import Optional, Dict, List, Any
+    from typing import Any, Dict, List, Optional
 
     Tuple = tuple
 from enum import Enum
@@ -170,15 +170,9 @@ class FormatAnalyzer:
         analyzed_formats = self.analyze_formats(formats)
 
         # 分类格式
-        complete_formats = [
-            f for f in analyzed_formats if f.stream_type == StreamType.COMPLETE
-        ]
-        video_only_formats = [
-            f for f in analyzed_formats if f.stream_type == StreamType.VIDEO_ONLY
-        ]
-        audio_only_formats = [
-            f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY
-        ]
+        complete_formats = [f for f in analyzed_formats if f.stream_type == StreamType.COMPLETE]
+        video_only_formats = [f for f in analyzed_formats if f.stream_type == StreamType.VIDEO_ONLY]
+        audio_only_formats = [f for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY]
 
         log.debug(
             f"格式分析结果: 完整流={len(complete_formats)}, 视频流={len(video_only_formats)}, 音频流={len(audio_only_formats)}"
@@ -252,15 +246,11 @@ class FormatAnalyzer:
         if "+" in target_format_id:
             video_id, audio_id = target_format_id.split("+", 1)
 
-            video_format = next(
-                (f for f in video_only_formats if f.format_id == video_id), None
-            )
+            video_format = next((f for f in video_only_formats if f.format_id == video_id), None)
 
             if video_format and audio_only_formats:
                 # 使用智能音频选择替代用户指定的音频格式
-                log.info(
-                    f"检测到用户指定组合格式 {video_id}+{audio_id}，使用智能音频选择替代音频部分"
-                )
+                log.info(f"检测到用户指定组合格式 {video_id}+{audio_id}，使用智能音频选择替代音频部分")
                 best_audio = self._select_best_audio_format(audio_only_formats)
 
                 return DownloadPlan(
@@ -271,9 +261,7 @@ class FormatAnalyzer:
                 )
 
             # 如果找不到视频格式或没有音频选项，回退到原来的逻辑
-            audio_format = next(
-                (f for f in audio_only_formats if f.format_id == audio_id), None
-            )
+            audio_format = next((f for f in audio_only_formats if f.format_id == audio_id), None)
 
             if video_format and audio_format:
                 return DownloadPlan(
@@ -284,9 +272,7 @@ class FormatAnalyzer:
                 )
 
         # 查找目标格式
-        target_format = next(
-            (f for f in analyzed_formats if f.format_id == target_format_id), None
-        )
+        target_format = next((f for f in analyzed_formats if f.format_id == target_format_id), None)
 
         if target_format:
             if target_format.stream_type == StreamType.COMPLETE:
@@ -295,10 +281,7 @@ class FormatAnalyzer:
                     primary_format=target_format,
                     reason=f"用户指定完整流格式: {target_format_id}",
                 )
-            elif (
-                target_format.stream_type == StreamType.VIDEO_ONLY
-                and audio_only_formats
-            ):
+            elif target_format.stream_type == StreamType.VIDEO_ONLY and audio_only_formats:
                 # 为指定的视频格式匹配最佳音频
                 best_audio = self._select_best_audio_format(audio_only_formats)
                 return DownloadPlan(
@@ -321,9 +304,7 @@ class FormatAnalyzer:
         original_formats = [f.raw_format for f in analyzed_formats]
         return self.find_best_download_plan(original_formats, None)
 
-    def _select_best_complete_format(
-        self, complete_formats: List[FormatInfo]
-    ) -> FormatInfo:
+    def _select_best_complete_format(self, complete_formats: List[FormatInfo]) -> FormatInfo:
         """选择最佳完整流格式"""
         return max(complete_formats, key=self._calculate_format_score)
 
@@ -358,9 +339,7 @@ class FormatAnalyzer:
         format_scores.sort(key=lambda x: x[1], reverse=True)
         best_format = format_scores[0][0]
 
-        log.info(
-            f"选择最佳音频流: {best_format.format_id} (得分: {format_scores[0][1]:.2f})"
-        )
+        log.info(f"选择最佳音频流: {best_format.format_id} (得分: {format_scores[0][1]:.2f})")
 
         # 如果最高分的格式包含"original (default)"，记录特别日志
         raw_format = best_format.raw_format
@@ -369,14 +348,10 @@ class FormatAnalyzer:
             raw_format.get("language", ""),
             raw_format.get("format", ""),
         ]
-        combined_info = " ".join(
-            str(field).lower() for field in fields_to_check if field
-        )
+        combined_info = " ".join(str(field).lower() for field in fields_to_check if field)
 
         if "original" in combined_info and "default" in combined_info:
-            log.info(
-                f"✅ 成功选择了 'original (default)' 音频流: {best_format.format_id}"
-            )
+            log.info(f"✅ 成功选择了 'original (default)' 音频流: {best_format.format_id}")
         elif "default" in combined_info:
             log.info(f"✅ 选择了 'default' 音频流: {best_format.format_id}")
         elif "original" in combined_info:
@@ -407,13 +382,9 @@ class FormatAnalyzer:
             score += 5
 
         # 编解码器偏好 (0-10分)
-        if fmt.vcodec and any(
-            codec in fmt.vcodec for codec in self.preferred_video_codecs
-        ):
+        if fmt.vcodec and any(codec in fmt.vcodec for codec in self.preferred_video_codecs):
             score += 5
-        if fmt.acodec and any(
-            codec in fmt.acodec for codec in self.preferred_audio_codecs
-        ):
+        if fmt.acodec and any(codec in fmt.acodec for codec in self.preferred_audio_codecs):
             score += 5
 
         # 完整流奖励 (0-20分)
@@ -435,9 +406,7 @@ class FormatAnalyzer:
             score += fmt.tbr / 150  # 总比特率分数（降权）
 
         # 编解码器偏好
-        if fmt.vcodec and any(
-            codec in fmt.vcodec for codec in self.preferred_video_codecs
-        ):
+        if fmt.vcodec and any(codec in fmt.vcodec for codec in self.preferred_video_codecs):
             score += 10
 
         return score
@@ -453,9 +422,7 @@ class FormatAnalyzer:
             score += fmt.tbr / 20  # 总比特率分数（降权）
 
         # 编解码器偏好
-        if fmt.acodec and any(
-            codec in fmt.acodec for codec in self.preferred_audio_codecs
-        ):
+        if fmt.acodec and any(codec in fmt.acodec for codec in self.preferred_audio_codecs):
             score += 10
 
         # 容器格式偏好
@@ -477,16 +444,12 @@ class FormatAnalyzer:
         ]
 
         # 将所有相关字段组合成一个字符串进行检查
-        combined_info = " ".join(
-            str(field).lower() for field in fields_to_check if field
-        )
+        combined_info = " ".join(str(field).lower() for field in fields_to_check if field)
 
         # 优先级1: 明确标记为 "original (default)" 的音轨
         if "original" in combined_info and "default" in combined_info:
             score += 50  # 给予最高优先级
-            log.debug(
-                f"音频流 {fmt.format_id} 检测到 'original (default)' 标记，加分50"
-            )
+            log.debug(f"音频流 {fmt.format_id} 检测到 'original (default)' 标记，加分50")
 
         # 优先级2: 标记为 "default" 的音轨
         elif "default" in combined_info:
@@ -515,9 +478,7 @@ class FormatAnalyzer:
         # 检查其他可能的标识符
         # 如果format_note包含具体的音轨描述
         format_note = raw_format.get("format_note", "").lower()
-        if any(
-            keyword in format_note for keyword in ["main", "primary", "first", "track"]
-        ):
+        if any(keyword in format_note for keyword in ["main", "primary", "first", "track"]):
             score += 5
             log.debug(f"音频流 {fmt.format_id} 检测到主要音轨标识，加分5")
 
@@ -535,15 +496,9 @@ class FormatAnalyzer:
         """
         analyzed_formats = self.analyze_formats(formats)
 
-        complete_count = sum(
-            1 for f in analyzed_formats if f.stream_type == StreamType.COMPLETE
-        )
-        video_count = sum(
-            1 for f in analyzed_formats if f.stream_type == StreamType.VIDEO_ONLY
-        )
-        audio_count = sum(
-            1 for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY
-        )
+        complete_count = sum(1 for f in analyzed_formats if f.stream_type == StreamType.COMPLETE)
+        video_count = sum(1 for f in analyzed_formats if f.stream_type == StreamType.VIDEO_ONLY)
+        audio_count = sum(1 for f in analyzed_formats if f.stream_type == StreamType.AUDIO_ONLY)
 
         summary = f"格式分析: 总数={len(analyzed_formats)}, 完整流={complete_count}, 视频流={video_count}, 音频流={audio_count}"
 

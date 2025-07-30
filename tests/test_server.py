@@ -5,6 +5,7 @@
 
 if __name__ == "__main__":
     import uvicorn
+
     from web.main import app
 
     # 启动FastAPI开发服务器

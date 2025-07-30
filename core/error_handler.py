@@ -5,11 +5,12 @@ import re
 from typing import Optional
 
 from config_manager import config
+
 from .exceptions import (
-    ProxyException,
-    NetworkException,
-    DownloaderException,
     AuthenticationException,
+    DownloaderException,
+    NetworkException,
+    ProxyException,
 )
 
 log = logging.getLogger(__name__)
@@ -74,9 +75,7 @@ class ErrorHandler:
         ]
         return any(pattern in error_lower for pattern in auth_patterns)
 
-    def create_appropriate_exception(
-        self, error_output: str, command: str
-    ) -> Exception:
+    def create_appropriate_exception(self, error_output: str, command: str) -> Exception:
         """
         根据错误输出创建合适的异常
 
@@ -91,9 +90,7 @@ class ErrorHandler:
         truncated_error = error_output[:200] if error_output else "未知错误"
 
         if error_type == "auth":
-            return AuthenticationException(
-                f"认证失败，需要更新cookies: {truncated_error}"
-            )
+            return AuthenticationException(f"认证失败，需要更新cookies: {truncated_error}")
         elif error_type == "proxy":
             return ProxyException(f"代理连接失败: {truncated_error}")
         elif error_type == "network":
@@ -101,9 +98,7 @@ class ErrorHandler:
         else:
             return DownloaderException(f"命令 '{command}' 执行失败: {truncated_error}")
 
-    def handle_subprocess_error(
-        self, returncode: int, error_output: str, command: str
-    ) -> Optional[Exception]:
+    def handle_subprocess_error(self, returncode: int, error_output: str, command: str) -> Optional[Exception]:
         """
         处理子进程错误
 

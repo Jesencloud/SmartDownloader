@@ -5,20 +5,19 @@ Celery 工作进程管理脚本
 """
 
 import os
+import subprocess
 import sys
 import time
-import subprocess
-import psutil
 from pathlib import Path
+
+import psutil
 
 
 class CeleryManager:
     """Celery 工作进程管理器"""
 
     def __init__(self, project_root=None):
-        self.project_root = (
-            Path(project_root) if project_root else Path(__file__).parent
-        )
+        self.project_root = Path(project_root) if project_root else Path(__file__).parent
         self.workers = {}
         # 启动时自动发现已存在的进程
         self.discover_existing_workers()
@@ -36,11 +35,7 @@ class CeleryManager:
 
                     # 检查是否是我们的Celery worker进程
                     cmdline_str = " ".join(cmdline)
-                    if (
-                        "celery" in cmdline_str
-                        and "web.celery_app" in cmdline_str
-                        and "worker" in cmdline_str
-                    ):
+                    if "celery" in cmdline_str and "web.celery_app" in cmdline_str and "worker" in cmdline_str:
                         pid = proc.info["pid"]
                         worker_name = f"existing_{pid}"
 
@@ -74,9 +69,7 @@ class CeleryManager:
                 try:
                     process = worker_info["process"]
                     if process.is_running():
-                        print(
-                            f"🔄 停止已存在的worker: {worker_name} (PID: {worker_info['pid']})"
-                        )
+                        print(f"🔄 停止已存在的worker: {worker_name} (PID: {worker_info['pid']})")
                         process.terminate()
                         try:
                             process.wait(timeout=5)
@@ -102,16 +95,12 @@ class CeleryManager:
             print("\n操作已取消")
             return False
 
-    def start_worker(
-        self, worker_name="worker1", concurrency=None, queue=None, simple_mode=False
-    ):
+    def start_worker(self, worker_name="worker1", concurrency=None, queue=None, simple_mode=False):
         """启动 Celery 工作进程"""
 
         # 检查是否已有worker在运行
         existing_workers = [
-            name
-            for name, info in self.workers.items()
-            if info.get("discovered") or not info.get("discovered", True)
+            name for name, info in self.workers.items() if info.get("discovered") or not info.get("discovered", True)
         ]
 
         if existing_workers and not self._confirm_multiple_workers():
@@ -391,9 +380,7 @@ def main():
     parser.add_argument("--worker", default="worker1", help="Worker 名称")
     parser.add_argument("--concurrency", type=int, help="并发数")
     parser.add_argument("--queue", help="队列名称")
-    parser.add_argument(
-        "--simple", action="store_true", help="使用简单模式（更接近直接 celery 命令）"
-    )
+    parser.add_argument("--simple", action="store_true", help="使用简单模式（更接近直接 celery 命令）")
     parser.add_argument("--port", type=int, default=5555, help="Flower/监控端口")
     parser.add_argument("--interval", type=int, default=30, help="监控间隔(秒)")
 

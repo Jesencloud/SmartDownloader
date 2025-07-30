@@ -4,20 +4,14 @@
 作为 Flower 的轻量级替代方案
 """
 
+import os
+import time
+
+import psutil
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
-import time
-import psutil
-import os
-from pathlib import Path
 
-# 导入现有的 Celery 应用
-import sys
-
-project_root = Path(__file__).parent
-sys.path.append(str(project_root))
-
-from web.celery_app import celery_app  # noqa: E402
+from web.celery_app import celery_app
 
 app = FastAPI(title="Celery 监控面板")
 
@@ -165,31 +159,24 @@ async def dashboard():
             async function refreshData() {
                 try {
                     const response = await fetch('/api/stats');
-                    const data = await response.json();
-                    
+                    const data = await response.json();                    
                     // 更新 Worker 信息
-                    updateWorkerStats(data.workers);
-                    
+                    updateWorkerStats(data.workers);                 
                     // 更新系统信息
-                    updateSystemStats(data.system);
-                    
+                    updateSystemStats(data.system);                    
                     // 更新时间戳
                     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-                    
                 } catch (error) {
                     console.error('刷新数据失败:', error);
                 }
-            }
-            
+            }            
             function updateWorkerStats(workers) {
                 const container = document.getElementById('workers-container');
-                container.innerHTML = '';
-                
+                container.innerHTML = '';                
                 if (Object.keys(workers).length === 0) {
                     container.innerHTML = '<p>没有在线的 Worker</p>';
                     return;
                 }
-                
                 for (const [name, stats] of Object.entries(workers)) {
                     const workerDiv = document.createElement('div');
                     workerDiv.className = 'card';
@@ -218,21 +205,17 @@ async def dashboard():
                     `;
                     container.appendChild(workerDiv);
                 }
-            }
-            
+            }            
             function updateSystemStats(system) {
-                if (!system) return;
-                
+                if (!system) return;                
                 document.getElementById('cpu-percent').textContent = `${system.cpu_percent.toFixed(1)}%`;
                 document.getElementById('memory-usage').textContent = `${system.memory_used}GB / ${system.memory_total}GB (${system.memory_percent.toFixed(1)}%)`;
                 document.getElementById('disk-usage').textContent = `${system.disk_used}GB / ${system.disk_total}GB (${system.disk_percent.toFixed(1)}%)`;
-                
                 // 更新进度条
                 document.getElementById('cpu-fill').style.width = `${system.cpu_percent}%`;
                 document.getElementById('memory-fill').style.width = `${system.memory_percent}%`;
                 document.getElementById('disk-fill').style.width = `${system.disk_percent}%`;
-            }
-            
+            }            
             // 页面加载时刷新数据
             window.onload = function() {
                 refreshData();
@@ -248,8 +231,7 @@ async def dashboard():
                 <p>实时监控 Celery 工作进程和系统状态</p>
                 <button class="refresh-btn" onclick="refreshData()">🔄 刷新数据</button>
                 <p>最后更新: <span id="lastUpdate">-</span></p>
-            </div>
-            
+            </div>            
             <div class="stats-grid">
                 <div class="card">
                     <h2>📊 系统资源</h2>
@@ -260,15 +242,13 @@ async def dashboard():
                     <div class="progress-bar">
                         <div class="progress-fill" id="cpu-fill" style="width: 0%;"></div>
                     </div>
-                    
                     <div class="stat-item">
                         <span>内存使用:</span>
                         <span class="stat-value" id="memory-usage">-</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill" id="memory-fill" style="width: 0%;"></div>
-                    </div>
-                    
+                    </div>                    
                     <div class="stat-item">
                         <span>磁盘使用:</span>
                         <span class="stat-value" id="disk-usage">-</span>
@@ -278,7 +258,6 @@ async def dashboard():
                     </div>
                 </div>
             </div>
-            
             <div class="card">
                 <h2>⚙️ Celery Workers</h2>
                 <div id="workers-container">
@@ -298,9 +277,7 @@ async def get_stats():
     worker_stats = monitor.get_worker_stats()
     system_stats = monitor.get_system_stats()
 
-    return JSONResponse(
-        {"workers": worker_stats, "system": system_stats, "timestamp": time.time()}
-    )
+    return JSONResponse({"workers": worker_stats, "system": system_stats, "timestamp": time.time()})
 
 
 def start_monitor_server(port=8001):

@@ -17,9 +17,7 @@ def test_audio_mp4_support():
     print("🧪 测试音频mp4格式支持...")
 
     try:
-        response = requests.post(
-            f"{BASE_URL}/video-info", json={"url": test_url, "download_type": "audio"}
-        )
+        response = requests.post(f"{BASE_URL}/video-info", json={"url": test_url, "download_type": "audio"})
 
         if response.status_code == 200:
             audio_data = response.json()
@@ -49,9 +47,7 @@ def test_audio_mp4_support():
                 priority_list = ["m4a", "mp4", "aac", "opus", "mp3"]
                 try:
                     priority_index = priority_list.index(ext)
-                    print(
-                        f"   📊 格式优先级排名: {priority_index + 1}/{len(priority_list)}"
-                    )
+                    print(f"   📊 格式优先级排名: {priority_index + 1}/{len(priority_list)}")
                 except ValueError:
                     print("   📊 格式不在优先级列表中")
             else:

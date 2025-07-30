@@ -1,7 +1,7 @@
 import asyncio
 import functools
 import logging
-from typing import Callable, Any, Type, Tuple, Optional
+from typing import Any, Callable, Optional, Tuple, Type
 
 from .exceptions import UnhandledException
 
@@ -77,9 +77,7 @@ class RetryManager:
         self.attempts = 0
         self.delay = initial_delay
 
-    async def execute_with_retries(
-        self, operation: Callable[..., Any], *args: Any, **kwargs: Any
-    ) -> Any:
+    async def execute_with_retries(self, operation: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """
         执行一个操作，如果失败则根据策略重试。
 
@@ -110,8 +108,7 @@ class RetryManager:
                     raise e
 
                 log.warning(
-                    f"操作失败 (尝试 {self.attempts}/{self.max_retries}): {e}。"
-                    f"将在 {self.delay:.2f} 秒后重试..."
+                    f"操作失败 (尝试 {self.attempts}/{self.max_retries}): {e}。将在 {self.delay:.2f} 秒后重试..."
                 )
 
                 # 在重试前执行异步延迟
@@ -126,6 +123,4 @@ class RetryManager:
                 raise UnhandledException(f"操作失败，出现非重试错误: {e}") from e
 
         # 如果循环结束但没有成功，这是个意外情况
-        raise RuntimeError(
-            "重试逻辑出现意外错误，所有尝试均已用尽但未成功也未引发异常。"
-        )
+        raise RuntimeError("重试逻辑出现意外错误，所有尝试均已用尽但未成功也未引发异常。")

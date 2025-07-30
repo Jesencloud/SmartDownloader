@@ -1,10 +1,10 @@
 # subtitles.py
 import asyncio
-import re
 import logging
+import re
 import sys
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 import aiofiles
 from rich.console import Console
@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 console = Console(file=sys.stdout)
 
 try:
-    from deep_translator import GoogleTranslator, MyMemoryTranslator, BaiduTranslator
+    from deep_translator import BaiduTranslator, GoogleTranslator, MyMemoryTranslator
 
     AI_LIBRARIES_AVAILABLE = True
 except ImportError:
@@ -79,9 +79,7 @@ class TranscriptionProcessor:
         self.source_language = config.ai_subtitles.source_language
         self.whisper_model_path = config.ai_subtitles.whisper_model_path
 
-    async def transcribe_audio(
-        self, audio_path: Path, output_folder: Path
-    ) -> Optional[Path]:
+    async def transcribe_audio(self, audio_path: Path, output_folder: Path) -> Optional[Path]:
         """使用Whisper转录音频文件"""
         console.print(f"🧠 正在转录音频: {audio_path.name}", style="bold green")
         console.print(f"🤖 使用Whisper模型: {self.whisper_model}", style="bold blue")
@@ -156,36 +154,26 @@ class TranslationProcessor:
             # 设置主翻译器
             try:
                 if translator_service == "google":
-                    self.translator = GoogleTranslator(
-                        source="en", target="zh-CN", proxies=proxy_config
-                    )
+                    self.translator = GoogleTranslator(source="en", target="zh-CN", proxies=proxy_config)
                 elif translator_service == "mymemory":
                     self.translator = MyMemoryTranslator(source="en", target="zh-CN")
                 elif translator_service == "baidu":
                     self.translator = BaiduTranslator(source="en", target="zh")
                 else:
-                    log.warning(
-                        f"不支持的翻译服务: {translator_service}。将使用Google翻译。"
-                    )
-                    self.translator = GoogleTranslator(
-                        source="en", target="zh-CN", proxies=proxy_config
-                    )
+                    log.warning(f"不支持的翻译服务: {translator_service}。将使用Google翻译。")
+                    self.translator = GoogleTranslator(source="en", target="zh-CN", proxies=proxy_config)
 
                 # 设置备用翻译器
                 if translator_service != "mymemory":
                     try:
-                        self.fallback_translators.append(
-                            MyMemoryTranslator(source="en", target="zh-CN")
-                        )
+                        self.fallback_translators.append(MyMemoryTranslator(source="en", target="zh-CN"))
                     except Exception:
                         pass
 
                 if translator_service != "google":
                     try:
                         self.fallback_translators.append(
-                            GoogleTranslator(
-                                source="en", target="zh-CN", proxies=proxy_config
-                            )
+                            GoogleTranslator(source="en", target="zh-CN", proxies=proxy_config)
                         )
                     except Exception:
                         pass
@@ -242,32 +230,25 @@ class TranslationProcessor:
     def _extract_text_blocks(self, content: str) -> List[str]:
         """从SRT内容中提取文本块"""
         text_blocks = [
-            m.group(1).replace("\n", " ")
-            for m in re.finditer(r"[\d:,\-\s>]+\n(.*?)(?=\n\d+|$)", content, re.DOTALL)
+            m.group(1).replace("\n", " ") for m in re.finditer(r"[\d:,\-\s>]+\n(.*?)(?=\n\d+|$)", content, re.DOTALL)
         ]
         log.info(f"提取到 {len(text_blocks)} 个文本块进行翻译。")
         return text_blocks
 
-    async def _translate_text_blocks(
-        self, text_blocks: List[str]
-    ) -> Optional[List[str]]:
+    async def _translate_text_blocks(self, text_blocks: List[str]) -> Optional[List[str]]:
         """批量翻译文本块，带重试机制"""
         all_translated_blocks = []
         batch_size = config.ai_subtitles.translation_batch_size
         delay = config.ai_subtitles.translation_delay
 
-        log.info(
-            f"准备翻译 {len(text_blocks)} 个文本块，分批大小: {batch_size}，批次间延迟: {delay}秒..."
-        )
+        log.info(f"准备翻译 {len(text_blocks)} 个文本块，分批大小: {batch_size}，批次间延迟: {delay}秒...")
 
         for i in range(0, len(text_blocks), batch_size):
             batch = text_blocks[i : i + batch_size]
             batch_num = i // batch_size + 1
             total_batches = (len(text_blocks) + batch_size - 1) // batch_size
 
-            log.info(
-                f"正在翻译批次 {batch_num}/{total_batches} (包含 {len(batch)} 个文本块)..."
-            )
+            log.info(f"正在翻译批次 {batch_num}/{total_batches} (包含 {len(batch)} 个文本块)...")
 
             # 重试机制
             max_retries = config.ai_subtitles.translation_max_retries
@@ -278,9 +259,7 @@ class TranslationProcessor:
                         # 增加延迟时间，避免频繁请求
                         await asyncio.sleep(min(delay * (retry + 1), 10))
 
-                    translated_batch = await asyncio.to_thread(
-                        self.translator.translate_batch, batch
-                    )
+                    translated_batch = await asyncio.to_thread(self.translator.translate_batch, batch)
                     all_translated_blocks.extend(translated_batch)
                     log.info(f"批次 {batch_num} 翻译完成。")
                     break  # 成功则跳出重试循环
@@ -291,18 +270,11 @@ class TranslationProcessor:
 
                     # 尝试使用备用翻译器
                     fallback_success = False
-                    if (
-                        "No translation was found" in error_msg
-                        or "translator" in error_msg.lower()
-                    ):
+                    if "No translation was found" in error_msg or "translator" in error_msg.lower():
                         for fallback_translator in self.fallback_translators:
                             try:
-                                log.info(
-                                    f"尝试使用备用翻译器: {type(fallback_translator).__name__}"
-                                )
-                                translated_batch = await asyncio.to_thread(
-                                    fallback_translator.translate_batch, batch
-                                )
+                                log.info(f"尝试使用备用翻译器: {type(fallback_translator).__name__}")
+                                translated_batch = await asyncio.to_thread(fallback_translator.translate_batch, batch)
                                 all_translated_blocks.extend(translated_batch)
                                 log.info(f"批次 {batch_num} 使用备用翻译器翻译完成。")
                                 fallback_success = True
@@ -314,23 +286,15 @@ class TranslationProcessor:
                     if fallback_success:
                         break  # 备用翻译成功，跳出重试循环
 
-                    if (
-                        "SSL" in error_msg
-                        or "Connection" in error_msg
-                        or "HTTPSConnectionPool" in error_msg
-                    ):
-                        log.warning(
-                            f"网络连接错误 (批次 {batch_num}, 尝试 {retry + 1}/{max_retries}): {e}"
-                        )
+                    if "SSL" in error_msg or "Connection" in error_msg or "HTTPSConnectionPool" in error_msg:
+                        log.warning(f"网络连接错误 (批次 {batch_num}, 尝试 {retry + 1}/{max_retries}): {e}")
                         if is_last_retry:
                             log.error(f"批次 {batch_num} 网络连接重试失败，使用原文")
                             all_translated_blocks.extend(batch)
                             log.info(f"批次 {batch_num} 使用原文代替翻译")
                             break
                     else:
-                        log.error(
-                            f"deep_translator.translate_batch 调用失败 (批次 {batch_num}): {e}"
-                        )
+                        log.error(f"deep_translator.translate_batch 调用失败 (批次 {batch_num}): {e}")
                         if is_last_retry:
                             # 对于其他错误，也使用原文代替
                             all_translated_blocks.extend(batch)
@@ -342,9 +306,7 @@ class TranslationProcessor:
                 await asyncio.sleep(delay)
 
         if len(text_blocks) != len(all_translated_blocks):
-            log.error(
-                f"翻译返回片段数与原文不匹配。原文: {len(text_blocks)}, 翻译: {len(all_translated_blocks)}"
-            )
+            log.error(f"翻译返回片段数与原文不匹配。原文: {len(text_blocks)}, 翻译: {len(all_translated_blocks)}")
             return None
 
         return all_translated_blocks
@@ -354,9 +316,7 @@ class TranslationProcessor:
     ) -> None:
         """写入翻译后的SRT文件"""
         new_content_parts = []
-        subtitle_blocks_iter = re.finditer(
-            r"(\d+\n[\d:,\-\s>]+\n)(.*?)(?=\n\n|$)", original_content, re.DOTALL
-        )
+        subtitle_blocks_iter = re.finditer(r"(\d+\n[\d:,\-\s>]+\n)(.*?)(?=\n\n|$)", original_content, re.DOTALL)
 
         for i, match in enumerate(subtitle_blocks_iter):
             header = match.group(1)
@@ -408,17 +368,9 @@ class SubtitleMerger:
 
     async def _create_merged_content(self, en_content: str, zh_content: str) -> str:
         """创建合并的字幕内容"""
-        en_subtitles = {
-            m[1]: m[3].strip()
-            for m in re.finditer(r"(\d+)\n(.*?)\n(.*?)\n\n", en_content, re.DOTALL)
-        }
-        zh_subtitles = {
-            m[1]: m[3].strip()
-            for m in re.finditer(r"(\d+)\n(.*?)\n(.*?)\n\n", zh_content, re.DOTALL)
-        }
-        timestamps = {
-            m[1]: m[2].strip() for m in re.finditer(r"(\d+)\n(.*?)\n", en_content)
-        }
+        en_subtitles = {m[1]: m[3].strip() for m in re.finditer(r"(\d+)\n(.*?)\n(.*?)\n\n", en_content, re.DOTALL)}
+        zh_subtitles = {m[1]: m[3].strip() for m in re.finditer(r"(\d+)\n(.*?)\n(.*?)\n\n", zh_content, re.DOTALL)}
+        timestamps = {m[1]: m[2].strip() for m in re.finditer(r"(\d+)\n(.*?)\n", en_content)}
 
         merged_parts = []
         for i in sorted(timestamps.keys(), key=int):
@@ -458,9 +410,7 @@ class SubtitleProcessor:
         if await self._check_for_existing_subs(file_prefix, output_folder):
             return
 
-        base_folder = (
-            output_folder if output_folder is not None else self.download_folder
-        )
+        base_folder = output_folder if output_folder is not None else self.download_folder
 
         # 步骤1: 音频格式转换
         audio_to_transcribe = await self._prepare_audio(audio_source_path)
@@ -468,9 +418,7 @@ class SubtitleProcessor:
             return
 
         # 步骤2: 语音转录
-        en_srt_path = await self.transcription_processor.transcribe_audio(
-            audio_to_transcribe, base_folder
-        )
+        en_srt_path = await self.transcription_processor.transcribe_audio(audio_to_transcribe, base_folder)
 
         # 清理临时音频文件
         if audio_to_transcribe != audio_source_path:
@@ -481,9 +429,7 @@ class SubtitleProcessor:
 
         # 步骤3: 翻译字幕
         if self.translation_processor.translate_to_chinese:
-            zh_srt_path = await self.translation_processor.translate_subtitle(
-                en_srt_path
-            )
+            zh_srt_path = await self.translation_processor.translate_subtitle(en_srt_path)
             if zh_srt_path:
                 # 步骤4: 合并字幕
                 await self.subtitle_merger.merge_subtitles(en_srt_path, zh_srt_path)
@@ -498,18 +444,12 @@ class SubtitleProcessor:
             return audio_source_path
         else:
             # whisper-cli不支持的格式(如m4a, webm)需要转换为wav
-            log.info(
-                f"whisper-cli不支持 {audio_source_path.suffix} 格式，转换为WAV格式以兼容"
-            )
+            log.info(f"whisper-cli不支持 {audio_source_path.suffix} 格式，转换为WAV格式以兼容")
             return await self.audio_processor.convert_to_wav(audio_source_path)
 
-    async def _check_for_existing_subs(
-        self, file_prefix: str, output_folder: Optional[Path] = None
-    ) -> bool:
+    async def _check_for_existing_subs(self, file_prefix: str, output_folder: Optional[Path] = None) -> bool:
         """检查是否已存在字幕文件"""
-        base_folder = (
-            output_folder if output_folder is not None else self.download_folder
-        )
+        base_folder = output_folder if output_folder is not None else self.download_folder
 
         def _glob():
             return list(base_folder.glob(f"{file_prefix}*.srt"))

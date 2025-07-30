@@ -3,20 +3,18 @@
 快速启动 Celery 工作进程的脚本
 """
 
+import os
+import signal
 import subprocess
 import sys
 import time
-import signal
-import os
 
 
 def start_redis():
     """检查并启动 Redis"""
     try:
         # 检查 Redis 是否运行
-        result = subprocess.run(
-            ["redis-cli", "ping"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["redis-cli", "ping"], check=False, capture_output=True, text=True, timeout=5)
         if result.returncode == 0 and "PONG" in result.stdout:
             print("✅ Redis 已运行")
             return True
@@ -30,9 +28,7 @@ def start_redis():
         time.sleep(3)
 
         # 再次检查
-        result = subprocess.run(
-            ["redis-cli", "ping"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["redis-cli", "ping"], check=False, capture_output=True, text=True, timeout=5)
         if result.returncode == 0 and "PONG" in result.stdout:
             print("✅ Redis 启动成功")
             return True
@@ -71,9 +67,7 @@ def main():
         time.sleep(3)
 
         print("\n2️⃣ 启动内置监控面板...")
-        monitor_process = subprocess.Popen(
-            [sys.executable, "celery_manager.py", "builtin-monitor", "--port", "8001"]
-        )
+        monitor_process = subprocess.Popen([sys.executable, "celery_manager.py", "builtin-monitor", "--port", "8001"])
         processes.append(("内置监控", monitor_process))
         time.sleep(2)
 

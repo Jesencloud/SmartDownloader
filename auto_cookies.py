@@ -16,10 +16,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
-    from typing import Optional, Dict, List, Tuple
+    from typing import Dict, List, Optional, Tuple
 except ImportError:
     # Python 3.8兼容性
-    from typing import Optional, Dict, List
+    from typing import Dict, List, Optional
 
     Tuple = tuple
 
@@ -84,9 +84,7 @@ class BrowserCookiesExtractor:
             "edge": self._get_edge_cookies,
         }
 
-    def extract_cookies_for_domain(
-        self, domain: str, browser: str = "auto"
-    ) -> Optional[str]:
+    def extract_cookies_for_domain(self, domain: str, browser: str = "auto") -> Optional[str]:
         """
         为指定域名提取cookies并保存为Netscape格式（含缓存机制）
 
@@ -134,9 +132,7 @@ class BrowserCookiesExtractor:
 
         return None
 
-    def _extract_cookies_with_retry(
-        self, browser: str, domain: str, max_retries: int = 2
-    ) -> List[Dict]:
+    def _extract_cookies_with_retry(self, browser: str, domain: str, max_retries: int = 2) -> List[Dict]:
         """带重试机制的cookies提取。
 
         Args:
@@ -160,24 +156,16 @@ class BrowserCookiesExtractor:
             except Exception as e:
                 last_exception = e
                 if attempt < max_retries:
-                    logger.debug(
-                        f"第{attempt + 1}次尝试从{browser}获取cookies失败，重试中..."
-                    )
+                    logger.debug(f"第{attempt + 1}次尝试从{browser}获取cookies失败，重试中...")
                     time.sleep(1)  # 短暂等待后重试
                 else:
                     # 转换为更具体的异常
                     if "database is locked" in str(e).lower():
-                        raise BrowserCookieError(
-                            f"无法访问{browser}数据库，请关闭浏览器后重试"
-                        )
+                        raise BrowserCookieError(f"无法访问{browser}数据库，请关闭浏览器后重试")
                     elif "permission denied" in str(e).lower():
-                        raise BrowserCookieError(
-                            f"权限被拒绝，无法访问{browser}cookies文件"
-                        )
+                        raise BrowserCookieError(f"权限被拒绝，无法访问{browser}cookies文件")
                     elif "no such file" in str(e).lower():
-                        raise BrowserCookieError(
-                            f"未找到{browser}cookies文件，请确保浏览器已安装并使用过"
-                        )
+                        raise BrowserCookieError(f"未找到{browser}cookies文件，请确保浏览器已安装并使用过")
                     else:
                         raise BrowserCookieError(f"从{browser}获取cookies失败: {e}")
 
@@ -258,22 +246,14 @@ class BrowserCookiesExtractor:
 
         # Chrome cookies数据库路径（macOS）
         if sys.platform == "darwin":
-            chrome_cookies_path = os.path.expanduser(
-                "~/Library/Application Support/Google/Chrome/Default/Cookies"
-            )
+            chrome_cookies_path = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Cookies")
         elif sys.platform == "win32":
-            chrome_cookies_path = os.path.expanduser(
-                "~/AppData/Local/Google/Chrome/User Data/Default/Cookies"
-            )
+            chrome_cookies_path = os.path.expanduser("~/AppData/Local/Google/Chrome/User Data/Default/Cookies")
         else:  # Linux
-            chrome_cookies_path = os.path.expanduser(
-                "~/.config/google-chrome/Default/Cookies"
-            )
+            chrome_cookies_path = os.path.expanduser("~/.config/google-chrome/Default/Cookies")
 
         if not os.path.exists(chrome_cookies_path):
-            raise BrowserCookieError(
-                "未找到Chrome cookies数据库，请确保Chrome已安装并使用过"
-            )
+            raise BrowserCookieError("未找到Chrome cookies数据库，请确保Chrome已安装并使用过")
 
         # 复制数据库到临时文件（因为Chrome可能正在使用）
         try:
@@ -281,15 +261,11 @@ class BrowserCookiesExtractor:
                 shutil.copy2(chrome_cookies_path, temp_file.name)
                 temp_cookies_path = temp_file.name
         except PermissionError as e:
-            raise BrowserCookieError(
-                "无法访问Chrome cookies文件，请关闭Chrome浏览器后重试"
-            ) from e
+            raise BrowserCookieError("无法访问Chrome cookies文件，请关闭Chrome浏览器后重试") from e
         except (OSError, IOError) as e:
             raise BrowserCookieError(f"Chrome cookies文件操作失败: {e}") from e
         except Exception as e:
-            raise BrowserCookieError(
-                f"复制Chrome cookies文件时发生未知错误: {e}"
-            ) from e
+            raise BrowserCookieError(f"复制Chrome cookies文件时发生未知错误: {e}") from e
 
         try:
             conn = sqlite3.connect(temp_cookies_path, timeout=10.0)
@@ -330,9 +306,7 @@ class BrowserCookiesExtractor:
             conn.close()
 
         except sqlite3.DatabaseError as e:
-            raise BrowserCookieError(
-                f"Chrome数据库访问失败，可能被浏览器占用: {e}"
-            ) from e
+            raise BrowserCookieError(f"Chrome数据库访问失败，可能被浏览器占用: {e}") from e
         except sqlite3.Error as e:
             raise BrowserCookieError(f"Chrome数据库操作失败: {e}") from e
         except Exception as e:
@@ -365,13 +339,9 @@ class BrowserCookiesExtractor:
 
         # Firefox profile目录
         if sys.platform == "darwin":
-            firefox_path = os.path.expanduser(
-                "~/Library/Application Support/Firefox/Profiles"
-            )
+            firefox_path = os.path.expanduser("~/Library/Application Support/Firefox/Profiles")
         elif sys.platform == "win32":
-            firefox_path = os.path.expanduser(
-                "~/AppData/Roaming/Mozilla/Firefox/Profiles"
-            )
+            firefox_path = os.path.expanduser("~/AppData/Roaming/Mozilla/Firefox/Profiles")
         else:  # Linux
             firefox_path = os.path.expanduser("~/.mozilla/firefox")
 
@@ -388,9 +358,7 @@ class BrowserCookiesExtractor:
                     try:
                         cookies.extend(self._read_firefox_cookies(cookies_file, domain))
                     except BrowserCookieError as e:
-                        logger.debug(
-                            f"读取Firefox profile {profile_dir} cookies失败: {e}"
-                        )
+                        logger.debug(f"读取Firefox profile {profile_dir} cookies失败: {e}")
                     except Exception as e:
                         logger.warning(
                             f"读取Firefox profile {profile_dir} cookies时发生未知错误: {e}",
@@ -480,9 +448,7 @@ class BrowserCookiesExtractor:
             logger.warning("Safari cookies只在macOS上支持")
             return cookies
 
-        safari_cookies_path = os.path.expanduser(
-            "~/Library/Cookies/Cookies.binarycookies"
-        )
+        safari_cookies_path = os.path.expanduser("~/Library/Cookies/Cookies.binarycookies")
 
         if not os.path.exists(safari_cookies_path):
             logger.warning("未找到Safari cookies文件")
@@ -506,17 +472,11 @@ class BrowserCookiesExtractor:
 
         # Edge cookies路径（与Chrome类似）
         if sys.platform == "darwin":
-            edge_cookies_path = os.path.expanduser(
-                "~/Library/Application Support/Microsoft Edge/Default/Cookies"
-            )
+            edge_cookies_path = os.path.expanduser("~/Library/Application Support/Microsoft Edge/Default/Cookies")
         elif sys.platform == "win32":
-            edge_cookies_path = os.path.expanduser(
-                "~/AppData/Local/Microsoft/Edge/User Data/Default/Cookies"
-            )
+            edge_cookies_path = os.path.expanduser("~/AppData/Local/Microsoft/Edge/User Data/Default/Cookies")
         else:  # Linux
-            edge_cookies_path = os.path.expanduser(
-                "~/.config/microsoft-edge/Default/Cookies"
-            )
+            edge_cookies_path = os.path.expanduser("~/.config/microsoft-edge/Default/Cookies")
 
         if not os.path.exists(edge_cookies_path):
             logger.warning("未找到Edge cookies数据库")
@@ -615,9 +575,7 @@ class BrowserCookiesExtractor:
 
                 for cookie in cookies:
                     # Netscape格式: domain, flag, path, secure, expires, name, value
-                    domain_flag = (
-                        "TRUE" if cookie["domain"].startswith(".") else "FALSE"
-                    )
+                    domain_flag = "TRUE" if cookie["domain"].startswith(".") else "FALSE"
                     path = cookie.get("path", "/")
                     secure = "TRUE" if cookie.get("secure", False) else "FALSE"
                     expires = str(cookie.get("expires", 0))

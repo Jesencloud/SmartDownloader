@@ -4,10 +4,10 @@
 """
 
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from pathlib import Path
 
 
 def create_test_files(base_path: Path):
@@ -80,9 +80,7 @@ def test_lightweight_cleanup(
     end_time = time.time()
     response_time = end_time - start_time
 
-    assert response.status_code == 200, (
-        f"清理请求失败: {response.status_code} - {response.text}"
-    )
+    assert response.status_code == 200, f"清理请求失败: {response.status_code} - {response.text}"
 
     result = response.json()
 

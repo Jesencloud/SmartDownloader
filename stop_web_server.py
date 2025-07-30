@@ -3,12 +3,13 @@
 快速停止所有 Uvicorn Web 服务器进程
 """
 
+import logging
 import os
 import signal
 import subprocess
-import psutil
-import logging
 import sys
+
+import psutil
 
 # 设置日志
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -31,9 +32,7 @@ def _find_pids_by_port_lsof(port: int) -> set[int]:
         # -P: inhibit port name conversion (e.g., 8000 instead of http-alt)
         # -n: inhibit network number conversion (no DNS lookup)
         command = ["lsof", "-i", f":{port}", "-sTCP:LISTEN", "-P", "-n", "-t"]
-        result = subprocess.run(
-            command, capture_output=True, text=True, check=False, timeout=5
-        )
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=5)
 
         if result.returncode == 0 and result.stdout.strip():
             found_pids = {int(pid) for pid in result.stdout.strip().split("\n")}
@@ -43,12 +42,8 @@ def _find_pids_by_port_lsof(port: int) -> set[int]:
             # lsof returns 1 if nothing is found, which is not an error for us.
             if "can't be stated" in result.stderr:  # Common permission error on macOS
                 log.warning("     [lsof] 权限不足，无法检查所有文件。结果可能不完整。")
-            elif (
-                "command not found" not in result.stderr
-            ):  # Ignore "not found" as we handle it below
-                log.warning(
-                    f"     [lsof] 命令执行时返回非零值，stderr: {result.stderr.strip()}"
-                )
+            elif "command not found" not in result.stderr:  # Ignore "not found" as we handle it below
+                log.warning(f"     [lsof] 命令执行时返回非零值，stderr: {result.stderr.strip()}")
 
     except FileNotFoundError:
         log.warning("     [lsof] `lsof` 命令未找到，跳过此策略。")
@@ -89,11 +84,7 @@ def stop_uvicorn_processes():
         try:
             for conn in psutil.net_connections(kind="inet"):
                 try:
-                    if (
-                        conn.laddr.port == SERVER_PORT
-                        and conn.status == psutil.CONN_LISTEN
-                        and conn.pid
-                    ):
+                    if conn.laddr.port == SERVER_PORT and conn.status == psutil.CONN_LISTEN and conn.pid:
                         log.info(f"     [psutil-net] 发现进程 PID: {conn.pid}")
                         pids_to_stop.add(conn.pid)
                 except psutil.AccessDenied:
@@ -128,9 +119,7 @@ def stop_uvicorn_processes():
                     log.info(f"   - 终止进程组 {pgid}...")
                     os.killpg(pgid, signal.SIGTERM)
                 except ProcessLookupError:
-                    log.info(
-                        f"   - 进程组 {proc.pid} 查找失败，可能已停止。尝试终止单个进程..."
-                    )
+                    log.info(f"   - 进程组 {proc.pid} 查找失败，可能已停止。尝试终止单个进程...")
                     proc.terminate()
             else:
                 # 在 Windows 上，直接终止主进程
@@ -161,9 +150,7 @@ def force_kill_process(proc: psutil.Process):
                 pgid = os.getpgid(proc.pid)
                 os.killpg(pgid, signal.SIGKILL)
             except ProcessLookupError:
-                log.info(
-                    f"   - 进程组 {proc.pid} 查找失败，可能已停止。尝试强制终止单个进程..."
-                )
+                log.info(f"   - 进程组 {proc.pid} 查找失败，可能已停止。尝试强制终止单个进程...")
                 proc.kill()
         else:
             proc.kill()

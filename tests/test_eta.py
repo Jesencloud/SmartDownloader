@@ -3,9 +3,10 @@
 测试ETA信息传递的脚本
 """
 
+import time
+
 import pytest
 import requests
-import time
 
 BASE_URL = "http://localhost:8000"
 
@@ -49,11 +50,7 @@ def test_eta_progress():
 
                 if status_response.status_code == 200:
                     status_data = status_response.json()
-                    _ = (
-                        debug_response.json()
-                        if debug_response.status_code == 200
-                        else {}
-                    )
+                    _ = debug_response.json() if debug_response.status_code == 200 else {}
 
                     print(f"\n--- 尝试 {attempt + 1} ---")
                     print(f"状态: {status_data['status']}")

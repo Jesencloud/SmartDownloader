@@ -6,15 +6,16 @@
 
 import logging
 from pathlib import Path
-from typing import Optional, List
-import aiofiles.os
+from typing import List, Optional
 
+import aiofiles.os
 from rich.console import Console
 
 from config_manager import config
-from .subprocess_manager import SubprocessManager
+
 from .command_builder import CommandBuilder
-from .exceptions import FFmpegException, DownloaderException
+from .exceptions import DownloaderException, FFmpegException
+from .subprocess_manager import SubprocessManager
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -72,14 +73,10 @@ class FileProcessor:
             if not audio_part.exists():
                 raise DownloaderException(f"音频文件不存在: {audio_part}")
 
-            log.info(
-                f"开始合并视频: {video_part.name} + {audio_part.name} -> {output_file.name}"
-            )
+            log.info(f"开始合并视频: {video_part.name} + {audio_part.name} -> {output_file.name}")
 
             # 构建FFmpeg合并命令
-            merge_cmd = self.command_builder.build_ffmpeg_merge_cmd(
-                str(video_part), str(audio_part), str(output_file)
-            )
+            merge_cmd = self.command_builder.build_ffmpeg_merge_cmd(str(video_part), str(audio_part), str(output_file))
 
             # 执行合并命令
             return_code, stdout, stderr = await self.subprocess_manager.execute_simple(
@@ -96,9 +93,7 @@ class FileProcessor:
             if output_size == 0:
                 raise FFmpegException(f"合并失败，输出文件为空: {output_file}")
 
-            log.info(
-                f"合并成功: {output_file.name} ({output_size / (1024 * 1024):.1f} MB)"
-            )
+            log.info(f"合并成功: {output_file.name} ({output_size / (1024 * 1024):.1f} MB)")
 
             # 清理临时文件
             if cleanup_parts:
@@ -142,9 +137,7 @@ class FileProcessor:
             log.info(f"开始从视频提取音频: {video_file.name} -> {output_file.name}")
 
             # 构建FFmpeg音频提取命令
-            extract_cmd = self.command_builder.build_ffmpeg_extract_audio_cmd(
-                str(video_file), str(output_file)
-            )
+            extract_cmd = self.command_builder.build_ffmpeg_extract_audio_cmd(str(video_file), str(output_file))
 
             # 执行提取命令
             return_code, stdout, stderr = await self.subprocess_manager.execute_simple(
@@ -161,9 +154,7 @@ class FileProcessor:
             if output_size == 0:
                 raise FFmpegException(f"音频提取失败，输出文件为空: {output_file}")
 
-            log.info(
-                f"音频提取成功: {output_file.name} ({output_size / (1024 * 1024):.1f} MB)"
-            )
+            log.info(f"音频提取成功: {output_file.name} ({output_size / (1024 * 1024):.1f} MB)")
 
             return True
 
@@ -203,9 +194,7 @@ class FileProcessor:
             log.info(f"开始转换音频格式: {input_file.name} -> {output_file.name}")
 
             # 构建FFmpeg转换命令
-            convert_cmd = self.command_builder.build_ffmpeg_extract_audio_cmd(
-                str(input_file), str(output_file)
-            )
+            convert_cmd = self.command_builder.build_ffmpeg_extract_audio_cmd(str(input_file), str(output_file))
 
             # 执行转换命令
             return_code, stdout, stderr = await self.subprocess_manager.execute_simple(
@@ -214,9 +203,7 @@ class FileProcessor:
             )
 
             if not output_file.exists() or output_file.stat().st_size == 0:
-                raise FFmpegException(
-                    f"音频转换失败，输出文件未生成或为空: {output_file}"
-                )
+                raise FFmpegException(f"音频转换失败，输出文件未生成或为空: {output_file}")
 
             log.info(f"音频转换成功: {output_file.name}")
 
@@ -312,9 +299,7 @@ class FileProcessor:
         except OSError as e:
             raise DownloaderException(f"无法获取文件信息 {file_path}: {e}") from e
 
-    async def verify_file_integrity(
-        self, file_path: Path, min_size_bytes: int = 1024
-    ) -> bool:
+    async def verify_file_integrity(self, file_path: Path, min_size_bytes: int = 1024) -> bool:
         """
         验证文件完整性。
 
@@ -333,9 +318,7 @@ class FileProcessor:
 
             # 检查文件大小
             if stat.st_size < min_size_bytes:
-                log.warning(
-                    f"文件太小可能不完整: {file_path.name} ({stat.st_size} bytes)"
-                )
+                log.warning(f"文件太小可能不完整: {file_path.name} ({stat.st_size} bytes)")
                 return False
 
             # 尝试读取文件头部，确保文件可读

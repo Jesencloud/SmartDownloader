@@ -7,15 +7,15 @@
 import asyncio
 import logging
 import os
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 from rich.console import Console
 from rich.progress import Progress, TaskID
 
+from .error_handler import ErrorHandler
+from .exceptions import DownloaderException, DownloadStalledException, NetworkException
 from .retry_manager import RetryManager, with_retries
 from .subprocess_progress_handler import SubprocessProgressHandler
-from .error_handler import ErrorHandler
-from .exceptions import DownloaderException, NetworkException, DownloadStalledException
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -75,9 +75,7 @@ class SubprocessManager:
 
         @with_retries()
         async def _execute():
-            return await self._run_subprocess_with_progress(
-                cmd, progress, task_id, timeout
-            )
+            return await self._run_subprocess_with_progress(cmd, progress, task_id, timeout)
 
         return await _execute()
 
@@ -159,9 +157,7 @@ class SubprocessManager:
             self._running_processes.append(process)
 
             # 使用进度处理器监控进程
-            error_output = await self.progress_handler.handle_subprocess_with_progress(
-                process, progress, task_id
-            )
+            error_output = await self.progress_handler.handle_subprocess_with_progress(process, progress, task_id)
 
             # 获取返回码和输出
             return_code = process.returncode
@@ -181,9 +177,7 @@ class SubprocessManager:
                         raise DownloadStalledException(f"下载停滞: {error_msg}")
                 else:
                     # 创建适当的异常类型
-                    exception = self.error_handler.create_appropriate_exception(
-                        error_msg, " ".join(cmd)
-                    )
+                    exception = self.error_handler.create_appropriate_exception(error_msg, " ".join(cmd))
                     raise exception
 
             return (
@@ -248,9 +242,7 @@ class SubprocessManager:
 
             # 等待进程完成
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), timeout=timeout
-                )
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
             except asyncio.TimeoutError:
                 raise DownloadStalledException("进程执行超时")
 
@@ -267,9 +259,7 @@ class SubprocessManager:
                         raise DownloadStalledException(f"执行失败: {stderr_str}")
                 else:
                     # 创建适当的异常类型
-                    exception = self.error_handler.create_appropriate_exception(
-                        stderr_str, " ".join(cmd)
-                    )
+                    exception = self.error_handler.create_appropriate_exception(stderr_str, " ".join(cmd))
                     raise exception
 
             return process.returncode, stdout_str, stderr_str

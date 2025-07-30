@@ -3,8 +3,9 @@
 测试轻量级清理功能 (Mock测试)
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 def test_cancel_downloads():
@@ -43,9 +44,7 @@ def test_cancel_downloads():
 
         # 验证POST请求会被正确调用
         base_url = "http://127.0.0.1:8000"
-        response = mock_session.post(
-            f"{base_url}/downloads/cancel", json=cancel_data, timeout=20
-        )
+        response = mock_session.post(f"{base_url}/downloads/cancel", json=cancel_data, timeout=20)
 
         assert response.status_code == 200, f"取消请求失败: {response.status_code}"
 
@@ -89,13 +88,9 @@ def test_cancel_downloads_e2e():
     session.trust_env = False
 
     # 1. 发送取消请求
-    response = session.post(
-        f"{base_url}/downloads/cancel", json=cancel_data, timeout=20
-    )
+    response = session.post(f"{base_url}/downloads/cancel", json=cancel_data, timeout=20)
 
-    assert response.status_code == 200, (
-        f"取消请求失败: {response.status_code} - {response.text}"
-    )
+    assert response.status_code == 200, f"取消请求失败: {response.status_code} - {response.text}"
 
     result = response.json()
     print("✅ 取消请求成功:")
@@ -108,9 +103,7 @@ def test_cancel_downloads_e2e():
 
     time.sleep(1)
     health_response = session.get(f"{base_url}/", timeout=10)
-    assert health_response.status_code == 200, (
-        f"服务器在清理后没有保持在线状态，返回码: {health_response.status_code}"
-    )
+    assert health_response.status_code == 200, f"服务器在清理后没有保持在线状态，返回码: {health_response.status_code}"
     print("✅ 服务器保持在线状态，测试通过！")
 
 

@@ -2,10 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from config_manager import config
-from .format_analyzer import FormatAnalyzer, DownloadStrategy
+
+from .format_analyzer import DownloadStrategy, FormatAnalyzer
 
 log = logging.getLogger(__name__)
 
@@ -50,9 +51,7 @@ class CommandBuilder:
 
         # 添加健壮性参数：片段重试
         # 无限次重试片段，每次重试之间有指数退避延迟（1到30秒）
-        cmd.extend(
-            ["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"]
-        )
+        cmd.extend(["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"])
 
         # 添加更激进的性能优化参数
         cmd.extend(
@@ -88,9 +87,7 @@ class CommandBuilder:
             cmd.extend(["--cookies", str(Path(self.cookies_file).resolve())])
 
         # 添加健壮性参数
-        cmd.extend(
-            ["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"]
-        )
+        cmd.extend(["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"])
 
         # 添加更激进的性能优化参数
         cmd.extend(
@@ -118,9 +115,7 @@ class CommandBuilder:
 
         return cmd
 
-    def build_audio_download_cmd(
-        self, url: str, output_template: str, audio_format: str = "mp3"
-    ) -> List[str]:
+    def build_audio_download_cmd(self, url: str, output_template: str, audio_format: str = "mp3") -> List[str]:
         """
         构建音频下载命令。
 
@@ -177,14 +172,10 @@ class CommandBuilder:
 
         video_format = format_id or "bestvideo[ext=mp4]/bestvideo"
 
-        cmd.extend(
-            ["-f", video_format, "--newline", "-o", str(output_template), "--", url]
-        )
+        cmd.extend(["-f", video_format, "--newline", "-o", str(output_template), "--", url])
         return cmd
 
-    def build_separate_audio_download_cmd(
-        self, output_path: str, url: str, file_prefix: str
-    ) -> List[str]:
+    def build_separate_audio_download_cmd(self, output_path: str, url: str, file_prefix: str) -> List[str]:
         """
         构建独立的音频部分下载命令。
 
@@ -200,9 +191,7 @@ class CommandBuilder:
         # 使用可预测的文件名模板
         output_template = Path(output_path) / f"{file_prefix}.audio.%(ext)s"
         audio_format = "bestaudio[ext=m4a]/bestaudio"
-        cmd.extend(
-            ["-f", audio_format, "--newline", "-o", str(output_template), "--", url]
-        )
+        cmd.extend(["-f", audio_format, "--newline", "-o", str(output_template), "--", url])
         return cmd
 
     def build_combined_download_cmd(
@@ -296,13 +285,9 @@ class CommandBuilder:
         """
         try:
             # 分析格式并获取最佳下载计划
-            download_plan = self.format_analyzer.find_best_download_plan(
-                formats, format_id
-            )
+            download_plan = self.format_analyzer.find_best_download_plan(formats, format_id)
 
-            log.info(
-                f"智能下载策略: {download_plan.strategy.value} - {download_plan.reason}"
-            )
+            log.info(f"智能下载策略: {download_plan.strategy.value} - {download_plan.reason}")
 
             # 确保下载目录存在
             output_dir = Path(output_path).resolve()
@@ -322,18 +307,14 @@ class CommandBuilder:
                 # 构建合并下载命令
                 video_format_id = download_plan.primary_format.format_id
                 audio_format_id = (
-                    download_plan.secondary_format.format_id
-                    if download_plan.secondary_format
-                    else "bestaudio"
+                    download_plan.secondary_format.format_id if download_plan.secondary_format else "bestaudio"
                 )
                 combined_format = f"{video_format_id}+{audio_format_id}"
 
                 # 输出视频音频组合信息
                 log.info(f"🎬 视频音频组合: {combined_format}")
 
-                return self._build_merge_download_cmd(
-                    url, exact_output_path, combined_format, download_plan.strategy
-                )
+                return self._build_merge_download_cmd(url, exact_output_path, combined_format, download_plan.strategy)
 
         except Exception as e:
             log.warning(f"智能格式分析失败: {e}，降级到传统方法")
@@ -429,9 +410,7 @@ class CommandBuilder:
         cmd.extend(["--flat-playlist", "--print-json", "--skip-download", url])
         return cmd
 
-    def build_ffmpeg_merge_cmd(
-        self, video_path: str, audio_path: str, output_path: str
-    ) -> List[str]:
+    def build_ffmpeg_merge_cmd(self, video_path: str, audio_path: str, output_path: str) -> List[str]:
         """构建FFmpeg合并命令"""
         return [
             "ffmpeg",
@@ -445,9 +424,7 @@ class CommandBuilder:
             str(Path(output_path).resolve()),
         ]
 
-    def build_ffmpeg_extract_audio_cmd(
-        self, video_path: str, audio_path: str
-    ) -> List[str]:
+    def build_ffmpeg_extract_audio_cmd(self, video_path: str, audio_path: str) -> List[str]:
         """构建FFmpeg音频提取命令"""
         return [
             "ffmpeg",
@@ -460,9 +437,7 @@ class CommandBuilder:
             str(Path(audio_path).resolve()),
         ]
 
-    def build_ffmpeg_convert_to_wav_cmd(
-        self, input_path: str, output_path: str
-    ) -> List[str]:
+    def build_ffmpeg_convert_to_wav_cmd(self, input_path: str, output_path: str) -> List[str]:
         """构建FFmpeg WAV转换命令"""
         return [
             "ffmpeg",
@@ -477,9 +452,7 @@ class CommandBuilder:
             str(Path(output_path).resolve()),
         ]
 
-    def build_whisper_cmd(
-        self, model_path: str, source_language: str, audio_path: str
-    ) -> List[str]:
+    def build_whisper_cmd(self, model_path: str, source_language: str, audio_path: str) -> List[str]:
         """构建Whisper转录命令"""
         return [
             "whisper-cli",

@@ -8,19 +8,18 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 import yaml
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
-    field_validator,
     ValidationError,
     ValidationInfo,
-    ConfigDict,
+    field_validator,
 )
 from rich.console import Console
-
 
 # ==================== 配置模型定义 ====================
 
@@ -43,9 +42,7 @@ class FoldersConfig(BaseConfig):
     base_download_folder: str = Field(default="downloads", description="基础下载目录")
     use_timestamp_folder: bool = Field(default=True, description="是否使用时间戳文件夹")
     timestamp_format: str = Field(default="%Y%m%d-%H%M%S", description="时间戳格式")
-    custom_download_path: Optional[str] = Field(
-        default=None, description="自定义下载路径"
-    )
+    custom_download_path: Optional[str] = Field(default=None, description="自定义下载路径")
     relative_to_script: bool = Field(default=True, description="是否相对于脚本路径")
 
     @field_validator("timestamp_format")
@@ -65,44 +62,24 @@ class DownloaderConfig(BaseConfig):
     base_delay: float = Field(default=10.0, ge=0, description="基础延迟时间(秒)")
     max_delay: float = Field(default=300.0, ge=0, description="最大延迟时间(秒)")
     backoff_factor: float = Field(default=2.0, ge=1.0, description="退避因子")
-    network_timeout: int = Field(
-        default=60, gt=0, le=600, description="网络超时时间(秒)"
-    )
+    network_timeout: int = Field(default=60, gt=0, le=600, description="网络超时时间(秒)")
 
     stall_detection_time: int = Field(default=30, gt=0, description="停滞检测时间(秒)")
     stall_check_interval: int = Field(default=5, gt=0, description="停滞检查间隔(秒)")
     stall_threshold_count: int = Field(default=6, ge=0, description="停滞阈值计数")
 
-    proxy_retry_base_delay: int = Field(
-        default=30, ge=0, description="代理重试基础延迟(秒)"
-    )
-    proxy_retry_increment: int = Field(
-        default=10, ge=0, description="代理重试递增延迟(秒)"
-    )
-    proxy_retry_max_delay: int = Field(
-        default=120, ge=0, description="代理重试最大延迟(秒)"
-    )
+    proxy_retry_base_delay: int = Field(default=30, ge=0, description="代理重试基础延迟(秒)")
+    proxy_retry_increment: int = Field(default=10, ge=0, description="代理重试递增延迟(秒)")
+    proxy_retry_max_delay: int = Field(default=120, ge=0, description="代理重试最大延迟(秒)")
 
-    circuit_breaker_failure_threshold: int = Field(
-        default=5, ge=1, le=20, description="熔断器失败阈值"
-    )
-    circuit_breaker_timeout: int = Field(
-        default=300, ge=60, le=3600, description="熔断器超时时间(秒)"
-    )
+    circuit_breaker_failure_threshold: int = Field(default=5, ge=1, le=20, description="熔断器失败阈值")
+    circuit_breaker_timeout: int = Field(default=300, ge=60, le=3600, description="熔断器超时时间(秒)")
 
     # yt-dlp 下载命令配置
-    ytdlp_video_format: str = Field(
-        default="bestvideo", description="yt-dlp视频格式选择"
-    )
-    ytdlp_audio_format: str = Field(
-        default="bestaudio", description="yt-dlp音频格式选择"
-    )
-    ytdlp_combined_format: str = Field(
-        default="bestvideo+bestaudio/best", description="yt-dlp合并格式选择"
-    )
-    ytdlp_merge_output_format: str = Field(
-        default="mp4", description="yt-dlp合并输出格式"
-    )
+    ytdlp_video_format: str = Field(default="bestvideo", description="yt-dlp视频格式选择")
+    ytdlp_audio_format: str = Field(default="bestaudio", description="yt-dlp音频格式选择")
+    ytdlp_combined_format: str = Field(default="bestvideo+bestaudio/best", description="yt-dlp合并格式选择")
+    ytdlp_merge_output_format: str = Field(default="mp4", description="yt-dlp合并输出格式")
 
     retry_patterns: List[str] = Field(
         default=[
@@ -156,9 +133,7 @@ class DownloaderConfig(BaseConfig):
 class FileProcessingConfig(BaseConfig):
     """文件处理配置"""
 
-    filename_max_length: int = Field(
-        default=50, gt=0, le=255, description="文件名最大长度"
-    )
+    filename_max_length: int = Field(default=50, gt=0, le=255, description="文件名最大长度")
     filename_truncate_suffix: str = Field(default="...", description="文件名截断后缀")
     polite_wait_time: float = Field(default=3.0, ge=0, description="礼貌等待时间(秒)")
 
@@ -176,24 +151,16 @@ class AISubtitlesConfig(BaseConfig):
 
     whisper_model: str = Field(default="base.en", description="Whisper模型名称")
     whisper_device: str = Field(default="auto", description="Whisper设备")
-    whisper_model_path: Optional[str] = Field(
-        default=None, description="Whisper模型路径"
-    )
+    whisper_model_path: Optional[str] = Field(default=None, description="Whisper模型路径")
 
     source_language: str = Field(default="auto", description="源语言")
     translate_to_chinese: bool = Field(default=True, description="是否翻译为中文")
     translator_service: str = Field(default="google", description="翻译服务")
 
-    translation_batch_size: int = Field(
-        default=50, ge=1, le=200, description="翻译批次大小"
-    )
+    translation_batch_size: int = Field(default=50, ge=1, le=200, description="翻译批次大小")
     translation_delay: float = Field(default=0.5, ge=0, description="翻译延迟(秒)")
-    translation_max_retries: int = Field(
-        default=3, ge=1, le=10, description="翻译最大重试次数"
-    )
-    translation_timeout: int = Field(
-        default=30, ge=5, le=120, description="翻译超时时间(秒)"
-    )
+    translation_max_retries: int = Field(default=3, ge=1, le=10, description="翻译最大重试次数")
+    translation_timeout: int = Field(default=30, ge=5, le=120, description="翻译超时时间(秒)")
 
     subtitle_formats: List[str] = Field(default=["srt", "vtt"], description="字幕格式")
 
@@ -220,9 +187,7 @@ class LoggingConfig(BaseConfig):
 class UIConfig(BaseConfig):
     """UI配置"""
 
-    progress_bar_width: Optional[int] = Field(
-        default=None, ge=10, le=200, description="进度条宽度"
-    )
+    progress_bar_width: Optional[int] = Field(default=None, ge=10, le=200, description="进度条宽度")
     show_transfer_speed: bool = Field(default=True, description="显示传输速度")
     show_time_remaining: bool = Field(default=True, description="显示剩余时间")
     show_detailed_errors: bool = Field(default=True, description="显示详细错误")
@@ -234,21 +199,15 @@ class CookiesConfig(BaseConfig):
 
     mode: str = Field(default="auto", description="Cookies获取方式")
     browser_type: str = Field(default="auto", description="浏览器类型")
-    manual_cookies_file: str = Field(
-        default="cookies.txt", description="手动cookies文件路径"
-    )
+    manual_cookies_file: str = Field(default="cookies.txt", description="手动cookies文件路径")
     auto_extract_enabled: bool = Field(default=True, description="是否启用自动提取")
     force_refresh: bool = Field(default=False, description="是否强制刷新cookies")
 
     # 缓存设置
     cache_enabled: bool = Field(default=True, description="是否启用cookies缓存")
     cache_file: str = Field(default="cookies.cache.txt", description="缓存文件路径")
-    cache_duration_hours: int = Field(
-        default=24, ge=1, le=168, description="缓存有效期（小时）"
-    )
-    cache_check_interval: int = Field(
-        default=1, ge=1, le=24, description="缓存检查间隔（小时）"
-    )
+    cache_duration_hours: int = Field(default=24, ge=1, le=168, description="缓存有效期（小时）")
+    cache_check_interval: int = Field(default=1, ge=1, le=24, description="缓存检查间隔（小时）")
 
     @field_validator("mode")
     def validate_mode(cls, v: str) -> str:
@@ -271,19 +230,11 @@ class AdvancedConfig(BaseConfig):
     ytdlp_extra_args: List[str] = Field(default=[], description="yt-dlp额外参数")
 
     connectivity_test_host: str = Field(default="8.8.8.8", description="连接测试主机")
-    connectivity_test_port: int = Field(
-        default=53, gt=0, le=65535, description="连接测试端口"
-    )
-    connectivity_timeout: int = Field(
-        default=5, gt=0, le=30, description="连接测试超时(秒)"
-    )
+    connectivity_test_port: int = Field(default=53, gt=0, le=65535, description="连接测试端口")
+    connectivity_timeout: int = Field(default=5, gt=0, le=30, description="连接测试超时(秒)")
 
-    proxy_test_url: str = Field(
-        default="http://httpbin.org/ip", description="代理测试URL"
-    )
-    proxy_test_timeout: int = Field(
-        default=10, gt=0, le=60, description="代理测试超时(秒)"
-    )
+    proxy_test_url: str = Field(default="http://httpbin.org/ip", description="代理测试URL")
+    proxy_test_timeout: int = Field(default=10, gt=0, le=60, description="代理测试超时(秒)")
 
 
 class SecurityConfig(BaseConfig):
@@ -298,12 +249,8 @@ class SecurityConfig(BaseConfig):
 class CeleryConfig(BaseConfig):
     """Celery配置"""
 
-    broker_url: str = Field(
-        default="redis://localhost:6379/0", description="Celery消息代理URL"
-    )
-    result_backend: str = Field(
-        default="redis://localhost:6379/0", description="Celery结果后端URL"
-    )
+    broker_url: str = Field(default="redis://localhost:6379/0", description="Celery消息代理URL")
+    result_backend: str = Field(default="redis://localhost:6379/0", description="Celery结果后端URL")
 
 
 class AppConfig(BaseConfig):
@@ -369,9 +316,7 @@ class ConfigManager:
                 raw_config = yaml.safe_load(f) or {}
 
             app_config = AppConfig.model_validate(raw_config)
-            console.print(
-                f"✅ 配置文件加载并验证成功: {self.config_file}", style="bold green"
-            )
+            console.print(f"✅ 配置文件加载并验证成功: {self.config_file}", style="bold green")
             return app_config
 
         except yaml.YAMLError as e:
@@ -457,9 +402,7 @@ class ConfigManager:
             fallback_folder = Path.cwd() / datetime.now().strftime("%Y%m%d-%H%M%S")
             try:
                 fallback_folder.mkdir(parents=True, exist_ok=True)
-                console.print(
-                    f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow"
-                )
+                console.print(f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow")
                 return fallback_folder
             except Exception as fallback_error:
                 log.critical(f"致命错误：无法创建任何文件夹: {fallback_error}")
@@ -470,9 +413,7 @@ class ConfigManager:
             fallback_folder = Path.cwd() / datetime.now().strftime("%Y%m%d-%H%M%S")
             try:
                 fallback_folder.mkdir(parents=True, exist_ok=True)
-                console.print(
-                    f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow"
-                )
+                console.print(f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow")
                 return fallback_folder
             except Exception as fallback_error:
                 log.critical(f"致命错误：无法创建任何文件夹: {fallback_error}")

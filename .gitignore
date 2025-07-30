@@ -10,7 +10,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
+.pylintrc
+.ruff_cache
 # Python virtual environment
 venv/
 .venv/

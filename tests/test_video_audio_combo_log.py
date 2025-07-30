@@ -3,15 +3,15 @@
 测试视频音频组合日志输出
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
+
+from core.command_builder import CommandBuilder
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
-
-from core.command_builder import CommandBuilder
 
 # 设置详细日志
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(name)s: %(message)s")

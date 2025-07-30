@@ -6,6 +6,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
+
 from web.main import app, validate_format_id
 
 
@@ -29,9 +30,7 @@ class TestFormatIdValidation:
 
         for format_id in valid_ids:
             is_valid, error = validate_format_id(format_id)
-            assert is_valid, (
-                f"Format ID '{format_id}' should be valid, but got error: {error}"
-            )
+            assert is_valid, f"Format ID '{format_id}' should be valid, but got error: {error}"
 
     def test_invalid_format_ids(self):
         """测试无效的格式ID"""
@@ -61,9 +60,7 @@ class TestFormatIdValidation:
 
         for format_id, description in invalid_cases:
             is_valid, error = validate_format_id(format_id)
-            assert not is_valid, (
-                f"Format ID '{format_id}' ({description}) should be invalid but was accepted"
-            )
+            assert not is_valid, f"Format ID '{format_id}' ({description}) should be invalid but was accepted"
             assert error, f"Should have error message for '{format_id}'"
 
     def test_edge_cases(self):
@@ -193,13 +190,8 @@ class TestSecurityValidation:
 
         for malicious_id in malicious_format_ids:
             is_valid, error = validate_format_id(malicious_id)
-            assert not is_valid, (
-                f"Malicious format ID should be rejected: {malicious_id}"
-            )
-            assert (
-                "dangerous characters" in error.lower()
-                or "invalid characters" in error.lower()
-            )
+            assert not is_valid, f"Malicious format ID should be rejected: {malicious_id}"
+            assert "dangerous characters" in error.lower() or "invalid characters" in error.lower()
 
     def test_path_traversal_prevention(self):
         """测试路径遍历防护"""
@@ -215,9 +207,7 @@ class TestSecurityValidation:
 
         for path_attempt in path_traversal_attempts:
             is_valid, error = validate_format_id(path_attempt)
-            assert not is_valid, (
-                f"Path traversal attempt should be rejected: {path_attempt}"
-            )
+            assert not is_valid, f"Path traversal attempt should be rejected: {path_attempt}"
 
     def test_xss_prevention(self):
         """测试XSS防护"""

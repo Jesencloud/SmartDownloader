@@ -3,8 +3,9 @@
 测试解析速度优化效果
 """
 
-import pytest
 import time
+
+import pytest
 import requests
 
 BASE_URL = "http://localhost:8000"
@@ -21,9 +22,7 @@ def test_parsing_speed():
     print("\n📺 测试视频信息解析...")
     start_time = time.time()
 
-    video_response = requests.post(
-        f"{BASE_URL}/video-info", json={"url": test_url, "download_type": "video"}
-    )
+    video_response = requests.post(f"{BASE_URL}/video-info", json={"url": test_url, "download_type": "video"})
 
     video_time = time.time() - start_time
     print(f"   视频解析时间: {video_time:.2f}秒")
@@ -38,9 +37,7 @@ def test_parsing_speed():
     print("\n🎵 测试音频信息解析...")
     start_time = time.time()
 
-    audio_response = requests.post(
-        f"{BASE_URL}/video-info", json={"url": test_url, "download_type": "audio"}
-    )
+    audio_response = requests.post(f"{BASE_URL}/video-info", json={"url": test_url, "download_type": "audio"})
 
     audio_time = time.time() - start_time
     print(f"   音频解析时间: {audio_time:.2f}秒")

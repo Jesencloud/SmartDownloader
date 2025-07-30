@@ -12,9 +12,9 @@
     python start_celery_beat.py &
 """
 
-import sys
-import os
 import logging
+import os
+import sys
 from pathlib import Path
 
 # 添加项目根目录到 Python 路径

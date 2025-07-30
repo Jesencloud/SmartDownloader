@@ -3,12 +3,13 @@
 Celery 优化效果测试
 """
 
-import requests
-import time
 import concurrent.futures
 import statistics
+import time
 from datetime import datetime
+
 import pytest
+import requests
 
 
 @pytest.mark.e2e
@@ -37,9 +38,7 @@ class CeleryPerformanceTest:
         }
 
         try:
-            response = requests.post(
-                f"{self.base_url}/downloads", json=download_data, timeout=10
-            )
+            response = requests.post(f"{self.base_url}/downloads", json=download_data, timeout=10)
 
             if response.status_code == 202:
                 result = response.json()
@@ -93,9 +92,7 @@ class CeleryPerformanceTest:
             }
 
             try:
-                response = requests.post(
-                    f"{self.base_url}/downloads", json=download_data, timeout=10
-                )
+                response = requests.post(f"{self.base_url}/downloads", json=download_data, timeout=10)
 
                 if response.status_code == 202:
                     result = response.json()
@@ -111,10 +108,7 @@ class CeleryPerformanceTest:
 
         # 并发启动任务
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_tasks) as executor:
-            future_to_index = {
-                executor.submit(start_download, url, i): i
-                for i, url in enumerate(test_urls)
-            }
+            future_to_index = {executor.submit(start_download, url, i): i for i, url in enumerate(test_urls)}
 
             tasks = []
             for future in concurrent.futures.as_completed(future_to_index):
@@ -150,9 +144,7 @@ class CeleryPerformanceTest:
         test_result = {
             "test_type": "concurrent_downloads",
             "num_tasks": num_tasks,
-            "completed_tasks": len(
-                [t for t in task_results if t["status"] == "SUCCESS"]
-            ),
+            "completed_tasks": len([t for t in task_results if t["status"] == "SUCCESS"]),
             "total_duration": total_duration,
             "avg_task_duration": statistics.mean(durations) if durations else 0,
             "min_task_duration": min(durations) if durations else 0,
@@ -209,9 +201,7 @@ class CeleryPerformanceTest:
             start_time = time.time()
 
             # 启动下载
-            response = requests.post(
-                f"{self.base_url}/downloads", json=download_data, timeout=10
-            )
+            response = requests.post(f"{self.base_url}/downloads", json=download_data, timeout=10)
 
             if response.status_code == 202:
                 result = response.json()
@@ -242,9 +232,7 @@ class CeleryPerformanceTest:
 
                 if cancel_response.status_code == 200:
                     cancel_result = cancel_response.json()
-                    test_result["cleanup_result"] = cancel_result.get(
-                        "cleanup_result", {}
-                    )
+                    test_result["cleanup_result"] = cancel_result.get("cleanup_result", {})
 
                 self.results.append(test_result)
 
@@ -282,9 +270,7 @@ class CeleryPerformanceTest:
             elif result["test_type"] == "concurrent_downloads":
                 print(f"任务总数: {result['num_tasks']}")
                 print(f"完成任务: {result['completed_tasks']}")
-                print(
-                    f"成功率: {result['completed_tasks'] / result['num_tasks'] * 100:.1f}%"
-                )
+                print(f"成功率: {result['completed_tasks'] / result['num_tasks'] * 100:.1f}%")
                 print(f"总执行时间: {result['total_duration']:.2f} 秒")
                 print(f"平均任务时间: {result['avg_task_duration']:.2f} 秒")
                 print(f"最快任务: {result['min_task_duration']:.2f} 秒")

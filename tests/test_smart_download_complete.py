@@ -5,14 +5,14 @@
 本文件包含对 FormatAnalyzer 的单元测试，以及对代码库的集成检查。
 """
 
+import logging
+from pathlib import Path
+from typing import Any, Dict, List
+
 import pytest
 from fastapi.testclient import TestClient
 
-import logging
-from pathlib import Path
-from typing import Dict, Any, List
-
-from core.format_analyzer import FormatAnalyzer, DownloadStrategy, StreamType
+from core.format_analyzer import DownloadStrategy, FormatAnalyzer, StreamType
 from web.main import app
 
 # 设置日志
@@ -215,9 +215,7 @@ def test_stream_type_detection():
         if detected_type == expected_type:
             print(f"✅ {fmt_id}: 正确识别为 {detected_type.value}")
         else:
-            print(
-                f"❌ {fmt_id}: 错误! 期望 {expected_type.value}, 实际为 {detected_type.value}"
-            )
+            print(f"❌ {fmt_id}: 错误! 期望 {expected_type.value}, 实际为 {detected_type.value}")
             all_passed = False
 
     assert all_passed
@@ -332,9 +330,7 @@ def test_frontend_code_integration():
 
     # 3. 确认 style.css 不应存在，因为样式是内联的
     style_css = Path("static/css/style.css")
-    print(
-        f"  {'✅' if not style_css.exists() else '❌'} static/css/style.css 文件不存在 (正确，样式是内联的)"
-    )
+    print(f"  {'✅' if not style_css.exists() else '❌'} static/css/style.css 文件不存在 (正确，样式是内联的)")
 
     # 4. 检查多语言文件是否存在
     locales_dir = Path("static/locales")
@@ -342,9 +338,7 @@ def test_frontend_code_integration():
     zh_json = locales_dir / "zh-CN.json"
     results.append(en_json.exists())
     results.append(zh_json.exists())
-    print(
-        f"  {'✅' if en_json.exists() and zh_json.exists() else '❌'} 多语言文件 (en.json, zh-CN.json) 存在"
-    )
+    print(f"  {'✅' if en_json.exists() and zh_json.exists() else '❌'} 多语言文件 (en.json, zh-CN.json) 存在")
 
     assert all(results)
 
@@ -399,11 +393,7 @@ def test_find_best_plan_chooses_merge_when_no_complete():
     # Arrange
     analyzer = FormatAnalyzer()
     # 从模拟数据中移除所有完整流
-    formats_without_complete = [
-        f
-        for f in simulate_video_formats()
-        if f["acodec"] == "none" or f["vcodec"] == "none"
-    ]
+    formats_without_complete = [f for f in simulate_video_formats() if f["acodec"] == "none" or f["vcodec"] == "none"]
 
     # Act
     plan = analyzer.find_best_download_plan(formats_without_complete)

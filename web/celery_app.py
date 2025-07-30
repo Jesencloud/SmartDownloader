@@ -1,7 +1,11 @@
 # web/celery_app.py
-from celery import Celery
-import os
 import logging
+import os
+
+from celery import Celery
+from celery.signals import worker_process_init, worker_ready, worker_shutdown
+
+from config_manager import config_manager
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -15,17 +19,13 @@ backend_url = os.environ.get("CELERY_RESULT_BACKEND_URL", "redis://localhost:637
 is_ci_environment = os.environ.get("GITHUB_ACTIONS") == "true"
 
 # 检测是否禁用Redis重连（用于开发调试）
-disable_redis_retry = (
-    os.environ.get("CELERY_DISABLE_REDIS_RETRY", "false").lower() == "true"
-)
+disable_redis_retry = os.environ.get("CELERY_DISABLE_REDIS_RETRY", "false").lower() == "true"
 
 # 第一个参数是当前模块的名称，这是Celery自动发现任务所必需的。
 # `broker` 指向消息代理（我们使用Redis）。
 # `backend` 指向结果存储（我们也使用Redis）。
 # `include` 是一个模块列表，当worker启动时会自动导入它们，以注册任务。
-celery_app = Celery(
-    "smartdownloader", broker=broker_url, backend=backend_url, include=["web.tasks"]
-)
+celery_app = Celery("smartdownloader", broker=broker_url, backend=backend_url, include=["web.tasks"])
 
 # 为CI环境使用简化配置
 if is_ci_environment:
@@ -154,9 +154,7 @@ def check_redis_connection():
 
         # 解析Redis URL
         if broker_url.startswith("redis://"):
-            redis_client = redis.from_url(
-                broker_url, socket_connect_timeout=5, socket_timeout=5
-            )
+            redis_client = redis.from_url(broker_url, socket_connect_timeout=5, socket_timeout=5)
             redis_client.ping()
             return True
     except Exception as e:
@@ -165,8 +163,6 @@ def check_redis_connection():
 
 
 # === Worker信号处理 ===
-from celery.signals import worker_ready, worker_shutdown, worker_process_init
-from config_manager import config_manager
 
 
 @worker_ready.connect
