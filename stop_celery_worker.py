@@ -40,9 +40,10 @@ def stop_celery_workers():
         result = subprocess.run(["pkill", "-f", "celery worker"], capture_output=True, text=True, check=False)
         if result.returncode == 0:
             log.info("✅ 使用pkill命令停止了Celery worker")
-            stopped_count += 1
+            # 如果pkill成功，我们假设它已经完成了任务，可以直接返回
+            return
     except FileNotFoundError:
-        log.warning("`pkill` 命令未找到，跳过此方法。")
+        log.warning("`pkill` 命令未找到，将使用psutil方法。")
     except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
         # 捕获更具体的子进程错误
         log.warning("pkill命令执行失败: %s", e)

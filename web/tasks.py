@@ -3,13 +3,12 @@ import asyncio
 import logging
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psutil
 import redis
 from celery import Task
-from celery.exceptions import Retry
 from celery.signals import task_failure, task_postrun, task_prerun, task_revoked
 
 from config_manager import config_manager
@@ -26,23 +25,12 @@ if project_root not in sys.path:
 # Set up logging
 log = logging.getLogger(__name__)
 
-
-# === Redis连接错误处理装饰器 ===
-def handle_redis_errors(func):
-    """处理Redis连接错误的装饰器"""
-
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except (ConnectionError, TimeoutError) as e:
-            log.error(f"Redis连接错误: {e}")
-            # 可以选择重试或返回默认值
-            raise Retry(f"Redis连接失败，稍后重试: {e}", countdown=10, max_retries=3)
-        except Exception as e:
-            log.error(f"任务执行出错: {e}")
-            raise
-
-    return wrapper
+# 创建一个模块级别的 Redis 客户端，由所有任务共享
+try:
+    redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
+except Exception as e:
+    log.error(f"无法在模块加载时初始化Redis客户端: {e}")
+    redis_client = None
 
 
 class BaseDownloadTask(Task):
@@ -219,7 +207,6 @@ def task_revoked_handler(
     acks_late=True,
     reject_on_worker_lost=True,
 )
-@handle_redis_errors
 def download_video_task(
     self,
     video_url: str,
@@ -229,21 +216,26 @@ def download_video_task(
     title: str = "",
     custom_path: str = None,
 ):
-    # 在任务内部初始化 Redis 客户端，确保 config 已加载
-    redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
-
-    self.start_time = time.time()
     task_id = self.request.id
-
-    # 更新任务状态
     try:
-        self.update_state(state="PROGRESS", meta={"status": "正在下载中", "progress": 0})
-    except Exception as e:
-        log.error(f"Failed to update initial PROGRESS state: {e}")
+        if not redis_client:
+            raise ConnectionError("Redis client not initialized")
 
-    async def _async_download():
-        try:
-            download_folder = Path(custom_path) if custom_path else Path(config_manager.config.downloader.save_path)
+        self.start_time = time.time()
+
+        # 更新任务状态
+        self.update_state(state="PROGRESS", meta={"status": "正在下载中", "progress": 0})
+
+        async def _async_download():
+            root_download_folder = Path(config_manager.config.downloader.save_path).resolve()
+            if custom_path:
+                # 将 custom_path 与根目录结合，并解析为绝对路径
+                download_folder = (root_download_folder / custom_path).resolve()
+                # 关键安全检查：确保最终路径仍在根下载目录内
+                if root_download_folder not in download_folder.parents and download_folder != root_download_folder:
+                    raise ValueError("非法的自定义路径")
+            else:
+                download_folder = root_download_folder
 
             # 验证下载路径
             if not download_folder.exists():
@@ -326,7 +318,7 @@ def download_video_task(
                 "file_path": str(output_file.resolve()),
                 "filename": output_file.name,
                 "media_type": "video/mp4" if download_type == "video" else "audio/mpeg",  # 可以做得更精确
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
             }
 
             # 使用 pipeline 保证原子性
@@ -356,35 +348,24 @@ def download_video_task(
 
             return final_result
 
-        except Exception as e:
-            # 异常由 downloader 抛出，此处直接重新抛出，由外层统一处理
-            log.error(f"Async download process failed: {str(e)}", exc_info=True)
-            raise
-
-    try:
         # 检查是否有足够的系统资源
         memory = psutil.virtual_memory()
         if memory.percent > 90:  # 内存使用超过90%
             log.warning(f"High memory usage: {memory.percent}%")
             # 可以选择延迟任务或减少并发
 
-        # log.info(f"Starting async download for task {task_id}")
         # 运行异步下载
         result = asyncio.run(_async_download())
-        # log.info(f"Async download completed for task {task_id}: {result}")
         return result
+
+    except (ConnectionError, TimeoutError) as e:
+        log.error(f"Redis连接错误: {e}")
+        raise self.retry(exc=e, countdown=10, max_retries=3)
 
     except Exception as e:
         # 记录详细错误信息
         log.error(f"Download task {task_id} failed: {str(e)}", exc_info=True)
-
-        # 检查是否需要重试
-        if isinstance(e, (ConnectionError, TimeoutError)):
-            log.info(f"Retrying task {task_id} due to network error")
-            raise self.retry(countdown=60, max_retries=3, exc=e)
-
-        # 确保异常信息格式正确，避免 Celery 解析错误
-        # 不要创建新的异常类型，而是使用标准的 Exception
+        # 确保异常信息格式正确
         error_message = f"Task failed: {str(e)}"
         raise Exception(error_message)
 
@@ -403,8 +384,9 @@ def cleanup_expired_files(self):
     """
     log.info("开始执行文件清理任务...")
 
-    # 初始化 Redis 客户端
-    redis_client = redis.Redis.from_url(config_manager.config.celery.broker_url, decode_responses=True)
+    if not redis_client:
+        log.error("Redis client not initialized, skipping cleanup.")
+        return
 
     download_folder = Path(config_manager.config.downloader.save_path)
 
@@ -515,4 +497,30 @@ def cleanup_task(self):
 
     except Exception as e:
         log.error(f"Cleanup task failed: {e}")
+        raise e
+
+
+# 监控任务
+@celery_app.task(bind=True, name="monitor_task", soft_time_limit=60, time_limit=120)
+def monitor_task(self):
+    """定期监控任务"""
+    log.info("Starting monitor task...")
+
+    try:
+        # 监控逻辑
+        # 例如，检查worker状态、队列长度等
+        i = celery_app.control.inspect()
+        active_tasks = i.active()
+        queued_tasks = i.scheduled()
+
+        result = {
+            "active_tasks": active_tasks,
+            "queued_tasks": queued_tasks,
+            "timestamp": time.time(),
+        }
+
+        return result
+
+    except Exception as e:
+        log.error(f"Monitor task failed: {e}")
         raise e

@@ -47,8 +47,11 @@ echo ""
 echo "2️⃣ Running All Tests (Unit & E2E) and Generating Report..."
 # 运行测试，同时生成覆盖率报告 (htmlcov/) 和独立的测试结果报告 (test_report.html)
 docker-compose run --rm test-runner pytest -v \
-  --cov=core --cov=web --cov-report=html \
-  --html=test_report.html --self-contained-html
+  --cov --cov-report=html \
+  --html=htmlcov/test_report.html --self-contained-html
 
 echo ""
+echo "📊 测试报告已生成在 'htmlcov/' 目录下。"
+echo "   - 覆盖率报告: htmlcov/index.html"
+echo "   - 测试结果:   htmlcov/test_report.html"
 echo "🎉 All local tests passed successfully!"

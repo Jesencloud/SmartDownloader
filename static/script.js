@@ -214,22 +214,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert(errorMessage);
             return;
         }
-        
+
         const validatedUrl = urlValidation.cleanUrl;
+        saveUrlToHistory(validatedUrl); // 在URL验证后保存到历史记录
         // --- 综合URL验证结束 ---
-
-        // --- NEW: Developer Test Mode ---
-        if (validatedUrl === 'test-video' || validatedUrl === 'test-audio') {
-            showLoadingState(downloadType);
-
-            // Simulate a short delay to mimic network latency
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            const mockData = validatedUrl === 'test-video' ? getMockVideoData() : getMockAudioData();
-            currentVideoData = mockData; // Store it for language switching
-            renderResults(mockData);
-            return; // Exit the function to prevent the real fetch
-        }
         // --- END: Developer Test Mode ---
         if (!validatedUrl) {
             alert(t.urlPlaceholder);
@@ -2071,25 +2059,17 @@ function pollTaskStatus(taskId, optionElement) {
         showUrlHistory();
     });
 
-    urlInput.addEventListener('blur', (e) => {
-        // Delay hiding to allow clicking on history items
-        setTimeout(() => {
-            const historyContainer = document.getElementById('urlHistory');
-            if (historyContainer && !historyContainer.contains(e.relatedTarget)) {
-                hideUrlHistory();
-            }
-        }, 150);
-    });
+    // --- NEW: Robust "Click Outside" to close history ---
+    // This is a more reliable way to handle closing the dropdown.
+    document.addEventListener('click', (e) => {
+        const historyContainer = document.getElementById('urlHistory');
+        const urlInput = document.getElementById('videoUrl');
 
-    // Save URL to history when analysis starts
-    const originalStartVideoAnalysis = startVideoAnalysis;
-    startVideoAnalysis = function(downloadType) {
-        const url = urlInput.value.trim();
-        if (url && url !== 'test-video' && url !== 'test-audio') {
-            saveUrlToHistory(url);
+        // If the click is outside of the input and the history dropdown, hide it.
+        if (historyContainer && urlInput && !historyContainer.contains(e.target) && e.target !== urlInput) {
+            hideUrlHistory();
         }
-        return originalStartVideoAnalysis(downloadType);
-    };
+    });
 
     // --- Clipboard and Input Handling ---
     function extractUrl(text) {
@@ -2132,54 +2112,6 @@ function pollTaskStatus(taskId, optionElement) {
         }
     });
 });
-
-// --- NEW: Mock Data for Developer Testing ---
-function getMockVideoData() {
-    return {
-        title: "【本地测试视频】一个非常精彩的演示视频",
-        original_url: "local-test-video",
-        download_type: "video",
-        formats: [
-            {
-                format_id: "test-vid-1080p",
-                resolution: "1920x1080",
-                vcodec: "avc1.640028",
-                acodec: "mp4a.40.2",
-                ext: "mp4",
-                fps: 60,
-            },
-            {
-                format_id: "test-vid-720p",
-                resolution: "1280x720",
-                vcodec: "avc1.4d401f",
-                acodec: "mp4a.40.2",
-                ext: "mp4",
-                fps: 30,
-            },
-            {
-                format_id: "test-vid-360p",
-                resolution: "640x360",
-                vcodec: "avc1.42c01e",
-                acodec: "mp4a.40.2",
-                ext: "mp4",
-                fps: 30,
-            }
-        ]
-    };
-}
-
-function getMockAudioData() {
-    return {
-        title: "【本地测试音频】轻松愉快的背景音乐",
-        original_url: "local-test-audio",
-        download_type: "audio",
-       formats: [
-           { format_id: "test-aud-high", quality: "高品质", ext: "m4a", abr: 128, filesize: 5 * 1024 * 1024 }, // 5MB
-           { format_id: "test-aud-medium", quality: "中等品质", ext: "m4a", abr: 96, filesize: 3.5 * 1024 * 1024 }, // 3.5MB
-           { format_id: "test-aud-low", quality: "普通品质", ext: "m4a", abr: 64, filesize: 2 * 1024 * 1024 }, // 2MB
-       ]
-   };
-}
 
 
 // --- Helper functions for dark mode and language ---

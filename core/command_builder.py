@@ -245,8 +245,6 @@ class CommandBuilder:
                 "--merge-output-format",
                 "mp4",  # 确保合并后的文件是mp4格式
                 "--newline",
-                # 移除强制使用ffmpeg作为下载器，让yt-dlp使用其更优的内置下载器（特别是对HLS）
-                # 移除 --no-overwrites, 因为基础命令中已有 --force-overwrites，可以防止因旧文件残留导致的失败
                 "--no-warnings",  # 减少警告信息
                 "--no-playlist",  # 不下载播放列表
                 "--no-keep-fragments",  # 删除下载的片段
