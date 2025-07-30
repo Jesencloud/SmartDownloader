@@ -142,3 +142,82 @@ def sanitize(name: str, max_len: Optional[int] = None) -> str:
         suffix = "..."
     name = re.sub(r'[\\/*?"<>|]', "_", name).strip()
     return f"{name[:max_len]}{suffix}" if len(name) > max_len else name
+
+
+def create_simplified_identifier(url: str, title: str = "") -> str:
+    """
+    从URL和标题创建简化的标识符，用于元数据中的来源字段
+
+    Args:
+        url: 原始视频URL
+        title: 视频标题（可选）
+
+    Returns:
+        str: 简化的标识符，格式如"x-1234567890"
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+
+        # X.com / Twitter
+        if "x.com" in domain or "twitter.com" in domain:
+            # 从路径中提取推文ID: /user/status/1234567890
+            path_match = re.search(r"/status/(\d+)", parsed.path)
+            if path_match:
+                tweet_id = path_match.group(1)
+                # 截取最后10位数字以保持简洁
+                short_id = tweet_id[-10:] if len(tweet_id) > 10 else tweet_id
+                return f"x-{short_id}"
+
+        # YouTube
+        elif "youtube.com" in domain or "youtu.be" in domain:
+            if "youtu.be" in domain:
+                # https://youtu.be/VIDEO_ID
+                video_id = parsed.path.lstrip("/")
+            else:
+                # https://www.youtube.com/watch?v=VIDEO_ID
+                query_params = parse_qs(parsed.query)
+                video_id = query_params.get("v", [""])[0]
+
+            if video_id:
+                return f"yt-{video_id[:8]}"  # YouTube ID前8位
+
+        # Bilibili
+        elif "bilibili.com" in domain:
+            # https://www.bilibili.com/video/BVXXXXXXXXXX
+            bv_match = re.search(r"/video/(BV\w+)", parsed.path)
+            if bv_match:
+                bv_id = bv_match.group(1)
+                return f"bili-{bv_id[2:10]}"  # BV号去掉BV前缀，取前8位
+
+        # 微博
+        elif "weibo.com" in domain:
+            # 从路径或查询参数中提取ID
+            id_match = re.search(r"/(\d+)", parsed.path)
+            if id_match:
+                weibo_id = id_match.group(1)
+                short_id = weibo_id[-8:] if len(weibo_id) > 8 else weibo_id
+                return f"wb-{short_id}"
+
+        # 抖音/TikTok
+        elif "douyin.com" in domain or "tiktok.com" in domain:
+            # 从路径中提取视频ID
+            id_match = re.search(r"/video/(\d+)", parsed.path)
+            if id_match:
+                video_id = id_match.group(1)
+                short_id = video_id[-8:] if len(video_id) > 8 else video_id
+                platform = "dy" if "douyin.com" in domain else "tt"
+                return f"{platform}-{short_id}"
+
+        # 通用回退：使用域名+路径哈希
+        domain_short = domain.replace("www.", "").split(".")[0][:4]
+        path_hash = str(abs(hash(parsed.path + parsed.query)))[-6:]
+        return f"{domain_short}-{path_hash}"
+
+    except Exception as e:
+        log.warning(f"URL标识符生成失败: {e}")
+        # 最终回退：使用URL哈希
+        url_hash = str(abs(hash(url)))[-8:]
+        return f"video-{url_hash}"

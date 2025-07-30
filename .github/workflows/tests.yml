@@ -74,7 +74,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        # Install runtime dependencies from requirements.txt and test dependencies from pyproject.toml
+        pip install -r requirements.txt ".[test]"
 
     - name: Run unit and integration tests
       run: |
@@ -140,11 +141,17 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        # Install runtime dependencies from requirements.txt and test dependencies from pyproject.toml
+        pip install -r requirements.txt ".[test]"
 
     - name: Install Redis client
       run: |
         sudo apt-get update && sudo apt-get install -y redis-tools
+
+    - name: Install Playwright Browsers
+      run: |
+        # 安装 Playwright 所需的浏览器驱动
+        playwright install
 
     - name: Start Celery worker in background
       run: |

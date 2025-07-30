@@ -147,6 +147,65 @@ class CommandBuilder:
         cmd.extend(["--newline", "-o", output_template, url])
         return cmd
 
+    def build_streaming_download_cmd(self, output_path: str, url: str, format_spec: str = "best") -> List[str]:
+        """构建浏览器直流下载命令，包含简化的来源元数据"""
+        cmd = [
+            "yt-dlp",
+            "--ignore-config",
+            "--no-warnings",
+            "--no-color",
+            "--force-overwrites",
+            "--force-ipv4",
+        ]
+
+        if self.proxy:
+            cmd.extend(["--proxy", self.proxy])
+
+        if self.cookies_file and Path(self.cookies_file).exists():
+            cmd.extend(["--cookies", str(Path(self.cookies_file).resolve())])
+
+        # 添加健壮性参数
+        cmd.extend(["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"])
+
+        # 添加更激进的性能优化参数
+        cmd.extend(
+            [
+                "--no-check-certificate",  # 跳过SSL证书检查
+                "--prefer-insecure",  # 优先使用HTTP而非HTTPS
+                "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
+                "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
+                "--no-part",  # 不创建部分文件
+                "--no-mtime",  # 不设置修改时间
+                "--concurrent-fragments",
+                "4",  # 并发片段下载
+            ]
+        )
+
+        # 为浏览器直流下载添加简化来源元数据
+        from utils import create_simplified_identifier
+
+        simplified_source = create_simplified_identifier(url)
+
+        cmd.extend(
+            [
+                "--add-metadata",  # 添加元数据到文件
+                "--embed-metadata",  # 嵌入元数据到容器
+                "--xattrs",  # 写入 macOS/Linux 扩展属性
+                # 设置关键元数据字段
+                "--replace-in-metadata",
+                "webpage_url",
+                "^.*$",
+                simplified_source,  # yt-dlp 网页URL字段
+                "--replace-in-metadata",
+                "comment",
+                "^.*$",
+                f"Source: {simplified_source}",  # FFmpeg comment 字段
+            ]
+        )
+
+        cmd.extend(["-f", format_spec, "--newline", "-o", output_path, url])
+        return cmd
+
     def build_separate_video_download_cmd(
         self,
         output_path: str,

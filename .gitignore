@@ -64,6 +64,7 @@ cookies_cache.txt.backup
 USAGE.md
 REFACTOR_REPORT.md
 daily_record.md
+run_tests.sh
 downloader_backup.py
 download.py
 README.TXT

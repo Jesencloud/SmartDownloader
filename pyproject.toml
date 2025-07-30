@@ -1,5 +1,19 @@
 # pyproject.toml
 
+[project]
+name = "smartdownloader"
+version = "1.0.0"
+description = "An intelligent tool for downloading videos and audio with AI subtitle generation."
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "pytest-html>=4.0.0",
+    "pytest-playwright>=0.4.0",
+]
+
 [tool.ruff]
 # 设置每行最大长度，与你的 .pylintrc 保持一致
 line-length = 120
