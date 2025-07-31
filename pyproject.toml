@@ -14,6 +14,10 @@ test = [
     "pytest-playwright>=0.4.0",
 ]
 
+[tool.setuptools]
+packages = ["core", "web"]
+py_modules = ["main", "downloader", "subtitles", "config_manager", "utils"]
+
 [tool.ruff]
 # 设置每行最大长度，与你的 .pylintrc 保持一致
 line-length = 120

@@ -14,7 +14,14 @@
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'dark') {
                 document.documentElement.classList.add('dark-mode');
-                document.body.classList.add('dark-mode');
+                // 等待body元素可用后再添加dark-mode类
+                if (document.body) {
+                    document.body.classList.add('dark-mode');
+                } else {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        document.body.classList.add('dark-mode');
+                    });
+                }
             }
             
             // 立即应用保存的语言
@@ -24,20 +31,6 @@
                 // 只更新页面标题，避免内联翻译
                 document.title = 'Smart Downloader';
             }
-            
-            // 预加载翻译文件以避免后续闪烁
-            const preloadLinks = [
-                '/static/locales/zh-CN.json',
-                '/static/locales/en.json'
-            ];
-            
-            preloadLinks.forEach(url => {
-                const link = document.createElement('link');
-                link.rel = 'preload';
-                link.as = 'fetch';
-                link.href = url;
-                document.head.appendChild(link);
-            });
         })();
     </script>
 

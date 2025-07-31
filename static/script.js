@@ -13,7 +13,7 @@ async function loadConfiguration() {
         const response = await fetch('/config_manager.config');
         if (response.ok) {
             appConfig = await response.json();
-            console.log('Configuration loaded from backend:', appConfig.security?.allowed_domains);
+            console.log('Configuration loaded successfully');
         } else {
             console.warn('Failed to load configuration from backend, no fallback domains');
             // No fallback domains - only use backend configuration
@@ -487,6 +487,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return; // 用户正在选择文字，不触发下载
             }
             
+            // 检查是否已下载完成（存在重新保存和删除按钮）
+            const hasResaveButton = el.querySelector('.resave-button');
+            const hasDeleteButton = el.querySelector('.delete-button');
+            if (hasResaveButton && hasDeleteButton) {
+                return; // 下载已完成，不再处理点击
+            }
+            
             handleDownload(el.dataset.formatId);
         });
     });
@@ -854,7 +861,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 // 短暂显示成功消息
                 setTimeout(() => {
-                    const successMessage = t.fileDeletedSuccess || `文件删除成功`;
+                    let successMessage = t.fileDeletedSuccess || `文件删除成功`;
                     if (result.file_size_mb > 0) {
                         successMessage += ` (${result.file_size_mb}MB)`;
                     }
@@ -1579,6 +1586,11 @@ function pollTaskStatus(taskId, optionElement) {
         }
         const optionElement = document.querySelector(`[data-format-id="${formatId}"]`);
 
+        if (!optionElement) {
+            console.error('handleDownload: optionElement not found for formatId:', formatId);
+            return;
+        }
+
         // Save the original descriptive text before showing the progress bar
         const textSpan = optionElement.querySelector('.option-content span');
         if (textSpan) {
@@ -1767,8 +1779,18 @@ function pollTaskStatus(taskId, optionElement) {
 
     // 显示具体进度的进度条函数
     function showProgressBar(optionElement, progress, message) {
+        if (!optionElement) {
+            console.error('showProgressBar: optionElement is null');
+            return;
+        }
+        
         const contentDiv = optionElement.querySelector('.option-content');
         const progressDiv = optionElement.querySelector('.option-progress');
+        
+        if (!contentDiv) {
+            console.error('showProgressBar: contentDiv not found');
+            return;
+        }
         
         contentDiv.classList.add('hidden');
         
