@@ -1,3 +1,4 @@
+# 核心依赖
 yt-dlp>=2023.12.30
 pyyaml>=6.0
 rich>=13.0.0
@@ -5,16 +6,29 @@ requests>=2.31.0
 pydantic>=2.0
 aiofiles>=23.2.1
 mutagen>=1.47.0
-psutil>=5.9.0
+flower>=1.0.0
 
-# AI Features
+# AI字幕功能 (可选)
+#地区显示
 deep-translator>=1.9.0
+#必须安装
 openai-whisper>=20231117
 
-# Web App & Backend
-fastapi
-uvicorn[standard]
-celery
-redis
-python-multipart
-cachetools
+# 开发与测试依赖
+mypy>=1.5.0
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+ruff>=0.5.0 # Fast Python linter and formatter
+pytest-html>=4.0.0
+httpx>=0.25.1
+# Web部署依赖
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+celery>=5.3.0
+redis>=4.6.0
+itsdangerous>=2.1.2
+python-multipart>=0.0.6
+cachetools>=5.0.0
+psutil>=5.9.0

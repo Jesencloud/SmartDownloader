@@ -1108,9 +1108,19 @@
                 <svg class="w-5 h-5 text-green-400 inline-block ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </div>
             <!-- Right Buttons -->
-            <div class="flex items-center justify-self-end">
-                <button class="resave-button button bg-blue-600 hover:bg-blue-700 text-xs py-1 px-3 mr-2" data-translate="resaveButton"></button>
-                <button class="delete-button button bg-red-600 hover:bg-red-700 text-xs py-1 px-3" data-translate="deleteButton"></button>
+            <div class="flex flex-col items-center justify-self-end gap-1">
+                <button class="delete-button button bg-red-600 hover:bg-red-700 text-xs py-1 px-2 flex items-center" data-translate-title="deleteButton">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                    </svg>
+                </button>
+                <button class="resave-button button bg-blue-600 hover:bg-blue-700 text-xs py-1 px-2 flex items-center" data-translate-title="resaveButton">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 12l-4-4h2.5V2h3v6H12l-4 4z"/>
+                        <rect x="2" y="13" width="12" height="1"/>
+                    </svg>
+                </button>
             </div>
         </div>
     </template>

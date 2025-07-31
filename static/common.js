@@ -84,6 +84,14 @@ async function switchLanguage(lang) {
         }
     });
 
+    // Update all elements that have a `data-translate-title` attribute
+    document.querySelectorAll('[data-translate-title]').forEach(element => {
+        const key = element.getAttribute('data-translate-title');
+        if (t[key]) {
+            element.title = t[key];
+        }
+    });
+
     // Update the page title separately
     const titleElement = document.querySelector('title');
     if (titleElement) {
