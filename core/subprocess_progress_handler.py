@@ -130,6 +130,13 @@ class SubprocessProgressHandler:
                 # 计算显示的进度
                 display_total, display_completed = self._calculate_combined_progress(total_bytes, downloaded_bytes)
 
+                # 调试日志
+                log.debug(f"进度更新: {percentage:.1f}% ({downloaded_bytes}/{total_bytes} bytes)")
+                if self.combined_download_state["is_combined_download"]:
+                    log.debug(
+                        f"组合下载进度: video={self.combined_download_state['video_completed']}/{self.combined_download_state['video_total']}, audio={self.combined_download_state['audio_completed']}/{self.combined_download_state['audio_total']}"
+                    )
+
                 # 确保任务可见后再更新进度
                 if not progress.tasks[task_id].visible:
                     progress.update(task_id, visible=True)
@@ -152,13 +159,20 @@ class SubprocessProgressHandler:
                 completed_combined = (
                     self.combined_download_state["video_completed"] + self.combined_download_state["audio_completed"]
                 )
-                progress.update(task_id, completed=completed_combined, total=total_combined)
+                if total_combined > 0:
+                    progress.update(task_id, completed=completed_combined, total=total_combined)
+                else:
+                    # 没有具体大小信息，但文件已完成，设置为100%
+                    progress.update(task_id, completed=100, total=100)
             else:
-                progress.update(
-                    task_id,
-                    completed=progress.tasks[task_id].total or 1,
-                    total=progress.tasks[task_id].total or 1,
-                )
+                # 单文件下载完成
+                current_task = progress.tasks[task_id]
+                if current_task.total and current_task.total > 1:
+                    # 使用已有的total值
+                    progress.update(task_id, completed=current_task.total, total=current_task.total)
+                else:
+                    # 设置为100%
+                    progress.update(task_id, completed=100, total=100)
             return True
         return False
 
@@ -246,7 +260,7 @@ class SubprocessProgressHandler:
         elif current_type == "audio":
             self.combined_download_state["audio_completed"] = downloaded_bytes
 
-        # 计算总进度 - 智能显示逻辑
+        # 简单的组合进度计算
         video_total = self.combined_download_state["video_total"]
         video_completed = self.combined_download_state["video_completed"]
         audio_total = self.combined_download_state["audio_total"]
@@ -254,8 +268,6 @@ class SubprocessProgressHandler:
 
         # 如果两个文件大小都已知，显示合并后的总进度
         if video_total > 0 and audio_total > 0:
-            # 计算总的合并进度：视频进度占80%，音频进度占20%
-            # 这样可以避免进度条从100%跳回到0%的问题
             total_combined = video_total + audio_total
             completed_combined = video_completed + audio_completed
             return total_combined, completed_combined
@@ -426,7 +438,27 @@ class SubprocessProgressHandler:
         完成进度处理
         """
         if process.returncode == 0:
-            progress.update(task_id, completed=progress.tasks[task_id].total or 100)
+            # 只有在没有明确进度信息时才设置为100%
+            # 如果是组合下载且有具体进度，保持当前进度
+            if self.combined_download_state["is_combined_download"]:
+                total_combined = (
+                    self.combined_download_state["video_total"] + self.combined_download_state["audio_total"]
+                )
+                if total_combined > 0:
+                    # 有具体进度信息，设置为完成
+                    progress.update(task_id, completed=total_combined, total=total_combined)
+                else:
+                    # 没有具体进度信息，设置为100%
+                    progress.update(task_id, completed=progress.tasks[task_id].total or 100)
+            else:
+                # 非组合下载，检查是否有具体的进度信息
+                current_task = progress.tasks[task_id]
+                if current_task.total and current_task.total > 1:
+                    # 有具体的total值，设置completed为total
+                    progress.update(task_id, completed=current_task.total)
+                else:
+                    # 没有具体进度，设置为100%
+                    progress.update(task_id, completed=100, total=100)
 
     async def handle_subprocess_with_progress(
         self, process: asyncio.subprocess.Process, progress: Progress, task_id: TaskID

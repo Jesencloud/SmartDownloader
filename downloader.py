@@ -226,14 +226,21 @@ class Downloader:
             return_code, stdout, stderr = await self._execute_info_cmd_with_auth_retry(url, info_cmd, timeout=60)
 
             # 解析JSON输出
-            for line in stdout.strip().split("\n"):
-                if line.strip():
-                    try:
-                        video_info = json.loads(line)
-                        yield video_info
-                    except json.JSONDecodeError as e:
-                        log.warning(f"解析视频信息JSON失败: {e}")
-                        continue
+            if stdout.strip():
+                try:
+                    # --dump-json 返回的是单个JSON对象，不是每行一个
+                    video_info = json.loads(stdout.strip())
+                    yield video_info
+                except json.JSONDecodeError as e:
+                    log.warning(f"解析视频信息JSON失败: {e}")
+                    # 回退到逐行解析（兼容旧行为）
+                    for line in stdout.strip().split("\n"):
+                        if line.strip():
+                            try:
+                                video_info = json.loads(line)
+                                yield video_info
+                            except json.JSONDecodeError:
+                                continue
 
         except AuthenticationException:
             # 认证异常直接向上传递,让上层处理重试
@@ -342,14 +349,26 @@ class Downloader:
         # 强化防回退：记录监控期间的最高进度
         max_progress_during_monitoring = current_celery_progress
 
+        # 添加初始状态检查
+        initial_checks = 0
+        max_initial_checks = 10  # 最多等待5秒(10 * 0.5s)
+
         try:
             while True:
                 task = progress.tasks[task_id]
-                if task.total and task.total > 0:
+
+                # 改进的进度计算逻辑
+                if task.total and task.total > 0 and task.completed is not None:
                     rich_percentage = int((task.completed / task.total) * 100)
 
+                    # 防止在初期就达到100%（这通常是错误的）
+                    if initial_checks < max_initial_checks and rich_percentage >= 100:
+                        log.debug(f"初期阶段忽略100%进度，等待真实下载开始 (检查次数: {initial_checks})")
+                        initial_checks += 1
+                        await asyncio.sleep(update_interval)
+                        continue
+
                     # 将Rich进度映射到剩余的Celery进度空间
-                    # 如果当前Celery进度是70%，那么Rich的0-100%映射到70-100%
                     remaining_space = 100 - current_celery_progress
                     base_adjusted_percentage = current_celery_progress + int((rich_percentage / 100) * remaining_space)
 
@@ -370,10 +389,23 @@ class Downloader:
 
                         # 调用进度回调
                         self._update_progress("正在下载中", adjusted_percentage, eta_seconds, speed)
+                        log.debug(
+                            f"进度更新: Rich={rich_percentage}%, Celery={adjusted_percentage}%, Total={task.total}, Completed={task.completed}"
+                        )
 
                         last_percentage = adjusted_percentage
                         max_progress_during_monitoring = adjusted_percentage
                         last_update_time = current_time
+
+                        # 重置初期检查计数器，表示真实下载已开始
+                        if initial_checks > 0:
+                            initial_checks = 0
+                            log.debug("检测到真实下载进度，开始正常监控")
+                else:
+                    # 没有有效的total值，但仍然要提供反馈
+                    if initial_checks < max_initial_checks:
+                        initial_checks += 1
+                        log.debug(f"等待进度初始化... (total={task.total}, completed={task.completed})")
 
                 await asyncio.sleep(update_interval)
 
@@ -716,7 +748,9 @@ class Downloader:
             # 生成文件前缀
             resolution_suffix = ""
             if format_id and "formats" in video_info:
-                selected_format = next((f for f in formats if f.get("format_id") == format_id), None)
+                # 确保格式ID类型一致性
+                format_id_str = str(format_id)
+                selected_format = next((f for f in formats if str(f.get("format_id")) == format_id_str), None)
                 if selected_format and selected_format.get("width") and selected_format.get("height"):
                     resolution_suffix = f"_{selected_format['width']}x{selected_format['height']}"
 

@@ -58,8 +58,8 @@ class CommandBuilder:
             [
                 "--no-check-certificate",  # 跳过SSL证书检查
                 "--prefer-insecure",  # 优先使用HTTP而非HTTPS
-                "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
-                "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
+                # "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
+                # "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
                 "--no-part",  # 不创建部分文件
                 "--no-mtime",  # 不设置修改时间
                 "--concurrent-fragments",
@@ -461,10 +461,37 @@ class CommandBuilder:
         )
         return cmd
 
+    def build_yt_dlp_info_cmd(self) -> List[str]:
+        """构建用于获取视频信息的yt-dlp基础命令（不跳过任何清单以获取完整格式列表）"""
+        cmd = ["yt-dlp"]
+
+        # 基础网络配置
+        cmd.extend(
+            [
+                "--socket-timeout",
+                "30",
+                "--retries",
+                "3",
+                "--no-call-home",
+                "--no-check-certificate",
+            ]
+        )
+
+        # 添加代理配置（如果有）
+        if self.proxy:
+            cmd.extend(["--proxy", self.proxy])
+
+        # 添加cookies配置（如果有）
+        if self.cookies_file and Path(self.cookies_file).exists():
+            cmd.extend(["--cookies", str(Path(self.cookies_file).resolve())])
+
+        return cmd
+
     def build_playlist_info_cmd(self, url: str) -> List[str]:
         """构建播放列表信息获取命令"""
-        cmd = self.build_yt_dlp_base_cmd()
-        cmd.extend(["--flat-playlist", "--print-json", "--skip-download", url])
+        # 使用专门的信息获取命令，不跳过HLS/DASH清单
+        cmd = self.build_yt_dlp_info_cmd()
+        cmd.extend(["--dump-json", "--no-download", "--no-playlist", url])
         return cmd
 
     def build_ffmpeg_merge_cmd(self, video_path: str, audio_path: str, output_path: str) -> List[str]:

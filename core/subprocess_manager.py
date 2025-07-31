@@ -170,8 +170,8 @@ class SubprocessManager:
                 error_msg = stderr.decode("utf-8", errors="ignore")
 
                 # 使用错误处理器分析错误类型
-                if self.retry_manager.should_retry(error_msg):
-                    if self.retry_manager.is_proxy_error(error_msg):
+                if self.error_handler.should_retry(error_msg):
+                    if self.error_handler.is_proxy_error(error_msg):
                         raise NetworkException(f"代理错误: {error_msg}")
                     else:
                         raise DownloadStalledException(f"下载停滞: {error_msg}")
@@ -252,8 +252,8 @@ class SubprocessManager:
             # 检查返回码
             if check_returncode and process.returncode != 0:
                 # 使用错误处理器分析错误类型
-                if self.retry_manager.should_retry(stderr_str):
-                    if self.retry_manager.is_proxy_error(stderr_str):
+                if self.error_handler.should_retry(stderr_str):
+                    if self.error_handler.is_proxy_error(stderr_str):
                         raise NetworkException(f"代理错误: {stderr_str}")
                     else:
                         raise DownloadStalledException(f"执行失败: {stderr_str}")

@@ -80,11 +80,15 @@ class FormatAnalyzer:
 
         for fmt in formats:
             # 跳过无效格式
-            if not fmt.get("format_id"):
+            format_id = fmt.get("format_id")
+            if not format_id:
                 continue
 
+            # 确保format_id是字符串类型
+            format_id = str(format_id)
+
             format_info = FormatInfo(
-                format_id=fmt.get("format_id", ""),
+                format_id=format_id,
                 ext=fmt.get("ext", ""),
                 vcodec=fmt.get("vcodec"),
                 acodec=fmt.get("acodec"),
@@ -99,6 +103,8 @@ class FormatAnalyzer:
             )
 
             analyzed_formats.append(format_info)
+
+        log.debug(f"分析完成，得到 {len(analyzed_formats)} 个有效格式")
 
         return analyzed_formats
 
@@ -118,9 +124,9 @@ class FormatAnalyzer:
         # 改进的编解码器检测逻辑：
         # 1. 'none' 明确表示没有该类型的流
         # 2. 'unknown' 表示编解码器未知但流可能存在
-        # 3. None/空字符串也视为可能的完整流（X.com等平台）
-        has_video = vcodec not in ("none", None, "") and vcodec != "audio only"
-        has_audio = acodec not in ("none", None, "") and acodec != "video only"
+        # 3. None视为可能的完整流，但空字符串需要进一步检查
+        has_video = vcodec not in ("none",) and vcodec != "audio only"
+        has_audio = acodec not in ("none",) and acodec != "video only"
 
         # 特殊处理：如果有宽高信息，通常表示有视频流
         has_dimensions = fmt.get("width") and fmt.get("height")
@@ -167,6 +173,11 @@ class FormatAnalyzer:
         Returns:
             DownloadPlan对象，包含推荐的下载策略
         """
+        if target_format_id:
+            log.debug(f"用户指定目标格式: {target_format_id}")
+        else:
+            log.debug("未指定目标格式，将自动选择最佳格式")
+
         analyzed_formats = self.analyze_formats(formats)
 
         # 分类格式
@@ -242,9 +253,18 @@ class FormatAnalyzer:
     ) -> DownloadPlan:
         """为指定的格式ID创建下载计划"""
 
+        # 确保target_format_id是字符串类型，处理传入数字的情况
+        target_format_id = str(target_format_id) if target_format_id is not None else None
+
+        if target_format_id is None:
+            raise ValueError("目标格式ID不能为None")
+
         # 检查是否是合并格式 (video_id+audio_id)
         if "+" in target_format_id:
             video_id, audio_id = target_format_id.split("+", 1)
+            # 确保ID是字符串类型
+            video_id = str(video_id).strip()
+            audio_id = str(audio_id).strip()
 
             video_format = next((f for f in video_only_formats if f.format_id == video_id), None)
 
@@ -270,9 +290,24 @@ class FormatAnalyzer:
                     secondary_format=audio_format,
                     reason=f"用户指定合并格式: {video_id}+{audio_id}",
                 )
+            else:
+                # 调试信息：记录为什么组合格式失败
+                if not video_format:
+                    log.warning(f"组合格式中找不到视频格式: {video_id}")
+                    log.warning(f"可用视频格式: {[f.format_id for f in video_only_formats[:10]]}")
+                if not audio_format:
+                    log.warning(f"组合格式中找不到音频格式: {audio_id}")
+                    log.warning(f"可用音频格式: {[f.format_id for f in audio_only_formats[:10]]}")
 
         # 查找目标格式
         target_format = next((f for f in analyzed_formats if f.format_id == target_format_id), None)
+
+        # 调试信息：记录查找结果
+        if target_format:
+            log.info(f"找到目标格式 {target_format_id}: stream_type={target_format.stream_type}")
+        else:
+            log.warning(f"未找到目标格式 {target_format_id}")
+            log.debug(f"可用格式ID列表: {[f.format_id for f in analyzed_formats[:20]]}")  # 只显示前20个避免日志过长
 
         if target_format:
             if target_format.stream_type == StreamType.COMPLETE:
