@@ -1,4 +1,3 @@
-p# Core Application & CLI
 yt-dlp>=2023.12.30
 pyyaml>=6.0
 rich>=13.0.0

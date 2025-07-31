@@ -1161,7 +1161,7 @@ async def download_stream(
                     raise HTTPException(status_code=500, detail="下载的文件为空")
 
                 file_size = os.path.getsize(temp_path)
-                log.info(f"下载完成: {file_size} bytes，开始流式传输")
+                log.info(f"下载完成: {file_size / 1000000:.2f}MB，开始流式传输")
 
                 # 高效流式传输文件 - 使用较大的缓冲区
                 chunk_size = 65536  # 64KB chunks for better performance
@@ -1182,14 +1182,14 @@ async def download_stream(
                         total_sent += len(chunk)
                         yield chunk
 
-                log.info(f"流式传输完成: {total_sent} bytes")
+                log.info(f"流式传输完成: {total_sent / 1000000:.2f}MB")
 
             finally:
                 # 确保临时文件被清理 - 即使出现异常也要清理
                 if temp_path and os.path.exists(temp_path):
                     try:
                         os.unlink(temp_path)
-                        log.debug(f"清理临时文件: {temp_path}")
+                        log.info(f"清理临时文件: {temp_path}")
                     except Exception as e:
                         log.error(f"清理临时文件失败: {e}")
 

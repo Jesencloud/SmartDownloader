@@ -79,9 +79,8 @@ jobs:
 
     - name: Run unit and integration tests
       run: |
-        # 运行测试，--cov 会自动从 pyproject.toml 的 addopts 中获取
-        # source 和 omit 规则也会自动应用
-        pytest --cov-branch --cov-report=xml -m "not e2e" -v
+        # 明确运行带覆盖率的测试。--cov 会自动使用 pyproject.toml 中的 source 设置
+        pytest --cov --cov-branch --cov-report=xml -m "not e2e" -v
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:

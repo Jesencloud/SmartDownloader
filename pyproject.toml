@@ -49,11 +49,6 @@ markers = [
     "e2e: marks tests as end-to-end tests that require live services.",
     "integration: marks tests as integration tests that check component interactions.",
 ]
-addopts = [
-    "--cov",                # 激活 coverage
- #   "--cov-report=term-missing", # 在终端显示报告
-    "--cov-report=html",         # 生成详细的 HTML 报告 (非常推荐!)
-]
 
 [tool.coverage.run]
 # source: 明确指定哪些是你的源代码，覆盖率只会在这些文件上计算
@@ -79,3 +74,7 @@ omit = [
 # (可选) 设置覆盖率报告的行为
 # show_missing = true   # 在终端报告中显示未覆盖的行号
 # fail_under = 80       # 如果总覆盖率低于80%，测试将失败 (非常适合CI)
+
+[tool.coverage.html]
+# 指定HTML报告的输出目录
+directory = "tests/htmlcov"
