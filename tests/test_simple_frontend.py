@@ -115,6 +115,7 @@ MOCK_VIDEO_INFO = {
 # --- 简化的前端测试 ---
 
 
+@pytest.mark.e2e
 def test_main_download_flow(page: Page):
     """
     一个简单的E2E测试，验证核心用户流程。

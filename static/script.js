@@ -2125,7 +2125,8 @@ function pollTaskStatus(taskId, optionElement) {
         });
     }
     if (clearButton) {
-        clearButton.addEventListener('click', () => {
+        clearButton.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent event bubbling to document click handler
             urlInput.value = '';
             pasteButton.style.display = 'flex';
             clearButton.style.display = 'none';
