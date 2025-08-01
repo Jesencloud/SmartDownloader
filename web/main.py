@@ -274,6 +274,10 @@ def fetch_video_info_sync(url: str, download_type: str = "all") -> dict:
         download_type: "video", "audio", or "all" to optimize parsing speed
     """
     try:
+        # 检测播放列表URL
+        if is_playlist_url(url):
+            raise ValueError("Playlists are not supported. Please enter a single video link.")
+
         cmd = [
             str(get_ytdlp_binary_path()),
             "--dump-json",
@@ -842,6 +846,66 @@ async def get_video_info(request: VideoInfoRequest):
     )
 
 
+def is_playlist_url(url: str) -> bool:
+    """
+    检测URL是否为播放列表
+
+    Args:
+        url: 要检测的URL
+
+    Returns:
+        bool: 如果是播放列表URL返回True，否则返回False
+    """
+    import re
+    from urllib.parse import parse_qs, urlparse
+
+    try:
+        parsed_url = urlparse(url.lower())
+        query_params = parse_qs(parsed_url.query)
+
+        # YouTube播放列表检测
+        if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
+            # 检查是否有播放列表参数
+            if "list" in query_params:
+                return True
+            # 检查URL路径是否包含播放列表标识
+            if "/playlist" in parsed_url.path:
+                return True
+
+        # Bilibili播放列表检测
+        if "bilibili.com" in parsed_url.netloc:
+            # 检查是否为播放列表/合集页面
+            if re.search(r"/video/[^/]+\?p=\d+", url):  # 分P视频
+                return True
+            if "/medialist/" in parsed_url.path:  # 播放列表
+                return True
+            if "/favlist/" in parsed_url.path:  # 收藏夹
+                return True
+
+        # 其他平台的通用播放列表检测
+        playlist_indicators = [
+            "playlist",
+            "album",
+            "collection",
+            "series",
+            "set",
+            "channel",
+            "user/",
+            "/c/",
+            "/channel/",
+        ]
+
+        for indicator in playlist_indicators:
+            if indicator in parsed_url.path.lower():
+                return True
+
+        return False
+
+    except Exception:
+        # 如果URL解析失败，保守处理，返回False
+        return False
+
+
 def validate_url_security(url: str) -> Tuple[bool, str]:
     """
     验证URL的安全性
@@ -1407,7 +1471,7 @@ async def get_task_status(task_id: str):
     # 添加详细调试信息
     # log.info("=== TASK STATUS DEBUG ===")
     # log.info(f"Task ID: {task_id}")
-    log.info(f"Task status: {status}")
+    log.debug(f"Task status: {status}")  # 改为DEBUG级别，减少日志冗余
     # log.info(f"Task result type: {type(result)}")
     # log.info(f"Task result: {result}")
     # log.info(f"Task info: {task_info}")
@@ -1947,4 +2011,12 @@ async def catch_all_spa_route(full_path: str):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    # 配置日志，减少访问日志的冗余输出
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        access_log=False,  # 禁用访问日志
+        log_level="warning",  # 只显示警告及以上级别的uvicorn日志
+    )

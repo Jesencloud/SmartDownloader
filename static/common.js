@@ -25,7 +25,26 @@ async function loadTranslations() {
 
 function getTranslations() {
     const currentLang = localStorage.getItem('language') || 'zh';
-    return translations[currentLang] || translations.zh || {};
+    const langTranslations = translations[currentLang] || translations.zh || {};
+    
+    // 如果翻译为空，返回备用翻译
+    if (!langTranslations || Object.keys(langTranslations).length === 0) {
+        return currentLang === 'en' ? {
+            playlistNotSupported: "Playlists are not supported. Please enter a single video link.",
+            errorTitle: "Failed to get video information",
+            analysisFailed: "Analysis Failed",
+            returnHome: "Back to Home",
+            urlPlaceholder: "Paste video URL..."
+        } : {
+            playlistNotSupported: "不支持播放列表，请输入单个视频链接",
+            errorTitle: "获取视频信息失败", 
+            analysisFailed: "解析失败",
+            returnHome: "返回主页",
+            urlPlaceholder: "粘贴视频URL..."
+        };
+    }
+    
+    return langTranslations;
 }
 
 
@@ -74,7 +93,7 @@ async function switchLanguage(lang) {
     document.querySelectorAll('[data-translate]').forEach(element => {
         const key = element.getAttribute('data-translate');
         if (t[key]) {
-            // If the attribute is for a placeholder, update the placeholder
+            // If the element has data-translate-placeholder attribute, update the placeholder
             if (element.hasAttribute('data-translate-placeholder')) {
                 element.placeholder = t[key];
             } else {
@@ -183,4 +202,9 @@ async function switchLanguage(lang) {
             span.innerHTML = newText; // Use innerHTML to support potential HTML tags
         }
     });
+    
+    // 更新错误状态的语言显示
+    if (typeof updateErrorStateLanguage === 'function') {
+        updateErrorStateLanguage();
+    }
 }

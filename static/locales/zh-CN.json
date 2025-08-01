@@ -1,7 +1,7 @@
 {
     "homeButton": "主页",
     "mainHeading": "智能下载器",
-    "urlPlaceholder": "粘贴视频或播放列表URL...",
+    "urlPlaceholder": "粘贴视频URL...",
     "pasteButton": "粘贴",
     "clearButton": "清除",
     "videoButton": "提取视频",
@@ -34,6 +34,7 @@
     "faq5A": "下载视频或音频供个人使用通常是允许的，但请确保您没有侵犯任何版权或知识产权。",
     "faq6Q": "支持哪些设备？",
     "faq6A": "我们的智能下载器兼容所有设备，包括智能手机、平板电脑和电脑。",
+    "playlistNotSupported": "不支持播放列表，请输入单个视频链接",
     "footerPrivacy": "隐私政策",
     "footerDisclaimer": "免责声明",
     "footerAbout": "关于我们",

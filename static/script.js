@@ -7,6 +7,9 @@ let appConfig = {
     }
 };
 
+// --- Global State ---
+let currentErrorState = null; // 存储当前的错误状态以支持语言切换
+
 // --- Configuration Loading ---
 async function loadConfiguration() {
     try {
@@ -236,9 +239,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!response.ok) {
                 const contentType = response.headers.get("content-type");
                 let errorMessage;
+                let errorType = 'generic'; // 错误类型
+                
                 if (contentType && contentType.includes("application/json")) {
                     const errorData = await response.json();
-                    errorMessage = errorData.detail || `API Error: ${response.status}`;
+                    let originalError = errorData.detail || `API Error: ${response.status}`;
+                    
+                    // 检查是否为播放列表错误，设置错误类型
+                    if (originalError.includes("Playlists are not supported")) {
+                        errorType = 'playlist';
+                        // 保持原始错误消息，不在这里翻译
+                        errorMessage = originalError;
+                    } else {
+                        errorMessage = originalError;
+                    }
                 } else {
                     // If the response isn't JSON, it's likely a server error page (e.g., from a timeout or crash)
                     // This is exactly what happens with Live Server
@@ -246,7 +260,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     console.error("Non-JSON error response from server:", serverText);
                     errorMessage = `${t.errorTitle} (${response.status} ${response.statusText}). The server might be busy or the request timed out.`;
                 }
-                throw new Error(errorMessage);
+                
+                // 创建错误对象，包含类型信息
+                const error = new Error(errorMessage);
+                error.type = errorType;
+                throw error;
             }
 
             currentVideoData = await response.json();
@@ -254,7 +272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         } catch (error) {
             console.error('Analysis Error:', error);
-            showErrorState(error.message);
+            showErrorState(error);
         }
     }
 
@@ -306,16 +324,115 @@ document.addEventListener('DOMContentLoaded', async () => {
     adjustButtonFontSize(downloadAudioButton);    
     adjustButtonFontSize(pasteButton);
     adjustButtonFontSize(clearButton);
-    function showErrorState(message) {
+    // 全局函数，用于在语言切换时更新错误状态
+    window.updateErrorStateLanguage = function() {
+        if (currentErrorState && currentErrorState.type === 'error') {
+            const t = getTranslations();
+            
+            // 获取当前语言
+            const currentLang = localStorage.getItem('language') || 'zh';
+            
+            // 根据错误类型获取翻译后的消息
+            let displayMessage;
+            if (currentErrorState.errorType === 'playlist') {
+                // 播放列表错误总是使用翻译后的消息
+                displayMessage = t.playlistNotSupported;
+            } else {
+                // 对于其他错误，检查是否为播放列表错误消息
+                const originalMessage = currentErrorState.originalMessage;
+                if (originalMessage.includes('Playlists are not supported')) {
+                    displayMessage = t.playlistNotSupported;
+                } else {
+                    displayMessage = originalMessage;
+                }
+            }
+            
+            // 强制备用消息处理 - 确保永远不显示undefined
+            if (!displayMessage || displayMessage === 'undefined' || displayMessage === undefined) {
+                displayMessage = currentLang === 'en' 
+                    ? "Playlists are not supported. Please enter a single video link."
+                    : "不支持播放列表，请输入单个视频链接";
+            }
+            
+            // 备用标题和按钮文本
+            const titleText = t.analysisFailed || (currentLang === 'en' ? 'Analysis Failed' : '解析失败');
+            const errorTitleText = t.errorTitle || (currentLang === 'en' ? 'Failed to get video information' : '获取视频信息失败');
+            const returnHomeText = t.returnHome || (currentLang === 'en' ? 'Back to Home' : '返回主页');
+            
+            // 重新渲染错误状态
+            const mainHeading = document.querySelector('.hero-section h1');
+            const resultContainer = document.getElementById('resultContainer');
+            
+            if (mainHeading) {
+                mainHeading.textContent = titleText;
+                mainHeading.setAttribute('data-translate', 'analysisFailed');
+            }
+            
+            if (resultContainer) {
+                resultContainer.innerHTML = `
+                    <div class="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">
+                        <strong class="font-bold">${errorTitleText}:</strong>
+                        <span class="block sm:inline">${displayMessage}</span>
+                    </div>
+                    <div class="text-center mt-4">                
+                        <button id="backButton" class="button">${returnHomeText}</button>                
+                    </div>`;
+                
+                // 重新绑定返回按钮事件
+                const backButton = document.getElementById('backButton');
+                if (backButton) {
+                    backButton.addEventListener('click', resetUI);
+                }
+            }
+        }
+    };
+
+    function showErrorState(error) {
+        // 存储错误状态以支持语言切换
+        const errorType = error.type || 'generic';
+        const errorMessage = error.message || error;
+        currentErrorState = { type: 'error', errorType: errorType, originalMessage: errorMessage };
+        
         const t = getTranslations();
-        mainHeading.textContent = t.analysisFailed;
+        
+        // 获取当前语言
+        const currentLang = localStorage.getItem('language') || 'zh';
+        
+        // 根据错误类型获取翻译后的消息
+        let displayMessage;
+        if (errorType === 'playlist') {
+            // 播放列表错误使用翻译后的消息
+            displayMessage = t.playlistNotSupported;
+        } else {
+            // 对于其他错误，检查是否为播放列表错误消息
+            if (errorMessage.includes('Playlists are not supported')) {
+                displayMessage = t.playlistNotSupported;
+            } else {
+                displayMessage = errorMessage;
+            }
+        }
+        
+        // 强制备用消息处理 - 确保永远不显示undefined
+        if (!displayMessage || displayMessage === 'undefined' || displayMessage === undefined) {
+            displayMessage = currentLang === 'en' 
+                ? "Playlists are not supported. Please enter a single video link."
+                : "不支持播放列表，请输入单个视频链接";
+        }
+        
+        // 备用标题和按钮文本
+        const titleText = t.analysisFailed || (currentLang === 'en' ? 'Analysis Failed' : '解析失败');
+        const errorTitleText = t.errorTitle || (currentLang === 'en' ? 'Failed to get video information' : '获取视频信息失败');
+        const returnHomeText = t.returnHome || (currentLang === 'en' ? 'Back to Home' : '返回主页');
+        
+        mainHeading.textContent = titleText;
+        mainHeading.setAttribute('data-translate', 'analysisFailed');
         resultContainer.innerHTML = `
             <div class="error-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">
-                <strong class="font-bold">${t.errorTitle}:</strong>
-                <span class="block sm:inline">${message}</span>
+                <strong class="font-bold">${errorTitleText}:</strong>
+                <span class="block sm:inline">${displayMessage}</span>
             </div>
             <div class="text-center mt-4">                
-                <button id="backButton" class="button">${t.returnHome}</button>                
+                <button id="backButton" class="button">${returnHomeText}</button>                
             </div>`;        
         document.getElementById('backButton').addEventListener('click', resetUI);
     }
@@ -351,7 +468,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const audioFormats = data.formats.filter(f => f.vcodec === 'none' || f.vcodec == null);
 
         if (audioFormats.length === 0) {
-            showErrorState(t.noFormats);
+            showErrorState({ message: t.noFormats, type: 'generic' });
             return;
         }
 
@@ -418,7 +535,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const videoFormats = data.formats;
 
         if (videoFormats.length === 0) {
-            showErrorState(t.noFormats);
+            showErrorState({ message: t.noFormats, type: 'generic' });
             return;
         }
 
@@ -1952,6 +2069,7 @@ function pollTaskStatus(taskId, optionElement) {
 
     function resetUI() {
     currentVideoData = null; // Clear any stored video data
+    currentErrorState = null; // 清除错误状态
 
     // Restore the main heading's original class and translation key
     const mainHeading = document.querySelector('.hero-section h1');
@@ -2174,20 +2292,38 @@ function initializeDarkMode() {
 }
 
 function initializeLanguageSelector() {
+    // 查找语言选择器按钮
+    const languageOptions = document.querySelectorAll('.language-option');
+    
+    // 如果找到按钮，直接绑定事件（当前HTML使用的方式）
+    if (languageOptions.length > 0) {
+        languageOptions.forEach(option => {
+            option.addEventListener('click', (e) => {
+                const selectedLang = e.target.dataset.lang;
+                switchLanguage(selectedLang);
+            });
+        });
+        return;
+    }
+    
+    // 备用：查找下拉菜单式的语言选择器
     const languageToggle = document.getElementById('languageToggle');
     const languageMenu = document.getElementById('languageMenu');
-    const languageOptions = document.querySelectorAll('.language-option');
+    
     if (!languageToggle || !languageMenu) return;
+    
     languageToggle.addEventListener('click', (e) => {
         e.stopPropagation();
         languageMenu.classList.toggle('hidden');
     });
+    
     document.addEventListener('click', (e) => {
         if (!languageToggle.contains(e.target) && !languageMenu.contains(e.target)) {
             languageMenu.classList.add('hidden');
         }
     });
-    languageOptions.forEach(option => {
+    
+    document.querySelectorAll('.language-option').forEach(option => {
         option.addEventListener('click', (e) => {
             const selectedLang = e.target.dataset.lang;
             switchLanguage(selectedLang);

@@ -49,7 +49,8 @@ if __name__ == "__main__":
         "8000",
         "--reload",
         "--log-level",
-        "info",
+        "warning",  # 改为warning级别，减少冗余日志
+        "--no-access-log",  # 禁用访问日志
         "--reload-dir",
         "web",
         "--reload-dir",

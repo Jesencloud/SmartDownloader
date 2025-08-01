@@ -84,6 +84,9 @@ def main():
                 "--port",
                 "8000",
                 "--reload",
+                "--log-level",
+                "warning",  # 减少冗余日志
+                "--no-access-log",  # 禁用访问日志
                 "--reload-dir",
                 "web",
                 "--reload-dir",

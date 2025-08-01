@@ -1,7 +1,7 @@
 {
     "homeButton": "Home",
     "mainHeading": "Smart Downloader",
-    "urlPlaceholder": "Paste video or playlist URL...",
+    "urlPlaceholder": "Paste video URL...",
     "pasteButton": "Paste",
     "clearButton": "Clear",
     "videoButton": "Extract Video",
@@ -34,6 +34,7 @@
     "faq5A": "Downloading videos or audio for personal use is generally allowed, but please make sure you are not infringing any copyright or intellectual property rights.",
     "faq6Q": "Which devices are supported?",
     "faq6A": "Our Smart Downloader is compatible with all devices, including smartphones, tablets, and computers.",
+    "playlistNotSupported": "Playlists are not supported. Please enter a single video link.",
     "footerPrivacy": "Privacy Policy",
     "footerDisclaimer": "Disclaimer",
     "footerAbout": "About Us",
