@@ -1067,6 +1067,7 @@ async def download_stream(
 
     # --- Range Request Handling ---
     import re
+
     range_header = request.headers.get("range")
     total_size = filesize if filesize and filesize > 0 else None
     status_code = 200
@@ -1081,11 +1082,15 @@ async def download_stream(
     else:
         audio_format_lower = audio_format.lower()
         format_map = {
-            "m4a": ("audio/mp4", "m4a"), "mp4": ("audio/mp4", "mp4"),
-            "opus": ("audio/opus", "opus"), "aac": ("audio/aac", "aac"),
-            "ogg": ("audio/ogg", "ogg"), "webm": ("audio/webm", "webm"),
-            "flac": ("audio/flac", "flac"), "wav": ("audio/wav", "wav"),
-            "mp3": ("audio/mp3", "mp3")
+            "m4a": ("audio/mp4", "m4a"),
+            "mp4": ("audio/mp4", "mp4"),
+            "opus": ("audio/opus", "opus"),
+            "aac": ("audio/aac", "aac"),
+            "ogg": ("audio/ogg", "ogg"),
+            "webm": ("audio/webm", "webm"),
+            "flac": ("audio/flac", "flac"),
+            "wav": ("audio/wav", "wav"),
+            "mp3": ("audio/mp3", "mp3"),
         }
         media_type, file_extension = format_map.get(audio_format_lower, ("audio/mp3", "mp3"))
         if media_type == "audio/mp3" and audio_format_lower != "mp3":
@@ -1096,7 +1101,7 @@ async def download_stream(
         filename = f"{clean_title}_{resolution}.{file_extension}"
     else:
         filename = f"{clean_title}.{file_extension}"
-    
+
     encoded_filename, safe_filename = create_safe_filenames(filename, download_type, resolution)
     content_disposition = f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{encoded_filename}"
 
@@ -1111,7 +1116,7 @@ async def download_stream(
         range_match = re.search(r"bytes=(\d+)-(\d*)", range_header)
         if range_match:
             start = int(range_match.group(1))
-            
+
             # Corrected Logic: Only treat as partial content if the start byte is greater than 0
             if start > 0:
                 status_code = 206
@@ -1132,7 +1137,7 @@ async def download_stream(
                 # Keep status_code = 200, do not set Content-Length or Content-Range
         else:
             log.warning(f"Malformed Range header: {range_header}. Serving full file.")
-    
+
     # For any full download (status_code == 200), we don't set Content-Length.
     # The server will automatically use Transfer-Encoding: chunked.
     if status_code == 200:
@@ -1140,14 +1145,14 @@ async def download_stream(
 
     # --- Streamer Definition ---
     async def stream_downloader():
-        import uuid
         import shutil
-        
+        import uuid
+
         # 1. 创建唯一的临时目录
         base_temp_dir = Path(config_manager.config.downloader.temp_path)
         unique_temp_dir = base_temp_dir / str(uuid.uuid4())
-        process = None # 确保process变量在finally块中可用
-        
+        process = None  # 确保process变量在finally块中可用
+
         try:
             unique_temp_dir.mkdir(parents=True, exist_ok=True)
             log.info(f"为下载创建了唯一的临时目录: {unique_temp_dir}")
@@ -1169,9 +1174,10 @@ async def download_stream(
             async def log_stderr():
                 while True:
                     chunk = await process.stderr.read(1024)
-                    if not chunk: break
+                    if not chunk:
+                        break
                     log.warning(f"yt-dlp stderr: {chunk.decode(errors='ignore').strip()}")
-            
+
             stderr_logger_task = asyncio.create_task(log_stderr())
 
             # 3. 流式传输数据
@@ -1182,19 +1188,20 @@ async def download_stream(
                         process.terminate()
                         break
                     chunk = await process.stdout.read(65536)
-                    if not chunk: break
+                    if not chunk:
+                        break
                     yield chunk
             finally:
                 if process and process.returncode is None:
                     process.terminate()
                     await process.wait()
-                
+
                 stderr_logger_task.cancel()
                 try:
                     await stderr_logger_task
                 except asyncio.CancelledError:
                     log.debug("Stderr logger task was correctly cancelled.")
-                
+
                 log.info(f"yt-dlp process finished with exit code {process.returncode if process else 'N/A'}")
 
         finally:
@@ -1217,10 +1224,26 @@ async def download_stream(
 
 
 def sanitize_filename(title_str: str, download_type: str) -> str:
-    if not title_str: return ""
+    if not title_str:
+        return ""
     import re
+
     title_str = re.sub(r"https?://[^\s]+", "", title_str)
-    forbidden_chars = {"<": "", ">": "", ":": "", "\"": "", "/": "", "\\": "", "|": "", "?": "", "*": "", "【": "", "】": "", "（": "(", "）": ")"}
+    forbidden_chars = {
+        "<": "",
+        ">": "",
+        ":": "",
+        '"': "",
+        "/": "",
+        "\\": "",
+        "|": "",
+        "?": "",
+        "*": "",
+        "【": "",
+        "】": "",
+        "（": "(",
+        "）": ")",
+    }
     for forbidden, replacement in forbidden_chars.items():
         title_str = title_str.replace(forbidden, replacement)
     title_str = "".join(" " if char in "\n\t\r" else char for char in title_str if ord(char) >= 32 or char in "\n\t\r")
@@ -1235,23 +1258,28 @@ def sanitize_filename(title_str: str, download_type: str) -> str:
         if available_length > 10:
             if " " in title_str[:available_length]:
                 last_space = title_str.rfind(" ", 0, available_length)
-                title_str = title_str[:last_space if last_space > available_length * 0.7 else available_length] + suffix
+                title_str = (
+                    title_str[: last_space if last_space > available_length * 0.7 else available_length] + suffix
+                )
             else:
                 title_str = title_str[:available_length] + suffix
         else:
             title_str = title_str[:available_length] + suffix
     return title_str
 
+
 def create_safe_filenames(original_filename: str, download_type: str, resolution: str) -> Tuple[str, str]:
     import urllib.parse
+
     encoded_filename = urllib.parse.quote(original_filename, safe="")
-    
+
     try:
         original_filename.encode("ascii")
         return encoded_filename, original_filename
     except UnicodeEncodeError:
         name_part, ext_part = os.path.splitext(original_filename)
         import re
+
         ascii_pattern = r"[a-zA-Z0-9\s\-_\(\)\[\]&+\.\,\!\?]+"
         ascii_parts = re.findall(ascii_pattern, name_part)
         if ascii_parts:
@@ -1268,12 +1296,12 @@ def create_safe_filenames(original_filename: str, download_type: str, resolution
                     ascii_combined = truncated
                 if ascii_combined and len(ascii_combined) >= 3:
                     return encoded_filename, ascii_combined + ext_part
-        
+
         fallback_name = f"video_{resolution}" if download_type == "video" else "audio"
         return encoded_filename, fallback_name + ext_part
 
-@app.get("/download-direct")
 
+@app.get("/download-direct")
 async def download_direct():
     """
     Direct download endpoint for complete streams that support browser downloads.

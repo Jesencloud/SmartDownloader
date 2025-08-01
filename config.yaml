@@ -17,9 +17,9 @@ folders:
 
 # 下载器设置
 downloader:
-  # 保存路径 - 使用绝对路径
-  save_path: "/Users/jiantai/Documents/script/SmartDownloader/downloads"  # 使用绝对路径
-  temp_path: "/Users/jiantai/Documents/script/SmartDownloader/downloads/temp" # 下载流的临时文件目录
+  # 保存路径 - 使用相对路径
+  save_path: "downloads"  # 相对于项目根目录
+  temp_path: "downloads/temp" # 下载流的临时文件目录，相对于项目根目录
   
   # 重试机制
   max_retries: 3                # 最大重试次数

@@ -60,7 +60,8 @@ class CommandBuilder:
                 "--prefer-insecure",
                 "--no-part",
                 "--no-mtime",
-                "--concurrent-fragments", "4",
+                "--concurrent-fragments",
+                "4",
             ]
         )
         return cmd
@@ -95,7 +96,8 @@ class CommandBuilder:
                 "--prefer-insecure",
                 "--no-part",
                 "--no-mtime",
-                "--concurrent-fragments", "4",
+                "--concurrent-fragments",
+                "4",
             ]
         )
         return cmd
@@ -122,16 +124,23 @@ class CommandBuilder:
 
     def build_streaming_download_cmd(self, output_path: str, url: str, format_spec: str = "best") -> List[str]:
         """构建浏览器直流下载命令（后台元数据嵌入模式）"""
-        cmd = self.build_yt_dlp_base_cmd_no_progress() # 依赖基础命令
+        cmd = self.build_yt_dlp_base_cmd_no_progress()  # 依赖基础命令
         from utils import create_simplified_identifier
+
         simplified_source = create_simplified_identifier(url)
         cmd.extend(
             [
                 "--add-metadata",
                 "--embed-metadata",
                 "--xattrs",
-                "--replace-in-metadata", "webpage_url", "^.*$", simplified_source,
-                "--replace-in-metadata", "comment", "^.*$", f"Source: {simplified_source}",
+                "--replace-in-metadata",
+                "webpage_url",
+                "^.*$",
+                simplified_source,
+                "--replace-in-metadata",
+                "comment",
+                "^.*$",
+                f"Source: {simplified_source}",
             ]
         )
         cmd.extend(["-f", format_spec, "--newline", "-o", output_path, url])
@@ -178,7 +187,8 @@ class CommandBuilder:
                 "--prefer-insecure",
                 "--no-part",
                 "--no-mtime",
-                "--concurrent-fragments", "4",
+                "--concurrent-fragments",
+                "4",
             ]
         )
 
