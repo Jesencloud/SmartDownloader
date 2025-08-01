@@ -59,6 +59,7 @@ def start_celery_worker():
         "-A",
         "web.celery_app:celery_app",
         "worker",
+       # "--workdir={project_root}",  # 强制设置工作目录
         "--loglevel=info",
         "--concurrency=4",
         "--pool=prefork",

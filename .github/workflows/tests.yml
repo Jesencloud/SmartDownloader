@@ -28,6 +28,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
@@ -55,6 +57,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
@@ -83,8 +87,9 @@ jobs:
         pytest --cov --cov-branch --cov-report=xml -m "not e2e" -v
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }} # 从GitHub Secrets获取Codecov Token
       with:
-        token: ${{ secrets.CODECOV_TOKEN }} # 需要在GitHub仓库设置中添加这个secret
         file: ./coverage.xml
         flags: unittests
 
@@ -123,6 +128,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
@@ -292,8 +299,9 @@ jobs:
         
     - name: Upload E2E coverage to Codecov
       uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }} # 从GitHub Secrets获取Codecov Token
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
         file: ./coverage.xml
         flags: e2etests # 为E2E测试报告设置一个独立的标志
 

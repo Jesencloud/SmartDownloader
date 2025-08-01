@@ -1672,7 +1672,8 @@ function pollTaskStatus(taskId, optionElement) {
             download_type: downloadType,
             format_id: formatId,
             resolution: resolution,
-            title: title
+            title: title,
+            filesize: optionElement.dataset.filesize || 0
         };
         
         // 如果是音频下载，添加音频格式参数

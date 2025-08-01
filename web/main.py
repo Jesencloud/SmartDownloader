@@ -1046,360 +1046,234 @@ async def download_stream(
     format_id: str,
     resolution: str,
     title: str,
-    audio_format: str = "mp3",  # 添加音频格式参数，默认为mp3保持向后兼容
+    audio_format: str = "mp3",
+    filesize: Optional[int] = None,
 ):
     log.info(
-        f"Stream download request: {url}, format_id: {format_id}, type: {download_type}, resolution: '{resolution}', audio_format: {audio_format}"
+        f"Stream download request: {url}, format_id: {format_id}, type: {download_type}, resolution: '{resolution}', audio_format: {audio_format}, filesize: {filesize}"
     )
 
-    # 验证URL安全性
+    # --- Security Validations ---
     url_valid, url_error = validate_url_security(url)
     if not url_valid:
         raise HTTPException(status_code=400, detail=f"Invalid URL: {url_error}")
 
-    # 验证格式ID
     format_valid, format_error = validate_format_id(format_id)
     if not format_valid:
         raise HTTPException(status_code=400, detail=f"Invalid format ID: {format_error}")
 
-    # 验证下载类型
     if download_type not in ["video", "audio"]:
         raise HTTPException(status_code=400, detail="Invalid download type. Must be 'video' or 'audio'")
 
-    try:
+    # --- Range Request Handling ---
+    import re
+    range_header = request.headers.get("range")
+    total_size = filesize if filesize and filesize > 0 else None
+    status_code = 200
+    start = 0
+    end = total_size - 1 if total_size is not None else None
+    byte_range_tuple = None
 
-        async def stream_downloader():
-            # 混合模式：使用优化的临时文件方案，但加强资源管理
-            import asyncio
-            import os
-            import shutil
-            import tempfile
+    # --- Filename and Content-Type setup ---
+    if download_type == "video":
+        media_type = "video/mp4"
+        file_extension = "mp4"
+    else:
+        audio_format_lower = audio_format.lower()
+        format_map = {
+            "m4a": ("audio/mp4", "m4a"), "mp4": ("audio/mp4", "mp4"),
+            "opus": ("audio/opus", "opus"), "aac": ("audio/aac", "aac"),
+            "ogg": ("audio/ogg", "ogg"), "webm": ("audio/webm", "webm"),
+            "flac": ("audio/flac", "flac"), "wav": ("audio/wav", "wav"),
+            "mp3": ("audio/mp3", "mp3")
+        }
+        media_type, file_extension = format_map.get(audio_format_lower, ("audio/mp3", "mp3"))
+        if media_type == "audio/mp3" and audio_format_lower != "mp3":
+            log.warning(f"Unrecognized audio format: {audio_format}, defaulting to mp3")
 
-            # 检查临时目录可用空间
-            temp_dir = tempfile.gettempdir()
-            free_space = shutil.disk_usage(temp_dir).free
-            free_space_gb = free_space / (1024**3)
+    clean_title = sanitize_filename(title, download_type)
+    if download_type == "video":
+        filename = f"{clean_title}_{resolution}.{file_extension}"
+    else:
+        filename = f"{clean_title}.{file_extension}"
+    
+    encoded_filename, safe_filename = create_safe_filenames(filename, download_type, resolution)
+    content_disposition = f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{encoded_filename}"
 
-            log.info(f"临时目录: {temp_dir}, 可用空间: {free_space_gb:.1f}GB")
+    # --- Prepare Headers ---
+    headers = {
+        "Content-Disposition": content_disposition,
+        "Cache-Control": "no-cache",
+        "Accept-Ranges": "bytes",
+    }
 
-            # 如果可用空间小于1GB，发出警告
-            if free_space_gb < 1.0:
-                log.warning(f"临时目录空间不足: {free_space_gb:.1f}GB")
+    if range_header and total_size:
+        range_match = re.search(r"bytes=(\d+)-(\d*)", range_header)
+        if range_match:
+            start = int(range_match.group(1))
+            
+            # Corrected Logic: Only treat as partial content if the start byte is greater than 0
+            if start > 0:
+                status_code = 206
+                end_str = range_match.group(2)
+                end = int(end_str) if end_str else total_size - 1
 
-            temp_path = None
-            try:
-                # 创建临时文件 - 使用更安全的临时文件管理
-                with tempfile.NamedTemporaryFile(suffix=f".{file_extension}", delete=False) as temp_file:
-                    temp_path = temp_file.name
+                if start >= total_size or end >= total_size or start > end:
+                    raise HTTPException(status_code=416, detail="Range Not Satisfiable")
 
-                log.info(f"元数据嵌入模式下载: {temp_path}")
-
-                # 重试机制：最多重试3次
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        # 使用CommandBuilder构建带元数据的命令
-                        command_builder = CommandBuilder()
-                        cmd = command_builder.build_streaming_download_cmd(temp_path, url, format_id)
-
-                        if attempt > 0:
-                            log.info(f"重试下载 (第{attempt + 1}次)")
-
-                        # 执行下载到临时文件
-                        process = await asyncio.create_subprocess_exec(
-                            *cmd,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE,
-                        )
-
-                        # 等待下载完成
-                        stdout, stderr = await process.communicate()
-
-                        if process.returncode == 0:
-                            # 下载成功，跳出重试循环
-                            break
-                        else:
-                            error_msg = stderr.decode()
-                            log.warning(f"下载尝试{attempt + 1}失败 (返回码: {process.returncode}): {error_msg}")
-
-                            # 检查是否是可重试的错误
-                            retryable_errors = [
-                                "SSL:",
-                                "EOF occurred in violation of protocol",
-                                "Connection reset by peer",
-                                "Unable to download JSON metadata",
-                                "timeout",
-                                "network",
-                            ]
-
-                            is_retryable = any(error in error_msg for error in retryable_errors)
-
-                            if attempt == max_retries - 1:
-                                # 最后一次尝试失败
-                                if is_retryable:
-                                    raise HTTPException(status_code=503, detail="网络连接不稳定，请稍后重试")
-                                else:
-                                    raise HTTPException(status_code=500, detail=f"下载失败: {error_msg}")
-                            elif not is_retryable:
-                                # 不可重试的错误，直接失败
-                                raise HTTPException(status_code=500, detail=f"下载失败: {error_msg}")
-                            else:
-                                # 等待一段时间后重试
-                                await asyncio.sleep(2**attempt)  # 指数退避: 2s, 4s
-                                continue
-
-                    except HTTPException:
-                        raise
-                    except Exception as e:
-                        if attempt == max_retries - 1:
-                            raise HTTPException(status_code=500, detail=f"下载过程中出现错误: {str(e)}")
-                        log.warning(f"下载尝试{attempt + 1}出现异常: {e}")
-                        await asyncio.sleep(1)
-
-                # 检查下载结果
-                if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
-                    raise HTTPException(status_code=500, detail="下载的文件为空")
-
-                file_size = os.path.getsize(temp_path)
-                log.info(f"下载完成: {file_size / 1000000:.2f}MB，开始流式传输")
-
-                # 高效流式传输文件 - 使用较大的缓冲区
-                chunk_size = 65536  # 64KB chunks for better performance
-                total_sent = 0
-
-                import aiofiles
-
-                async with aiofiles.open(temp_path, "rb") as f:
-                    while True:
-                        if await request.is_disconnected():
-                            log.warning("客户端断开连接")
-                            break
-
-                        chunk = await f.read(chunk_size)
-                        if not chunk:
-                            break
-
-                        total_sent += len(chunk)
-                        yield chunk
-
-                log.info(f"流式传输完成: {total_sent / 1000000:.2f}MB")
-
-            finally:
-                # 确保临时文件被清理 - 即使出现异常也要清理
-                if temp_path and os.path.exists(temp_path):
-                    try:
-                        os.unlink(temp_path)
-                        log.info(f"清理临时文件: {temp_path}")
-                    except Exception as e:
-                        log.error(f"清理临时文件失败: {e}")
-
-        # 动态确定媒体类型和文件扩展名
-        if download_type == "video":
-            media_type = "video/mp4"
-            file_extension = "mp4"
-        else:
-            # 根据音频格式确定正确的媒体类型
-            audio_format_lower = audio_format.lower()
-            if audio_format_lower == "m4a":
-                media_type = "audio/mp4"  # m4a使用audio/mp4媒体类型
-                file_extension = "m4a"
-            elif audio_format_lower == "mp4":
-                media_type = "audio/mp4"  # mp4音频也使用audio/mp4媒体类型
-                file_extension = "mp4"
-            elif audio_format_lower == "opus":
-                media_type = "audio/opus"
-                file_extension = "opus"
-            elif audio_format_lower == "aac":
-                media_type = "audio/aac"
-                file_extension = "aac"
-            elif audio_format_lower == "ogg":
-                media_type = "audio/ogg"
-                file_extension = "ogg"
-            elif audio_format_lower == "webm":
-                media_type = "audio/webm"
-                file_extension = "webm"
-            elif audio_format_lower == "flac":
-                media_type = "audio/flac"
-                file_extension = "flac"
-            elif audio_format_lower == "wav":
-                media_type = "audio/wav"
-                file_extension = "wav"
-            elif audio_format_lower == "mp3":
-                media_type = "audio/mp3"
-                file_extension = "mp3"
+                length = (end - start) + 1
+                headers["Content-Length"] = str(length)
+                headers["Content-Range"] = f"bytes {start}-{end}/{total_size}"
+                byte_range_tuple = (start, end)
+                log.info(f"Serving partial content for resumption: bytes {start}-{end} of {total_size}")
             else:
-                # 未识别格式使用mp3作为默认值，但添加日志以便调试
-                log.warning(f"未识别的音频格式: {audio_format}，使用mp3作为默认值")
-                media_type = "audio/mp3"
-                file_extension = "mp3"
+                # If start is 0, it's a new download. Ignore the range header and send a 200 OK.
+                log.info("Range header starts at 0, treating as a full download request.")
+                # Keep status_code = 200, do not set Content-Length or Content-Range
+        else:
+            log.warning(f"Malformed Range header: {range_header}. Serving full file.")
+    
+    # For any full download (status_code == 200), we don't set Content-Length.
+    # The server will automatically use Transfer-Encoding: chunked.
+    if status_code == 200:
+        log.info(f"Serving full content with chunked encoding (estimated size: {total_size or 'unknown'})")
 
-        # 添加详细的格式映射日志
-        if download_type == "audio":
-            log.info(f"音频格式映射: {audio_format} → {media_type} | .{file_extension}")
+    # --- Streamer Definition ---
+    async def stream_downloader():
+        import uuid
+        import shutil
+        
+        # 1. 创建唯一的临时目录
+        base_temp_dir = Path(config_manager.config.downloader.temp_path)
+        unique_temp_dir = base_temp_dir / str(uuid.uuid4())
+        process = None # 确保process变量在finally块中可用
+        
+        try:
+            unique_temp_dir.mkdir(parents=True, exist_ok=True)
+            log.info(f"为下载创建了唯一的临时目录: {unique_temp_dir}")
 
-        # Sanitize title for filename - improved to handle Chinese and Unicode characters
-        def sanitize_filename(title_str):
-            """改进的文件名清理函数，使用配置文件中的长度限制"""
-            if not title_str:
-                return ""
+            # 2. 构建并执行命令
+            command_builder = CommandBuilder()
+            cmd = command_builder.build_streaming_download_cmd_to_stdout(
+                url, format_spec=format_id, byte_range=byte_range_tuple, temp_dir_path=str(unique_temp_dir)
+            )
+            log.info(f"Executing streaming command: {' '.join(cmd)}")
 
-            # 对于包含URL的标题，先尝试清理URL部分
-            import re
-
-            # 移除或简化URL（以http开头的部分）
-            title_str = re.sub(r"https?://[^\s]+", "", title_str)
-
-            # 移除文件系统不支持的字符，用简单字符替换
-            forbidden_chars = {
-                "<": "",  # 完全移除
-                ">": "",
-                ":": "",
-                '"': "",
-                "/": "",
-                "\\": "",
-                "|": "",
-                "?": "",
-                "*": "",
-                # 移除一些常见的特殊符号
-                "【": "",
-                "】": "",
-                "（": "(",
-                "）": ")",
-            }
-
-            for forbidden, replacement in forbidden_chars.items():
-                title_str = title_str.replace(forbidden, replacement)
-
-            # 清理控制字符和多余空格
-            title_str = "".join(
-                " " if char in "\n\t\r" else char for char in title_str if ord(char) >= 32 or char in "\n\t\r"
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(unique_temp_dir),  # 设置子进程工作目录为临时目录，避免在web目录生成--Frag*文件
             )
 
-            # 合并多个空格并清理首尾
-            title_str = " ".join(title_str.split()).strip()
+            async def log_stderr():
+                while True:
+                    chunk = await process.stderr.read(1024)
+                    if not chunk: break
+                    log.warning(f"yt-dlp stderr: {chunk.decode(errors='ignore').strip()}")
+            
+            stderr_logger_task = asyncio.create_task(log_stderr())
 
-            # 移除连续的符号
-            title_str = re.sub(r"[-_\s]{2,}", " ", title_str).strip()
+            # 3. 流式传输数据
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        log.warning("Client disconnected, terminating download process.")
+                        process.terminate()
+                        break
+                    chunk = await process.stdout.read(65536)
+                    if not chunk: break
+                    yield chunk
+            finally:
+                if process and process.returncode is None:
+                    process.terminate()
+                    await process.wait()
+                
+                stderr_logger_task.cancel()
+                try:
+                    await stderr_logger_task
+                except asyncio.CancelledError:
+                    log.debug("Stderr logger task was correctly cancelled.")
+                
+                log.info(f"yt-dlp process finished with exit code {process.returncode if process else 'N/A'}")
 
-            # 如果清理后标题为空或太短，使用默认名称
-            if not title_str or len(title_str.strip()) < 2:
-                return "video" if download_type == "video" else "audio"
+        finally:
+            # 4. 强制清理唯一的临时目录
+            if unique_temp_dir.exists():
+                shutil.rmtree(unique_temp_dir, ignore_errors=True)
+                log.info(f"已强制清理临时目录: {unique_temp_dir}")
 
-            # 使用配置文件中的长度限制
-            max_length = config_manager.config.file_processing.filename_max_length
-            if len(title_str) > max_length:
-                suffix = config_manager.config.file_processing.filename_truncate_suffix
-                available_length = max_length - len(suffix)
-
-                if available_length > 10:
-                    # 在空格处截断以保持单词完整性
-                    if " " in title_str[:available_length]:
-                        last_space = title_str.rfind(" ", 0, available_length)
-                        if last_space > available_length * 0.7:  # 确保不会截断太多
-                            title_str = title_str[:last_space] + suffix
-                        else:
-                            title_str = title_str[:available_length] + suffix
-                    else:
-                        title_str = title_str[:available_length] + suffix
-                else:
-                    title_str = title_str[:available_length] + suffix
-
-            return title_str
-
-        clean_title = sanitize_filename(title)
-
-        # If the cleaned title is empty or too short, use a default
-        if not clean_title or len(clean_title) < 2:
-            clean_title = "video" if download_type == "video" else "audio"
-
-        # Create a safe filename - unified format for both video and audio
-        if download_type == "video":
-            filename = f"{clean_title}_{resolution}.{file_extension}"
-        else:
-            filename = f"{clean_title}.{file_extension}"
-
-        # 使用RFC 6266标准处理Unicode文件名
-        import urllib.parse
-
-        # 对文件名进行URL编码以支持Unicode字符
-        encoded_filename = urllib.parse.quote(filename, safe="")
-
-        # 创建符合RFC 6266的Content-Disposition头
-        # 改进的ASCII备用文件名生成策略
-        def create_ascii_safe_filename(original_filename):
-            """为包含Unicode字符的文件名创建ASCII兼容的备用文件名"""
-            # 分离文件名和扩展名
-            name_part = original_filename
-            ext_part = ""
-            if "." in original_filename:
-                name_part = original_filename.rsplit(".", 1)[0]
-                ext_part = "." + original_filename.rsplit(".", 1)[1]
-
-            # 策略1: 尽可能保留ASCII字符和数字
-            import re
-
-            # 提取所有ASCII字母、数字、基本符号和空格
-            ascii_pattern = r"[a-zA-Z0-9\s\-_\(\)\[\]&+\.\,\!\?]+"
-            ascii_parts = re.findall(ascii_pattern, name_part)
-
-            if ascii_parts:
-                # 合并所有ASCII部分
-                ascii_combined = "".join(ascii_parts).strip()
-                # 清理多余的空格和符号
-                ascii_combined = re.sub(r"\s+", " ", ascii_combined)  # 合并空格
-                ascii_combined = re.sub(r"[-_]{2,}", "-", ascii_combined)  # 合并连字符
-                ascii_combined = ascii_combined.strip(" -_")  # 移除首尾的空格和符号
-
-                # 检查是否有足够的有意义内容
-                meaningful_chars = re.sub(r"[\s\-_\(\)\[\]]+", "", ascii_combined)
-                if len(meaningful_chars) >= 3:  # 至少3个有意义的字符
-                    # 控制ASCII文件名长度，但比原来更宽松
-                    max_ascii_length = 50  # 最多50字符
-                    if len(ascii_combined) > max_ascii_length:
-                        # 尝试在单词边界截断
-                        truncated = ascii_combined[:max_ascii_length]
-                        if " " in truncated:
-                            truncated = truncated.rsplit(" ", 1)[0]
-                        ascii_combined = truncated
-
-                    if ascii_combined and len(ascii_combined) >= 3:
-                        return ascii_combined + ext_part
-
-            # 策略2: 回退到通用文件名
-            if download_type == "video":
-                fallback_name = f"video_{resolution}"
-            else:
-                fallback_name = "audio"
-
-            return fallback_name + ext_part
-
-        # 检查文件名是否包含非ASCII字符
-        try:
-            filename.encode("ascii")
-            # 如果编码成功，说明都是ASCII字符，直接使用
-            safe_filename = filename
-        except UnicodeEncodeError:
-            # 包含非ASCII字符，生成ASCII兼容的备用文件名
-            safe_filename = create_ascii_safe_filename(filename)
-
-        # 构建完整的Content-Disposition头，支持Unicode
-        content_disposition = f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{encoded_filename}"
-
+    # --- Return Final Response ---
+    try:
         return StreamingResponse(
             stream_downloader(),
             media_type=media_type,
-            headers={
-                "Content-Disposition": content_disposition,
-                "Cache-Control": "no-cache",
-            },
+            headers=headers,
+            status_code=status_code,
         )
-
     except Exception as e:
         log.error(f"Error in download_stream endpoint: {e}")
         raise HTTPException(status_code=500, detail=f"Stream download failed: {str(e)}")
 
 
+def sanitize_filename(title_str: str, download_type: str) -> str:
+    if not title_str: return ""
+    import re
+    title_str = re.sub(r"https?://[^\s]+", "", title_str)
+    forbidden_chars = {"<": "", ">": "", ":": "", "\"": "", "/": "", "\\": "", "|": "", "?": "", "*": "", "【": "", "】": "", "（": "(", "）": ")"}
+    for forbidden, replacement in forbidden_chars.items():
+        title_str = title_str.replace(forbidden, replacement)
+    title_str = "".join(" " if char in "\n\t\r" else char for char in title_str if ord(char) >= 32 or char in "\n\t\r")
+    title_str = " ".join(title_str.split()).strip()
+    title_str = re.sub(r"[-_\s]{2,}", " ", title_str).strip()
+    if not title_str or len(title_str.strip()) < 2:
+        return "video" if download_type == "video" else "audio"
+    max_length = config_manager.config.file_processing.filename_max_length
+    if len(title_str) > max_length:
+        suffix = config_manager.config.file_processing.filename_truncate_suffix
+        available_length = max_length - len(suffix)
+        if available_length > 10:
+            if " " in title_str[:available_length]:
+                last_space = title_str.rfind(" ", 0, available_length)
+                title_str = title_str[:last_space if last_space > available_length * 0.7 else available_length] + suffix
+            else:
+                title_str = title_str[:available_length] + suffix
+        else:
+            title_str = title_str[:available_length] + suffix
+    return title_str
+
+def create_safe_filenames(original_filename: str, download_type: str, resolution: str) -> Tuple[str, str]:
+    import urllib.parse
+    encoded_filename = urllib.parse.quote(original_filename, safe="")
+    
+    try:
+        original_filename.encode("ascii")
+        return encoded_filename, original_filename
+    except UnicodeEncodeError:
+        name_part, ext_part = os.path.splitext(original_filename)
+        import re
+        ascii_pattern = r"[a-zA-Z0-9\s\-_\(\)\[\]&+\.\,\!\?]+"
+        ascii_parts = re.findall(ascii_pattern, name_part)
+        if ascii_parts:
+            ascii_combined = "".join(ascii_parts).strip()
+            ascii_combined = re.sub(r"\s+", " ", ascii_combined)
+            ascii_combined = re.sub(r"[-_]{2,}", "-", ascii_combined).strip(" -_")
+            meaningful_chars = re.sub(r"[\s\-_\(\)\[\]]+", "", ascii_combined)
+            if len(meaningful_chars) >= 3:
+                max_ascii_length = 50
+                if len(ascii_combined) > max_ascii_length:
+                    truncated = ascii_combined[:max_ascii_length]
+                    if " " in truncated:
+                        truncated = truncated.rsplit(" ", 1)[0]
+                    ascii_combined = truncated
+                if ascii_combined and len(ascii_combined) >= 3:
+                    return encoded_filename, ascii_combined + ext_part
+        
+        fallback_name = f"video_{resolution}" if download_type == "video" else "audio"
+        return encoded_filename, fallback_name + ext_part
+
 @app.get("/download-direct")
+
 async def download_direct():
     """
     Direct download endpoint for complete streams that support browser downloads.

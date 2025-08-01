@@ -58,6 +58,7 @@ class DownloaderConfig(BaseConfig):
     """下载器配置"""
 
     save_path: str = Field(default="downloads", description="下载文件的保存目录")
+    temp_path: str = Field(default="downloads/temp", description="下载流的临时文件目录")
     max_retries: int = Field(default=3, ge=0, le=10, description="最大重试次数")
     base_delay: float = Field(default=10.0, ge=0, description="基础延迟时间(秒)")
     max_delay: float = Field(default=300.0, ge=0, description="最大延迟时间(秒)")

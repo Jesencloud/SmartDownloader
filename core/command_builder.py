@@ -40,33 +40,29 @@ class CommandBuilder:
             "--force-ipv4",
         ]
 
+        # 统一临时文件路径管理
+        temp_path = config.downloader.temp_path
+        if temp_path:
+            Path(temp_path).mkdir(parents=True, exist_ok=True)
+            cmd.extend(["--paths", f"temp:{temp_path}"])
+
         if self.proxy:
             cmd.extend(["--proxy", self.proxy])
 
         if self.cookies_file and Path(self.cookies_file).exists():
             cmd.extend(["--cookies", str(Path(self.cookies_file).resolve())])
 
-        # 添加进度模板
         cmd.extend(["--progress", "--progress-template", "%(progress)j"])
-
-        # 添加健壮性参数：片段重试
-        # 无限次重试片段，每次重试之间有指数退避延迟（1到30秒）
         cmd.extend(["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"])
-
-        # 添加更激进的性能优化参数
         cmd.extend(
             [
-                "--no-check-certificate",  # 跳过SSL证书检查
-                "--prefer-insecure",  # 优先使用HTTP而非HTTPS
-                # "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
-                # "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
-                "--no-part",  # 不创建部分文件
-                "--no-mtime",  # 不设置修改时间
-                "--concurrent-fragments",
-                "4",  # 并发片段下载
+                "--no-check-certificate",
+                "--prefer-insecure",
+                "--no-part",
+                "--no-mtime",
+                "--concurrent-fragments", "4",
             ]
         )
-
         return cmd
 
     def build_yt_dlp_base_cmd_no_progress(self) -> List[str]:
@@ -80,75 +76,75 @@ class CommandBuilder:
             "--force-ipv4",
         ]
 
+        # 统一临时文件路径管理
+        temp_path = config.downloader.temp_path
+        if temp_path:
+            Path(temp_path).mkdir(parents=True, exist_ok=True)
+            cmd.extend(["--paths", f"temp:{temp_path}"])
+
         if self.proxy:
             cmd.extend(["--proxy", self.proxy])
 
         if self.cookies_file and Path(self.cookies_file).exists():
             cmd.extend(["--cookies", str(Path(self.cookies_file).resolve())])
 
-        # 添加健壮性参数
         cmd.extend(["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"])
-
-        # 添加更激进的性能优化参数
         cmd.extend(
             [
-                "--no-check-certificate",  # 跳过SSL证书检查
-                "--prefer-insecure",  # 优先使用HTTP而非HTTPS
-                "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
-                "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
-                "--no-part",  # 不创建部分文件
-                "--no-mtime",  # 不设置修改时间
-                "--concurrent-fragments",
-                "4",  # 并发片段下载
+                "--no-check-certificate",
+                "--prefer-insecure",
+                "--no-part",
+                "--no-mtime",
+                "--concurrent-fragments", "4",
             ]
         )
-
         return cmd
 
     def build_video_download_cmd(self, output_path: str, url: str) -> List[str]:
         """构建视频下载命令"""
         cmd = self.build_yt_dlp_base_cmd()
-
         video_format = config.downloader.ytdlp_video_format
-
         cmd.extend(["-f", video_format, "--newline", "-o", output_path, url])
-
         return cmd
 
     def build_audio_download_cmd(self, url: str, output_template: str, audio_format: str = "mp3") -> List[str]:
-        """
-        构建音频下载命令。
-
-        Args:
-            url: 视频URL。
-            output_template: yt-dlp的输出模板,可以是目录或完整路径。
-            audio_format: 音频格式 (例如: 'mp3', 'm4a', 'best')。
-
-        Returns:
-            list: 命令列表。
-        """
+        """构建音频下载命令"""
         cmd = self.build_yt_dlp_base_cmd_no_progress()
-
-        # 始终为任何音频下载请求提取音频
         cmd.extend(["--extract-audio"])
-
         if audio_format == "best_original_audio":
-            # 策略1: 下载最佳原始音频流 (智能适配m4a/mp4)
             cmd.extend(["-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best"])
         elif audio_format in ["mp3", "m4a", "wav", "opus", "aac", "flac"]:
-            # 策略2: 下载最佳音频并转换为指定格式
-            cmd.extend(["-f", "bestaudio/best"])
-            cmd.extend(["--audio-format", audio_format])
-            cmd.extend(["--audio-quality", "0"])
+            cmd.extend(["-f", "bestaudio/best", "--audio-format", audio_format, "--audio-quality", "0"])
         else:
-            # 策略3: 假定它是要直接下载的特定格式ID
             cmd.extend(["-f", audio_format])
-
         cmd.extend(["--newline", "-o", output_template, url])
         return cmd
 
     def build_streaming_download_cmd(self, output_path: str, url: str, format_spec: str = "best") -> List[str]:
-        """构建浏览器直流下载命令，包含简化的来源元数据"""
+        """构建浏览器直流下载命令（后台元数据嵌入模式）"""
+        cmd = self.build_yt_dlp_base_cmd_no_progress() # 依赖基础命令
+        from utils import create_simplified_identifier
+        simplified_source = create_simplified_identifier(url)
+        cmd.extend(
+            [
+                "--add-metadata",
+                "--embed-metadata",
+                "--xattrs",
+                "--replace-in-metadata", "webpage_url", "^.*$", simplified_source,
+                "--replace-in-metadata", "comment", "^.*$", f"Source: {simplified_source}",
+            ]
+        )
+        cmd.extend(["-f", format_spec, "--newline", "-o", output_path, url])
+        return cmd
+
+    def build_streaming_download_cmd_to_stdout(
+        self,
+        url: str,
+        format_spec: str = "best",
+        byte_range: Optional[Tuple[int, Optional[int]]] = None,
+        temp_dir_path: Optional[str] = None,
+    ) -> List[str]:
+        """构建浏览器直流下载命令，将内容输出到stdout，支持范围请求和自定义临时目录"""
         cmd = [
             "yt-dlp",
             "--ignore-config",
@@ -156,7 +152,18 @@ class CommandBuilder:
             "--no-color",
             "--force-overwrites",
             "--force-ipv4",
+            "--no-progress",
         ]
+
+        # 直流模式使用专用的、每次都清理的临时目录
+        if temp_dir_path:
+            cmd.extend(["--paths", f"temp:{temp_dir_path}"])
+        else:
+            # 如果没有提供专用目录，则使用配置中的全局临时目录
+            temp_path = config.downloader.temp_path
+            if temp_path:
+                Path(temp_path).mkdir(parents=True, exist_ok=True)
+                cmd.extend(["--paths", f"temp:{temp_path}"])
 
         if self.proxy:
             cmd.extend(["--proxy", self.proxy])
@@ -164,46 +171,24 @@ class CommandBuilder:
         if self.cookies_file and Path(self.cookies_file).exists():
             cmd.extend(["--cookies", str(Path(self.cookies_file).resolve())])
 
-        # 添加健壮性参数
         cmd.extend(["--fragment-retries", "infinite", "--retry-sleep", "fragment:exp=1:30"])
-
-        # 添加更激进的性能优化参数
         cmd.extend(
             [
-                "--no-check-certificate",  # 跳过SSL证书检查
-                "--prefer-insecure",  # 优先使用HTTP而非HTTPS
-                "--youtube-skip-dash-manifest",  # YouTube: 跳过DASH清单
-                "--youtube-skip-hls-manifest",  # YouTube: 跳过HLS清单
-                "--no-part",  # 不创建部分文件
-                "--no-mtime",  # 不设置修改时间
-                "--concurrent-fragments",
-                "4",  # 并发片段下载
+                "--no-check-certificate",
+                "--prefer-insecure",
+                "--no-part",
+                "--no-mtime",
+                "--concurrent-fragments", "4",
             ]
         )
 
-        # 为浏览器直流下载添加简化来源元数据
-        from utils import create_simplified_identifier
+        if byte_range:
+            start, end = byte_range
+            end_str = str(end) if end is not None else ""
+            cmd.extend(["--download-section", f"*{start}-{end_str}"])
+            log.info(f"为yt-dlp构建范围下载: *{start}-{end_str}")
 
-        simplified_source = create_simplified_identifier(url)
-
-        cmd.extend(
-            [
-                "--add-metadata",  # 添加元数据到文件
-                "--embed-metadata",  # 嵌入元数据到容器
-                "--xattrs",  # 写入 macOS/Linux 扩展属性
-                # 设置关键元数据字段
-                "--replace-in-metadata",
-                "webpage_url",
-                "^.*$",
-                simplified_source,  # yt-dlp 网页URL字段
-                "--replace-in-metadata",
-                "comment",
-                "^.*$",
-                f"Source: {simplified_source}",  # FFmpeg comment 字段
-            ]
-        )
-
-        cmd.extend(["-f", format_spec, "--newline", "-o", output_path, url])
+        cmd.extend(["-f", format_spec, "-o", "-", url])
         return cmd
 
     def build_separate_video_download_cmd(
