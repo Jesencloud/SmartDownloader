@@ -125,8 +125,8 @@ class FormatAnalyzer:
         # 1. 'none' 明确表示没有该类型的流
         # 2. 'unknown' 表示编解码器未知但流可能存在
         # 3. None视为可能的完整流，但空字符串需要进一步检查
-        has_video = vcodec not in ("none",) and vcodec != "audio only"
-        has_audio = acodec not in ("none",) and acodec != "video only"
+        has_video = vcodec is not None and vcodec not in ("none", "audio only")
+        has_audio = acodec is not None and acodec not in ("none", "video only")
 
         # 特殊处理：如果有宽高信息，通常表示有视频流
         has_dimensions = fmt.get("width") and fmt.get("height")
@@ -349,6 +349,8 @@ class FormatAnalyzer:
 
     def _select_best_audio_format(self, audio_formats: List[FormatInfo]) -> FormatInfo:
         """选择最佳音频格式"""
+        if not audio_formats:
+            raise ValueError("无法从空列表中选择最佳音频格式。")
 
         # 为每个音频格式计算得分并记录详细信息
         format_scores = []
@@ -488,13 +490,27 @@ class FormatAnalyzer:
 
         # 优先级2: 标记为 "default" 的音轨
         elif "default" in combined_info:
-            score += 30  # 给予高优先级
-            log.debug(f"音频流 {fmt.format_id} 检测到 'default' 标记，加分30")
+            score += 15  # 降低权重，避免过度优先默认但低质量的流
+            log.debug(f"音频流 {fmt.format_id} 检测到 'default' 标记，加分15")
 
         # 优先级3: 标记为 "original" 的音轨
         elif "original" in combined_info:
             score += 20  # 给予中等优先级
             log.debug(f"音频流 {fmt.format_id} 检测到 'original' 标记，加分20")
+
+        # === 新增：音质标记检测和评分 ===
+        # 检查MORE INFO字段中的音质标记
+        more_info = str(raw_format.get("format_note", "")).lower() + " " + str(raw_format.get("format", "")).lower()
+
+        if "high" in more_info:
+            score += 15  # 高音质大幅加分
+            log.debug(f"音频流 {fmt.format_id} 检测到 'high' 音质标记，加分15")
+        elif "medium" in more_info:
+            score += 5  # 中等音质小幅加分
+            log.debug(f"音频流 {fmt.format_id} 检测到 'medium' 音质标记，加分5")
+        elif "low" in more_info:
+            score -= 10  # 低音质扣分
+            log.debug(f"音频流 {fmt.format_id} 检测到 'low' 音质标记，扣分10")
 
         # 优先级4: 语言为主要语言（en、zh等）
         language = raw_format.get("language", "") or ""  # 处理None值
