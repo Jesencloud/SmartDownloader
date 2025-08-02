@@ -944,9 +944,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 为“重新保存”按钮添加事件监听
         const resaveButton = completedItem.querySelector('.resave-button');
-        resaveButton.addEventListener('click', () => {
-            const downloadUrl = `/download/file/${taskId}`;
-            triggerBrowserDownload(downloadUrl);
+        resaveButton.addEventListener('click', async () => {
+            try {
+                // 先检查文件是否可用 - 使用GET请求但设置Range头只获取第一个字节
+                const checkResponse = await fetch(`/download/file/${taskId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Range': 'bytes=0-0'  // 只请求第一个字节来检查文件是否存在
+                    }
+                });
+                
+                if (!checkResponse.ok) {
+                    if (checkResponse.status === 404) {
+                        console.log('文件已过期，自动恢复到下载前状态');
+                        // 自动恢复到下载前状态
+                        await restoreToPreDownloadState(optionElement, taskId);
+                        return;
+                    }
+                    throw new Error('文件检查失败');
+                }
+                
+                // 文件可用，触发完整下载
+                const downloadUrl = `/download/file/${taskId}`;
+                triggerBrowserDownload(downloadUrl);
+                
+            } catch (error) {
+                console.error('重新保存失败:', error);
+                const t = getTranslations();
+                alert(t.errorTitle + ': ' + (error.message || '文件已过期'));
+            }
         });
 
         // 为"删除"按钮添加事件监听
@@ -974,6 +1000,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
                 
                 if (!response.ok) {
+                    // 检查是否是404错误（Redis记录已过期）
+                    if (response.status === 404) {
+                        console.log('Redis记录已过期，自动恢复到下载前状态');
+                        // 自动恢复到下载前状态，不显示错误消息
+                        await restoreToPreDownloadState(optionElement, taskId);
+                        return;
+                    }
+                    
+                    // 其他错误正常处理
                     const errorData = await response.json();
                     throw new Error(errorData.detail || '删除失败');
                 }
