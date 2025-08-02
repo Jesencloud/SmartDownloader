@@ -95,42 +95,55 @@ class BrowserCookiesExtractor:
         Returns:
             str: cookies文件路径，如果失败则返回None
         """
-        # 1. 首先检查缓存
+        # 1. 首先检查缓存 (卫语句)
         if self.cache_enabled and self._is_cache_valid():
             logger.info(f"✅ 使用有效的cookies缓存: {self.cache_file}")
             return self.cache_file
 
-        # 2. 缓存无效或不存在，尝试从浏览器获取
-        if browser == "auto":
-            # 自动检测可用的浏览器
-            for browser_name in self.supported_browsers:
-                try:
-                    cookies = self._extract_cookies_with_retry(browser_name, domain)
-                    if cookies:
-                        cookies_file = self._save_cookies_to_file(cookies, domain)
-                        if cookies_file and self.cache_enabled:
-                            self._update_cache(cookies_file)
-                        return cookies_file
-                except BrowserCookieError as e:
-                    logger.debug(f"尝试从{browser_name}获取cookies失败: {e}")
-                    continue
-                except Exception as e:
-                    logger.warning(f"从{browser_name}获取cookies时发生未知错误: {e}")
-                    continue
-        else:
+        # 2. 确定要尝试的浏览器列表
+        browsers_to_try = self.supported_browsers.keys() if browser == "auto" else [browser]
+
+        # 3. 遍历并尝试提取
+        for browser_name in browsers_to_try:
+            if browser_name not in self.supported_browsers:
+                logger.error(f"不支持的浏览器: {browser_name}")
+                continue
+
             try:
-                cookies = self._extract_cookies_with_retry(browser, domain)
-                if cookies:
-                    cookies_file = self._save_cookies_to_file(cookies, domain)
-                    if cookies_file and self.cache_enabled:
-                        self._update_cache(cookies_file)
-                    return cookies_file
+                cookies_file = self._try_extract_and_save(browser_name, domain)
+                if cookies_file:
+                    return cookies_file  # 成功提取，立即返回
             except BrowserCookieError as e:
-                logger.error(f"从{browser}获取cookies失败: {e}")
+                log_message = f"从 {browser_name} 获取cookies失败: {e}"
+                if browser == "auto":
+                    logger.debug(log_message)  # 在自动模式下，失败是正常的，使用debug级别
+                else:
+                    logger.error(log_message)  # 在指定浏览器模式下，失败是错误
             except Exception as e:
-                logger.error(f"从{browser}获取cookies时发生未知错误: {e}")
+                logger.warning(f"从 {browser_name} 获取cookies时发生未知错误: {e}")
 
         return None
+
+    def _try_extract_and_save(self, browser: str, domain: str) -> Optional[str]:
+        """
+        尝试从单个浏览器提取、保存并缓存cookies。
+
+        Args:
+            browser: 浏览器名称
+            domain: 目标域名
+
+        Returns:
+            str: 成功后的cookies文件路径，否则返回None
+        """
+        cookies = self._extract_cookies_with_retry(browser, domain)
+        if not cookies:
+            return None
+
+        cookies_file = self._save_cookies_to_file(cookies, domain)
+        if cookies_file and self.cache_enabled:
+            self._update_cache(cookies_file)
+
+        return cookies_file
 
     def _extract_cookies_with_retry(self, browser: str, domain: str, max_retries: int = 2) -> List[Dict]:
         """带重试机制的cookies提取。
@@ -158,19 +171,21 @@ class BrowserCookiesExtractor:
                 if attempt < max_retries:
                     logger.debug(f"第{attempt + 1}次尝试从{browser}获取cookies失败，重试中...")
                     time.sleep(1)  # 短暂等待后重试
-                else:
-                    # 转换为更具体的异常
-                    if "database is locked" in str(e).lower():
-                        raise BrowserCookieError(f"无法访问{browser}数据库，请关闭浏览器后重试")
-                    elif "permission denied" in str(e).lower():
-                        raise BrowserCookieError(f"权限被拒绝，无法访问{browser}cookies文件")
-                    elif "no such file" in str(e).lower():
-                        raise BrowserCookieError(f"未找到{browser}cookies文件，请确保浏览器已安装并使用过")
-                    else:
-                        raise BrowserCookieError(f"从{browser}获取cookies失败: {e}")
 
+        # 如果所有重试都失败了，则转换并抛出最终的异常
         if last_exception:
-            raise last_exception
+            raise self._convert_to_specific_error(last_exception, browser)
+
+    def _convert_to_specific_error(self, e: Exception, browser: str) -> BrowserCookieError:
+        """将通用异常转换为更具体的BrowserCookieError。"""
+        error_message = str(e).lower()
+        if "database is locked" in error_message:
+            return BrowserCookieError(f"无法访问{browser}数据库，请关闭浏览器后重试")
+        if "permission denied" in error_message:
+            return BrowserCookieError(f"权限被拒绝，无法访问{browser}cookies文件")
+        if "no such file" in error_message:
+            return BrowserCookieError(f"未找到{browser}cookies文件，请确保浏览器已安装并使用过")
+        return BrowserCookieError(f"从{browser}获取cookies失败: {e}")
 
     def _is_cache_valid(self) -> bool:
         """检查缓存是否有效。
@@ -434,7 +449,7 @@ class BrowserCookiesExtractor:
     def _get_safari_cookies(self, domain: str) -> List[Dict]:
         """从Safari浏览器获取cookies。
 
-        仅在macOS系统上支持，Safari使用二进制格式存储cookies。
+        仅在macOS系统上支持，使用browser-cookie3库解析。
 
         Args:
             domain (str): 目标域名。
@@ -442,22 +457,36 @@ class BrowserCookiesExtractor:
         Returns:
             List[Dict]: 从Safari提取的cookies列表。
         """
-        cookies = []
-
         if sys.platform != "darwin":
             logger.warning("Safari cookies只在macOS上支持")
+            return []
+
+        try:
+            import browser_cookie3
+
+            logger.info(f"正在从Safari中为域名 {domain} 提取cookies...")
+            cj = browser_cookie3.safari(domain_name=domain)
+            cookies = []
+            for cookie in cj:
+                cookies.append(
+                    {
+                        "name": cookie.name,
+                        "value": cookie.value,
+                        "domain": cookie.domain,
+                        "path": cookie.path,
+                        "expires": cookie.expires,
+                        "secure": cookie.secure,
+                        "httponly": cookie.has_nonstandard_attr("HttpOnly"),
+                    }
+                )
+            if not cookies:
+                logger.warning(f"在Safari中未找到域名 {domain} 的cookies")
             return cookies
-
-        safari_cookies_path = os.path.expanduser("~/Library/Cookies/Cookies.binarycookies")
-
-        if not os.path.exists(safari_cookies_path):
-            logger.warning("未找到Safari cookies文件")
-            return cookies
-
-        # Safari使用二进制格式，需要特殊处理
-        # 这里简化处理，实际可能需要更复杂的解析
-        logger.info("Safari cookies提取需要额外的解析库支持")
-        return cookies
+        except ImportError:
+            logger.error("需要安装 'browser-cookie3' 库来提取Safari cookies。请运行: pip install browser-cookie3")
+            return []
+        except Exception as e:
+            raise BrowserCookieError(f"从Safari提取cookies失败: {e}") from e
 
     def _get_edge_cookies(self, domain: str) -> List[Dict]:
         """从Microsoft Edge浏览器获取cookies。
@@ -553,7 +582,7 @@ class BrowserCookiesExtractor:
 
         return cookies
 
-    def _save_cookies_to_file(self, cookies: List[Dict], domain: str) -> str:
+    def _save_cookies_to_file(self, cookies: List[Dict], domain: str) -> Optional[str]:
         """保存cookies为Netscape格式文件。
 
         Args:
@@ -567,37 +596,36 @@ class BrowserCookiesExtractor:
             return None
 
         cookies_file = "cookies.txt"
-
         try:
-            with open(cookies_file, "w") as f:
+            with open(cookies_file, "w", encoding="utf-8") as f:
                 f.write("# Netscape HTTP Cookie File\n")
                 f.write("# This is a generated file! Do not edit.\n\n")
-
                 for cookie in cookies:
-                    # Netscape格式: domain, flag, path, secure, expires, name, value
-                    domain_flag = "TRUE" if cookie["domain"].startswith(".") else "FALSE"
-                    path = cookie.get("path", "/")
-                    secure = "TRUE" if cookie.get("secure", False) else "FALSE"
-                    expires = str(cookie.get("expires", 0))
-                    name = cookie.get("name", "")
-                    value = cookie.get("value", "")
-                    domain_name = cookie.get("domain", "")
-
-                    line = f"{domain_name}\t{domain_flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}\n"
-                    f.write(line)
+                    f.write(self._format_cookie_as_netscape(cookie))
 
             logger.info(f"成功保存 {len(cookies)} 个cookies到 {cookies_file}")
             return cookies_file
 
         except (OSError, IOError, PermissionError) as e:
             logger.error(f"无法写入cookies文件，权限不足或路径无效: {e}")
-            return None
         except UnicodeEncodeError as e:
             logger.error(f"cookies内容编码错误: {e}")
-            return None
         except Exception as e:
             logger.error(f"保存cookies文件时发生未知错误: {e}", exc_info=True)
-            return None
+
+        return None
+
+    def _format_cookie_as_netscape(self, cookie: Dict) -> str:
+        """将单个cookie字典格式化为Netscape格式的字符串行。"""
+        domain_name = cookie.get("domain", "")
+        domain_flag = "TRUE" if domain_name.startswith(".") else "FALSE"
+        path = cookie.get("path", "/")
+        secure = "TRUE" if cookie.get("secure", False) else "FALSE"
+        expires = str(cookie.get("expires", 0))
+        name = cookie.get("name", "")
+        value = cookie.get("value", "")
+
+        return f"{domain_name}\t{domain_flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}\n"
 
     def get_domain_from_url(self, url: str) -> str:
         """从URL提取域名。
@@ -649,22 +677,16 @@ def auto_extract_cookies_for_url(
 
     logger.info(f"正在为域名 {domain} 自动提取cookies...")
 
-    try:
-        cookies_file = extractor.extract_cookies_for_domain(domain, browser)
+    # 移除外层try-except，让异常在调用栈中向上传播
+    # BrowserCookiesExtractor内部已有健壮的错误处理和日志记录
+    cookies_file = extractor.extract_cookies_for_domain(domain, browser)
 
-        if cookies_file:
-            logger.info(f"✅ 成功提取cookies并保存到 {cookies_file}")
-        else:
-            logger.warning(f"❌ 无法为域名 {domain} 提取cookies")
+    if cookies_file:
+        logger.info(f"✅ 成功提取cookies并保存到 {cookies_file}")
+    else:
+        logger.warning(f"❌ 无法为域名 {domain} 提取cookies")
 
-        return cookies_file
-
-    except BrowserCookieError as e:
-        logger.error(f"❌ 浏览器cookies提取失败: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"❌ 提取cookies时发生未知错误: {e}")
-        return None
+    return cookies_file
 
 
 def main():

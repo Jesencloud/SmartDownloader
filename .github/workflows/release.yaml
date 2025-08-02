@@ -46,9 +46,6 @@ jobs:
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
           NOTES=$(awk "/## \\[$VERSION\\]/{flag=1; next} /## \\[/{flag=0} flag" CHANGELOG.md | sed '/^$/N;/^\n$/D')
-          NOTES="${NOTES//'%'/'%25'}"
-          NOTES="${NOTES//$'\n'/'%0A'}"
-          NOTES="${NOTES//$'\r'/'%0D'}"
           echo "notes=${NOTES}" >> $GITHUB_OUTPUT
         shell: bash
 

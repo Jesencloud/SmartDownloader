@@ -163,17 +163,7 @@ class Downloader:
                 log.warning(f"进度回调函数执行失败: {e}")
 
     async def _execute_info_cmd_with_auth_retry(self, url: str, info_cmd: list, timeout: int = 60):
-        """
-        执行信息获取命令,支持认证错误自动重试
-
-        Args:
-            url: 视频URL
-            info_cmd: 信息获取命令
-            timeout: 超时时间
-
-        Returns:
-            tuple: (return_code, stdout, stderr)
-        """
+        """执行信息获取命令,支持认证错误自动重试。"""
         max_auth_retries = 1
         auth_retry_count = 0
 
@@ -181,29 +171,35 @@ class Downloader:
             try:
                 return await self.subprocess_manager.execute_simple(info_cmd, timeout=timeout, check_returncode=True)
             except AuthenticationException as e:
-                if auth_retry_count < max_auth_retries and self.cookies_manager:
-                    log.warning(f"🍪 获取视频信息认证错误,尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
+                auth_retry_count += 1
+                info_cmd = await self._handle_info_auth_failure(e, auth_retry_count, max_auth_retries, url)
+            except Exception:
+                raise  # Re-throw other exceptions
 
-                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(url)
+        raise DownloaderException("获取信息失败,所有重试均已用尽.")
 
-                    if new_cookies_file:
-                        self.command_builder.update_cookies_file(new_cookies_file)
-                        # 重新构建信息获取命令
-                        info_cmd = self.command_builder.build_playlist_info_cmd(url)
-                        auth_retry_count += 1
-                        log.info("✅ Cookies已更新,重试获取视频信息...")
-                        continue
-                    else:
-                        log.error("❌ 无法自动更新cookies,获取视频信息失败")
-                        raise e
-                else:
-                    if not self.cookies_manager:
-                        log.error("❌ 未配置cookies管理器,无法自动处理认证错误")
-                    else:
-                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries})")
-                    raise e
-            except Exception as e:
-                raise e
+    async def _handle_info_auth_failure(
+        self, e: AuthenticationException, attempt: int, max_attempts: int, url: str
+    ) -> list:
+        """处理信息获取命令的认证失败。"""
+        if attempt > max_attempts:
+            log.error(f"❌ 已达到最大认证重试次数 ({max_attempts})")
+            raise e
+
+        if not self.cookies_manager:
+            log.error("❌ 未配置cookies管理器,无法自动处理认证错误.")
+            raise e
+
+        log.warning(f"🍪 获取视频信息认证错误,尝试第 {attempt} 次自动刷新cookies...")
+        new_cookies_file = self.cookies_manager.refresh_cookies_for_url(url)
+
+        if not new_cookies_file:
+            log.error("❌ 无法自动更新cookies,获取视频信息失败")
+            raise e
+
+        self.command_builder.update_cookies_file(new_cookies_file)
+        log.info("✅ Cookies已更新,重试获取视频信息...")
+        return self.command_builder.build_playlist_info_cmd(url)
 
     async def stream_playlist_info(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -262,158 +258,144 @@ class Downloader:
         """
         执行命令,支持认证错误自动重试,并可选择性地处理进度.
         这是一个通用的执行器,可以处理带或不带进度条的命令.
-
-        Args:
-            initial_cmd: 首次尝试执行的、已经构建好的命令.
-            cmd_builder_func: 用于在重试时重新构建命令的CommandBuilder方法.
-            url: 视频URL.
-            cmd_builder_args: 传递给cmd_builder_func的参数字典.
-            progress: (可选) Rich Progress对象.
-            task_id: (可选) Rich TaskID.
-            timeout: 命令执行的超时时间.
-
-        Returns:
-            tuple: (return_code, stdout, stderr)
-
-        Raises:
-            各种下载或执行相关的异常.
         """
         max_auth_retries = 1
         auth_retry_count = 0
-
         cmd = initial_cmd
 
         while auth_retry_count <= max_auth_retries:
             try:
                 if progress and task_id is not None:
-                    # 启动进度监控任务
-                    progress_monitor_task = None
-                    if self.progress_callback:
-                        progress_monitor_task = asyncio.create_task(self._monitor_rich_progress(progress, task_id))
-
-                    try:
-                        result = await self.subprocess_manager.execute_with_progress(
-                            cmd, progress, task_id, timeout=timeout
-                        )
-                        return result
-                    finally:
-                        # 停止进度监控
-                        if progress_monitor_task:
-                            progress_monitor_task.cancel()
-                            try:
-                                await progress_monitor_task
-                            except asyncio.CancelledError:
-                                pass
+                    return await self._execute_with_progress_monitoring(cmd, progress, task_id, timeout)
                 else:
                     return await self.subprocess_manager.execute_simple(cmd, timeout=timeout)
             except AuthenticationException as e:
-                if auth_retry_count < max_auth_retries and self.cookies_manager:
-                    log.warning(f"🍪 检测到认证错误,尝试第 {auth_retry_count + 1} 次自动刷新cookies...")
+                auth_retry_count += 1
+                cmd = await self._handle_auth_failure(
+                    e, auth_retry_count, max_auth_retries, url, cmd_builder_func, cmd_builder_args
+                )
+            except Exception:
+                raise  # 重新抛出其他所有异常
 
-                    new_cookies_file = self.cookies_manager.refresh_cookies_for_url(url)
-
-                    if new_cookies_file:
-                        self.command_builder.update_cookies_file(new_cookies_file)
-                        # 在重试时才重新构建命令
-                        rebuilt_cmd = cmd_builder_func(**cmd_builder_args)
-                        cmd = rebuilt_cmd[0] if isinstance(rebuilt_cmd, tuple) else rebuilt_cmd
-
-                        auth_retry_count += 1
-                        log.info("✅ Cookies已更新,重试命令...")
-                        continue
-                    else:
-                        log.error("❌ 无法自动更新cookies,命令执行失败.")
-                        raise e
-                else:
-                    if not self.cookies_manager:
-                        log.error("❌ 未配置cookies管理器,无法自动处理认证错误.")
-                    elif auth_retry_count >= max_auth_retries:
-                        log.error(f"❌ 已达到最大认证重试次数 ({max_auth_retries}).")
-                    raise e
-            except Exception as e:
-                raise e
         raise DownloaderException("命令执行失败,所有重试均已用尽.")
 
-    async def _monitor_rich_progress(self, progress: Progress, task_id: TaskID):
-        """监控Rich进度条并更新Celery进度回调"""
-        last_percentage = -1
-        last_update_time = 0
-        update_interval = 0.5  # 每500ms检查一次
+    async def _execute_with_progress_monitoring(self, cmd: list, progress: Progress, task_id: TaskID, timeout: int):
+        """执行命令并监控Rich进度条。"""
+        progress_monitor_task = None
+        if self.progress_callback:
+            progress_monitor_task = asyncio.create_task(self._monitor_rich_progress(progress, task_id))
 
-        # 获取当前Celery进度作为起始点，避免进度重置
         try:
-            current_celery_progress = getattr(self, "_last_celery_progress", 0)
-        except Exception:
-            current_celery_progress = 0
+            return await self.subprocess_manager.execute_with_progress(cmd, progress, task_id, timeout=timeout)
+        finally:
+            if progress_monitor_task:
+                progress_monitor_task.cancel()
+                try:
+                    await progress_monitor_task
+                except asyncio.CancelledError:
+                    pass  # 正常取消
 
-        # 强化防回退：记录监控期间的最高进度
-        max_progress_during_monitoring = current_celery_progress
+    async def _handle_auth_failure(
+        self,
+        e: AuthenticationException,
+        attempt: int,
+        max_attempts: int,
+        url: str,
+        cmd_builder_func,
+        cmd_builder_args: dict,
+    ) -> list:
+        """处理认证失败,刷新cookies并返回新命令。"""
+        if attempt > max_attempts:
+            log.error(f"❌ 已达到最大认证重试次数 ({max_attempts}).")
+            raise e
 
-        # 添加初始状态检查
-        initial_checks = 0
-        max_initial_checks = 10  # 最多等待5秒(10 * 0.5s)
+        if not self.cookies_manager:
+            log.error("❌ 未配置cookies管理器,无法自动处理认证错误.")
+            raise e
+
+        log.warning(f"🍪 检测到认证错误,尝试第 {attempt} 次自动刷新cookies...")
+        new_cookies_file = self.cookies_manager.refresh_cookies_for_url(url)
+
+        if not new_cookies_file:
+            log.error("❌ 无法自动更新cookies,命令执行失败.")
+            raise e
+
+        self.command_builder.update_cookies_file(new_cookies_file)
+        rebuilt_cmd = cmd_builder_func(**cmd_builder_args)
+        log.info("✅ Cookies已更新,重试命令...")
+        return rebuilt_cmd[0] if isinstance(rebuilt_cmd, tuple) else rebuilt_cmd
+
+    async def _monitor_rich_progress(self, progress: Progress, task_id: TaskID):
+        """监控Rich进度条并更新Celery进度回调。"""
+        state = {
+            "last_percentage": -1,
+            "last_update_time": 0,
+            "update_interval": 0.5,
+            "celery_base_progress": getattr(self, "_last_celery_progress", 0),
+            "initial_checks": 0,
+            "max_initial_checks": 10,
+        }
+        state["max_seen_progress"] = state["celery_base_progress"]
 
         try:
             while True:
                 task = progress.tasks[task_id]
-
-                # 改进的进度计算逻辑
-                if task.total and task.total > 0 and task.completed is not None:
-                    rich_percentage = int((task.completed / task.total) * 100)
-
-                    # 防止在初期就达到100%（这通常是错误的）
-                    if initial_checks < max_initial_checks and rich_percentage >= 100:
-                        log.debug(f"初期阶段忽略100%进度，等待真实下载开始 (检查次数: {initial_checks})")
-                        initial_checks += 1
-                        await asyncio.sleep(update_interval)
-                        continue
-
-                    # 将Rich进度映射到剩余的Celery进度空间
-                    remaining_space = 100 - current_celery_progress
-                    base_adjusted_percentage = current_celery_progress + int((rich_percentage / 100) * remaining_space)
-
-                    # 强化防回退：确保调整后的进度不会低于监控期间的最高进度
-                    adjusted_percentage = max(base_adjusted_percentage, max_progress_during_monitoring)
-
-                    current_time = asyncio.get_event_loop().time()
-
-                    # 检查是否需要更新（只有进度增加时才更新）
-                    if adjusted_percentage > last_percentage and current_time - last_update_time >= update_interval:
-                        # 从Rich任务中获取ETA和速度信息
-                        eta_seconds = 0
-                        speed = ""
-
-                        if hasattr(task, "fields") and task.fields:
-                            eta_seconds = task.fields.get("eta_seconds", 0)
-                            speed = task.fields.get("speed", "")
-
-                        # 调用进度回调
-                        self._update_progress("正在下载中", adjusted_percentage, eta_seconds, speed)
-                        log.debug(
-                            f"进度更新: Rich={rich_percentage}%, Celery={adjusted_percentage}%, Total={task.total}, Completed={task.completed}"
-                        )
-
-                        last_percentage = adjusted_percentage
-                        max_progress_during_monitoring = adjusted_percentage
-                        last_update_time = current_time
-
-                        # 重置初期检查计数器，表示真实下载已开始
-                        if initial_checks > 0:
-                            initial_checks = 0
-                            log.debug("检测到真实下载进度，开始正常监控")
-                else:
-                    # 没有有效的total值，但仍然要提供反馈
-                    if initial_checks < max_initial_checks:
-                        initial_checks += 1
-                        log.debug(f"等待进度初始化... (total={task.total}, completed={task.completed})")
-
-                await asyncio.sleep(update_interval)
-
+                self._process_progress_tick(task, state)
+                await asyncio.sleep(state["update_interval"])
         except asyncio.CancelledError:
             log.debug("进度监控任务已取消")
             raise
         except Exception as e:
             log.warning(f"进度监控过程中出错: {e}")
+
+    def _process_progress_tick(self, task: Task, state: dict) -> None:
+        """处理单次进度检查，并在需要时更新。"""
+        # Guard Clause 1: 任务数据尚未准备好进行进度计算
+        if not (task.total and task.total > 0 and task.completed is not None):
+            if state["initial_checks"] < state["max_initial_checks"]:
+                state["initial_checks"] += 1
+                log.debug(f"等待进度初始化... (checks: {state['initial_checks']})")
+            return
+
+        rich_percentage = int((task.completed / task.total) * 100)
+
+        # Guard Clause 2: 忽略下载初期的、可能是错误的100%进度
+        if state["initial_checks"] < state["max_initial_checks"] and rich_percentage >= 100:
+            state["initial_checks"] += 1
+            log.debug(f"初期阶段忽略100%进度 (checks: {state['initial_checks']})")
+            return
+
+        adjusted_percentage = self._calculate_adjusted_progress(rich_percentage, state)
+        current_time = asyncio.get_event_loop().time()
+
+        # 检查是否满足更新条件
+        if (
+            adjusted_percentage > state["last_percentage"]
+            and current_time - state["last_update_time"] >= state["update_interval"]
+        ):
+            self._send_progress_update(task, adjusted_percentage, rich_percentage, state)
+
+    def _calculate_adjusted_progress(self, rich_percentage: int, state: dict) -> int:
+        """计算调整后的Celery进度，确保不回退。"""
+        remaining_space = 100 - state["celery_base_progress"]
+        base_adjusted = state["celery_base_progress"] + int((rich_percentage / 100) * remaining_space)
+        return max(base_adjusted, state["max_seen_progress"])
+
+    def _send_progress_update(self, task: Task, adjusted_percentage: int, rich_percentage: int, state: dict) -> None:
+        """发送进度回调并更新状态。"""
+        eta = task.fields.get("eta_seconds", 0) if hasattr(task, "fields") else 0
+        speed = task.fields.get("speed", "") if hasattr(task, "fields") else ""
+
+        self._update_progress("正在下载中", adjusted_percentage, eta, speed)
+        log.debug(f"进度更新: Rich={rich_percentage}%, Celery={adjusted_percentage}%")
+
+        # 更新状态
+        state["last_percentage"] = adjusted_percentage
+        state["max_seen_progress"] = adjusted_percentage
+        state["last_update_time"] = asyncio.get_event_loop().time()
+        if state["initial_checks"] > 0:
+            state["initial_checks"] = 0
+            log.debug("检测到真实下载进度，开始正常监控")
 
     def _parse_path_from_stderr(self, stderr: str) -> Optional[Path]:
         """从yt-dlp的stderr输出中解析目标文件路径。"""
@@ -485,233 +467,189 @@ class Downloader:
         """
         下载视频和音频并合并为MP4格式.
         采用主/备（Primary/Fallback）策略以提高可靠性。
-        主策略：尝试一体化下载和合并。
-        备用策略：如果主策略失败，则分步下载视频和音频，然后手动合并。
-
-        Args:
-            video_url: 视频URL
-            fallback_prefix: 获取标题失败时的备用文件前缀 (可选)
-            format_id: 要下载的特定视频格式ID (可选)
-            resolution: 视频分辨率 (例如: '1080p60')
-
-        Returns:
-            合并后的文件路径,失败返回None
-
-        Raises:
-            DownloaderException: 下载或合并失败, 请检查日志获取详细信息
+        这是协调下载流程的主函数。
         """
-        # 开始下载
         self._update_progress("正在下载中", 0)
+        file_prefix = await self._prepare_download_prefix(video_url, format_id, resolution, fallback_prefix)
+        log.info(f"开始下载并合并: {file_prefix}")
+        self.download_folder.mkdir(parents=True, exist_ok=True)
 
-        # --- 获取标题和分辨率，并生成最终文件名 ---
+        # --- 主策略 ---
+        primary_result = await self._run_primary_strategy(video_url, file_prefix, format_id, resolution)
+        if primary_result:
+            self._update_progress("下载完成", 100)
+            log.info(f"✅ 主策略成功: {primary_result.name}")
+            return primary_result
+
+        # --- 备用策略 ---
+        log.warning("主策略失败。将尝试备用策略。")
+        self._update_progress("切换备用策略", 35)
+        fallback_result = await self._run_fallback_strategy(video_url, file_prefix, format_id)
+        if fallback_result:
+            self._update_progress("下载完成", 100)
+            log.info(f"✅ 备用策略成功: {fallback_result.name}")
+            return fallback_result
+
+        # --- 最终检查与失败 ---
+        log.error("主策略和备用策略均失败。")
+        final_check = await self._find_and_verify_output_file(file_prefix, (".mp4",))
+        if final_check:
+            log.info(f"在所有策略失败后，找到了一个最终文件: {final_check.name}")
+            return final_check
+
+        raise DownloaderException("下载和合并视频失败，所有策略均已尝试。")
+
+    async def _prepare_download_prefix(
+        self, video_url: str, format_id: str, resolution: str, fallback_prefix: Optional[str]
+    ) -> str:
+        """获取视频信息并准备文件名前缀。"""
         try:
-            # 1. Get video title
             self._update_progress("正在获取视频信息", 5)
             video_info_gen = self.stream_playlist_info(video_url)
             video_info = await video_info_gen.__anext__()
             video_title = video_info.get("title", "video")
-
             self._update_progress("正在解析格式信息", 10)
 
-            # 2. 根据 format_id 查找确切的分辨率，如果失败则使用传递的 resolution 参数
             resolution_suffix = ""
             if format_id and "formats" in video_info:
-                # Find the selected format to get its exact resolution
-                selected_format = next(
-                    (f for f in video_info["formats"] if f.get("format_id") == format_id),
-                    None,
-                )
+                selected_format = next((f for f in video_info["formats"] if f.get("format_id") == format_id), None)
                 if selected_format and selected_format.get("width") and selected_format.get("height"):
                     resolution_suffix = f"_{selected_format['width']}x{selected_format['height']}"
 
-            # 如果无法从format_id获取分辨率，但有resolution参数，则使用它
             if not resolution_suffix and resolution:
-                # resolution 可能是 "1920x1080" 格式，直接使用
                 if "x" in resolution and resolution != "audio":
                     resolution_suffix = f"_{resolution}"
-                    log.info(f"使用传递的分辨率参数: {resolution}")
                 elif resolution.endswith("p") and resolution != "audio":
-                    # 处理如 "1080p" 格式
                     resolution_suffix = f"_{resolution}"
-                    log.info(f"使用传递的分辨率参数: {resolution}")
 
-            # 3. 组合成最终的文件前缀
-            file_prefix = f"{self._sanitize_filename(video_title)}{resolution_suffix}"
-
+            return f"{self._sanitize_filename(video_title)}{resolution_suffix}"
         except (StopAsyncIteration, DownloaderException) as e:
             log.warning(f"无法获取视频标题: {e}。将使用备用前缀。")
-            # 使用 fallback_prefix 或一个默认值
-            file_prefix = fallback_prefix or "video"
-        log.info(f"使用文件前缀: {file_prefix}")
+            return fallback_prefix or "video"
 
-        log.info(f"开始下载并合并: {file_prefix}")
-        self.download_folder.mkdir(parents=True, exist_ok=True)
-
-        # --- 主策略：尝试一体化下载和合并 ---
+    async def _run_primary_strategy(
+        self, video_url: str, file_prefix: str, format_id: str, resolution: str
+    ) -> Optional[Path]:
+        """执行主策略（一体化下载）。"""
         log.info("尝试主策略：一体化下载和合并...")
         self._update_progress("准备下载", 15)
-
         try:
-            cmd_builder_args = {
+            cmd_args = {
                 "output_path": str(self.download_folder),
                 "url": video_url,
                 "file_prefix": file_prefix,
                 "format_id": format_id,
                 "resolution": resolution,
             }
-            download_cmd, _, exact_output_path = self.command_builder.build_combined_download_cmd(**cmd_builder_args)
+            cmd, _, exact_output_path = self.command_builder.build_combined_download_cmd(**cmd_args)
 
             self._update_progress("开始下载", 20)
+            await self._download_with_progress(
+                "Download/Merge", cmd, self.command_builder.build_combined_download_cmd, video_url, cmd_args
+            )
 
-            async with _progress_semaphore:
-                with Progress(
-                    SpinnerColumn(spinner_name="line"),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    "[progress.percentage]{task.percentage:>3.0f}%",
-                    "•",
-                    TransferSpeedColumn(),
-                    console=console,
-                ) as progress:
-                    download_task = progress.add_task("Download/Merge", total=100)
-
-                    # Rich进度监控会自动更新Celery进度，无需手动调用
-                    await self._execute_cmd_with_auth_retry(
-                        initial_cmd=download_cmd,
-                        cmd_builder_func=self.command_builder.build_combined_download_cmd,
-                        url=video_url,
-                        cmd_builder_args=cmd_builder_args,
-                        progress=progress,
-                        task_id=download_task,
-                    )
-
-            # 验证下载结果
             if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
-                self._update_progress("下载完成", 100)
-                log.info(f"✅ 主策略成功: {exact_output_path.name}")
                 return exact_output_path
-            else:
-                log.warning("主策略执行后未找到有效的输出文件。")
-                self._update_progress("正在下载中", 35)
-
+            log.warning("主策略执行后未找到有效的输出文件。")
+            return None
         except asyncio.CancelledError:
             log.warning("主策略下载任务被取消")
             raise
         except Exception as e:
-            log.warning(f"主策略失败: {e}。将尝试备用策略。")
+            log.warning(f"主策略执行中出错: {e}")
+            return None
 
-        # --- 备用策略：分步下载和手动合并 ---
-        log.info("切换到备用策略：分步下载和手动合并...")
-        self._update_progress("切换备用策略", 35)
-        video_file = None
-        audio_file = None
-
+    async def _run_fallback_strategy(self, video_url: str, file_prefix: str, format_id: str) -> Optional[Path]:
+        """执行备用策略（分步下载和合并）。"""
         try:
-            # 1. 下载视频部分
-            self._update_progress("下载视频流", 40)
-            async with _progress_semaphore:
-                with Progress(
-                    SpinnerColumn(spinner_name="line"),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    DownloadColumn(),
-                    "•",
-                    TransferSpeedColumn(),
-                    console=console,
-                ) as progress:
-                    video_task = progress.add_task("Downloading Video", total=100)
-                    video_cmd_args = {
-                        "output_path": str(self.download_folder),
-                        "url": video_url,
-                        "file_prefix": file_prefix,
-                        "format_id": format_id,
-                    }
-                    video_cmd = self.command_builder.build_separate_video_download_cmd(**video_cmd_args)
-                    await self._execute_cmd_with_auth_retry(
-                        initial_cmd=video_cmd,
-                        cmd_builder_func=self.command_builder.build_separate_video_download_cmd,
-                        url=video_url,
-                        cmd_builder_args=video_cmd_args,
-                        progress=progress,
-                        task_id=video_task,
-                    )
-
-            # 查找视频文件
-            video_file = await self._find_and_verify_output_file(f"{file_prefix}.video", (".mp4", ".webm", ".mkv"))
+            video_file = await self._download_separate_stream("video", video_url, file_prefix, format_id)
             if not video_file:
                 raise DownloaderException("备用策略：视频部分下载后未找到文件。")
             log.info(f"✅ 视频部分下载成功: {video_file.name}")
 
-            # 2. 下载音频部分
-            self._update_progress("下载音频流", 70)  # 调整为70%，避免与音频进度冲突
-            async with _progress_semaphore:
-                with Progress(
-                    SpinnerColumn(spinner_name="line"),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    DownloadColumn(),
-                    "•",
-                    TransferSpeedColumn(),
-                    console=console,
-                ) as progress:
-                    audio_task = progress.add_task("Downloading Audio", total=100)
-                    audio_cmd_args = {
-                        "output_path": str(self.download_folder),
-                        "url": video_url,
-                        "file_prefix": file_prefix,
-                    }
-                    audio_cmd = self.command_builder.build_separate_audio_download_cmd(**audio_cmd_args)
-                    await self._execute_cmd_with_auth_retry(
-                        initial_cmd=audio_cmd,
-                        cmd_builder_func=self.command_builder.build_separate_audio_download_cmd,
-                        url=video_url,
-                        cmd_builder_args=audio_cmd_args,
-                        progress=progress,
-                        task_id=audio_task,
-                    )
-
-            # 查找音频文件
-            audio_file = await self._find_and_verify_output_file(
-                f"{file_prefix}.audio", (".m4a", ".mp3", ".opus", ".aac")
-            )
+            audio_file = await self._download_separate_stream("audio", video_url, file_prefix)
             if not audio_file:
                 log.warning("备用策略：音频部分下载后未找到文件。将尝试无音频合并。")
 
-            # 3. 手动合并
-            if video_file and audio_file:
-                self._update_progress("合并音视频", 85)  # 调整为85%
-                merged_file_path = self.download_folder / f"{file_prefix}.mp4"
-                log.info(f"🔧 正在手动合并: {video_file.name} + {audio_file.name} -> {merged_file_path.name}")
-
-                await self.file_processor.merge_to_mp4(video_file, audio_file, merged_file_path)
-
-                if merged_file_path.exists() and merged_file_path.stat().st_size > 0:
-                    self._update_progress("下载完成", 100)
-                    log.info(f"✅ 备用策略成功: {merged_file_path.name}")
-                    return merged_file_path
-                else:
-                    raise DownloaderException("备用策略：手动合并后未生成有效文件。")
-
-            # 如果只有视频文件，作为最后手段返回
-            if video_file:
-                self._update_progress("处理视频文件", 90)  # 调整为90%
-                log.warning("备用策略：无法合并，返回仅视频文件。")
-                # 重命名视频文件以匹配最终文件名
-                final_video_path = self.download_folder / f"{file_prefix}.mp4"
-                video_file.rename(final_video_path)
-                self._update_progress("下载完成", 100)
-                return final_video_path
-
+            return await self._merge_or_finalize_fallback(video_file, audio_file, file_prefix)
         except Exception as e:
             log.error(f"备用策略执行失败: {e}", exc_info=True)
-            # 如果备用策略也失败，但主策略可能已经下载了部分文件，最后再检查一次
-            final_check = await self._find_and_verify_output_file(file_prefix, (".mp4",))
-            if final_check:
-                log.info(f"在所有策略失败后，找到了一个最终文件: {final_check.name}")
-                return final_check
-            raise DownloaderException(f"主策略和备用策略均失败: {e}") from e
+            return None
 
-        raise DownloaderException("下载和合并视频失败，所有策略均已尝试。")
+    async def _download_separate_stream(
+        self, stream_type: str, video_url: str, file_prefix: str, format_id: Optional[str] = None
+    ) -> Optional[Path]:
+        """为备用策略下载单个流（视频或音频）。"""
+        if stream_type == "video":
+            self._update_progress("下载视频流", 40)
+            task_desc, builder, cmd_args, search_prefix, exts = (
+                "Downloading Video",
+                self.command_builder.build_separate_video_download_cmd,
+                {
+                    "output_path": str(self.download_folder),
+                    "url": video_url,
+                    "file_prefix": file_prefix,
+                    "format_id": format_id,
+                },
+                f"{file_prefix}.video",
+                (".mp4", ".webm", ".mkv"),
+            )
+        else:
+            self._update_progress("下载音频流", 70)
+            task_desc, builder, cmd_args, search_prefix, exts = (
+                "Downloading Audio",
+                self.command_builder.build_separate_audio_download_cmd,
+                {"output_path": str(self.download_folder), "url": video_url, "file_prefix": file_prefix},
+                f"{file_prefix}.audio",
+                (".m4a", ".mp3", ".opus", ".aac"),
+            )
+
+        cmd = builder(**cmd_args)
+        await self._download_with_progress(task_desc, cmd, builder, video_url, cmd_args)
+        return await self._find_and_verify_output_file(search_prefix, exts)
+
+    async def _merge_or_finalize_fallback(
+        self, video_file: Path, audio_file: Optional[Path], file_prefix: str
+    ) -> Optional[Path]:
+        """处理备用策略的最后合并或重命名步骤。"""
+        final_path = self.download_folder / f"{file_prefix}.mp4"
+
+        if audio_file:
+            self._update_progress("合并音视频", 85)
+            log.info(f"🔧 正在手动合并: {video_file.name} + {audio_file.name} -> {final_path.name}")
+            await self.file_processor.merge_to_mp4(video_file, audio_file, final_path)
+            if final_path.exists() and final_path.stat().st_size > 0:
+                return final_path
+            raise DownloaderException("备用策略：手动合并后未生成有效文件。")
+        else:
+            self._update_progress("处理视频文件", 90)
+            log.warning("备用策略：无法合并，返回仅视频文件。")
+            video_file.rename(final_path)
+            return final_path
+
+    async def _download_with_progress(
+        self, task_desc: str, cmd: list, cmd_builder_func, url: str, cmd_builder_args: dict
+    ):
+        """辅助函数，在Rich进度条上下文中运行命令。"""
+        async with _progress_semaphore:
+            with Progress(
+                SpinnerColumn(spinner_name="line"),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                DownloadColumn(),
+                "•",
+                TransferSpeedColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task(task_desc, total=100)
+                await self._execute_cmd_with_auth_retry(
+                    initial_cmd=cmd,
+                    cmd_builder_func=cmd_builder_func,
+                    url=url,
+                    cmd_builder_args=cmd_builder_args,
+                    progress=progress,
+                    task_id=task,
+                )
 
     async def download_with_smart_strategy(
         self,
@@ -721,122 +659,89 @@ class Downloader:
         fallback_prefix: Optional[str] = None,
     ) -> Optional[Path]:
         """
-        使用智能策略下载视频，自动判断完整流vs分离流
-
-        Args:
-            video_url: 视频URL
-            format_id: 要下载的特定视频格式ID (可选)
-            resolution: 视频分辨率 (例如: '1080p60')
-            fallback_prefix: 获取标题失败时的备用文件前缀 (可选)
-
-        Returns:
-            下载完成的文件路径，失败返回None
-
-        Raises:
-            DownloaderException: 下载失败
+        使用智能策略下载视频，自动判断完整流vs分离流。
+        这是一个协调函数，负责准备、执行和处理下载降级。
         """
-        # 获取视频信息和格式列表
-        try:
-            video_info_gen = self.stream_playlist_info(video_url)
-            video_info = await video_info_gen.__anext__()
-            video_title = video_info.get("title", "video")
-            formats = video_info.get("formats", [])
-
-            if not formats:
-                raise DownloaderException("未找到任何可用的视频格式")
-
-            # 生成文件前缀
-            resolution_suffix = ""
-            if format_id and "formats" in video_info:
-                # 确保格式ID类型一致性
-                format_id_str = str(format_id)
-                selected_format = next((f for f in formats if str(f.get("format_id")) == format_id_str), None)
-                if selected_format and selected_format.get("width") and selected_format.get("height"):
-                    resolution_suffix = f"_{selected_format['width']}x{selected_format['height']}"
-
-            # 如果无法从format_id获取分辨率，但有resolution参数，则使用它
-            if not resolution_suffix and resolution:
-                # resolution 可能是 "1920x1080" 格式，直接使用
-                if "x" in resolution and resolution != "audio":
-                    resolution_suffix = f"_{resolution}"
-                    log.info(f"智能下载使用传递的分辨率参数: {resolution}")
-                elif resolution.endswith("p") and resolution != "audio":
-                    # 处理如 "1080p" 格式
-                    resolution_suffix = f"_{resolution}"
-                    log.info(f"智能下载使用传递的分辨率参数: {resolution}")
-
-            file_prefix = f"{self._sanitize_filename(video_title)}{resolution_suffix}"
-
-        except (StopAsyncIteration, DownloaderException) as e:
-            log.warning(f"无法获取视频信息: {e}。将使用备用前缀。")
-            file_prefix = fallback_prefix or "video"
-            formats = []
-
-        log.info(f"智能下载开始: {file_prefix}")
-        self.download_folder.mkdir(parents=True, exist_ok=True)
-
-        # 如果无法获取格式信息，降级到传统方法
-        if not formats:
+        # 1. 准备下载所需信息
+        preparation_result = await self._prepare_smart_download(video_url, format_id, resolution, fallback_prefix)
+        if not preparation_result:
             log.warning("无法获取格式列表，降级到传统下载方法")
             return await self.download_and_merge(video_url, format_id, resolution, fallback_prefix)
 
+        file_prefix, formats = preparation_result
+        log.info(f"智能下载开始: {file_prefix}")
+        self.download_folder.mkdir(parents=True, exist_ok=True)
+
+        # 2. 执行智能下载，并在失败时降级
         try:
-            # 构建智能下载命令
-            cmd_builder_args = {
-                "output_path": str(self.download_folder),
-                "url": video_url,
-                "file_prefix": file_prefix,
-                "formats": formats,
-                "format_id": format_id,
-                "resolution": resolution,
-            }
-
-            download_cmd, format_used, exact_output_path, strategy = self.command_builder.build_smart_download_cmd(
-                **cmd_builder_args
-            )
-
-            # 根据策略显示不同的进度描述
-            if strategy == DownloadStrategy.DIRECT:
-                progress_desc = "智能下载(完整流)"
-            else:
-                progress_desc = "智能下载(合并流)"
-
-            # 执行下载
-            async with _progress_semaphore:
-                with Progress(
-                    SpinnerColumn(spinner_name="line"),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    "[progress.percentage]{task.percentage:>3.0f}%",
-                    "•",
-                    TransferSpeedColumn(),
-                    console=console,
-                ) as progress:
-                    download_task = progress.add_task(progress_desc, total=100)
-                    await self._execute_cmd_with_auth_retry(
-                        initial_cmd=download_cmd,
-                        cmd_builder_func=self.command_builder.build_smart_download_cmd,
-                        url=video_url,
-                        cmd_builder_args=cmd_builder_args,
-                        progress=progress,
-                        task_id=download_task,
-                    )
-
-            # 验证输出文件
-            if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
-                strategy_name = "完整流直下" if strategy == DownloadStrategy.DIRECT else "分离流合并"
-                log.info(f"✅ 智能下载成功({strategy_name}): {exact_output_path.name}")
-                return exact_output_path
+            result_path = await self._execute_smart_download(video_url, file_prefix, formats, format_id, resolution)
+            if result_path:
+                return result_path
             else:
                 log.warning("智能下载执行后未找到有效的输出文件，尝试传统方法")
-                return await self.download_and_merge(video_url, format_id, resolution, fallback_prefix)
-
+                return await self.download_and_merge(video_url, format_id, resolution, file_prefix)
         except asyncio.CancelledError:
             log.warning("智能下载任务被取消")
             raise
         except Exception as e:
             log.warning(f"智能下载失败: {e}，降级到传统方法")
-            return await self.download_and_merge(video_url, format_id, resolution, fallback_prefix)
+            return await self.download_and_merge(video_url, format_id, resolution, file_prefix)
+
+    async def _prepare_smart_download(
+        self, video_url: str, format_id: str, resolution: str, fallback_prefix: Optional[str]
+    ) -> Optional[tuple]:
+        """获取视频信息，准备文件前缀和格式列表。如果失败则返回None。"""
+        try:
+            video_info_gen = self.stream_playlist_info(video_url)
+            video_info = await video_info_gen.__anext__()
+            video_title = video_info.get("title", "video")
+            formats = video_info.get("formats", [])
+            if not formats:
+                raise DownloaderException("未找到任何可用的视频格式")
+
+            resolution_suffix = ""
+            if format_id:
+                format_id_str = str(format_id)
+                selected_format = next((f for f in formats if str(f.get("format_id")) == format_id_str), None)
+                if selected_format and selected_format.get("width") and selected_format.get("height"):
+                    resolution_suffix = f"_{selected_format['width']}x{selected_format['height']}"
+
+            if not resolution_suffix and resolution:
+                if "x" in resolution and resolution != "audio":
+                    resolution_suffix = f"_{resolution}"
+                elif resolution.endswith("p") and resolution != "audio":
+                    resolution_suffix = f"_{resolution}"
+
+            file_prefix = f"{self._sanitize_filename(video_title)}{resolution_suffix}"
+            return file_prefix, formats
+        except (StopAsyncIteration, DownloaderException) as e:
+            log.warning(f"无法获取视频信息: {e}。")
+            return None
+
+    async def _execute_smart_download(
+        self, video_url: str, file_prefix: str, formats: list, format_id: str, resolution: str
+    ) -> Optional[Path]:
+        """执行智能下载的核心逻辑。"""
+        cmd_builder_args = {
+            "output_path": str(self.download_folder),
+            "url": video_url,
+            "file_prefix": file_prefix,
+            "formats": formats,
+            "format_id": format_id,
+            "resolution": resolution,
+        }
+        cmd, _, exact_output_path, strategy = self.command_builder.build_smart_download_cmd(**cmd_builder_args)
+        progress_desc = "智能下载(完整流)" if strategy == DownloadStrategy.DIRECT else "智能下载(合并流)"
+
+        await self._download_with_progress(
+            progress_desc, cmd, self.command_builder.build_smart_download_cmd, video_url, cmd_builder_args
+        )
+
+        if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
+            strategy_name = "完整流直下" if strategy == DownloadStrategy.DIRECT else "分离流合并"
+            log.info(f"✅ 智能下载成功({strategy_name}): {exact_output_path.name}")
+            return exact_output_path
+        return None
 
     async def download_audio(
         self,
@@ -846,138 +751,20 @@ class Downloader:
     ) -> Optional[Path]:
         """
         下载指定URL的音频。
-        对已知的转换格式（如mp3）采用"主动指定"策略，对直接下载的原始流采用"主动搜索"策略。
-
-        Args:
-            video_url: 视频URL
-            audio_format: 音频格式 (例如: 'mp3', 'm4a', 'best', 或一个特定的format_id)
-            fallback_prefix: 获取标题失败时的备用文件前缀 (可选)
-
-        Returns:
-            下载的音频文件路径,失败返回None
-
-        Raises:
-            DownloaderException: 下载失败
+        这是一个调度函数，根据请求的格式选择合适的下载策略。
         """
-        log.info(f"开始下载音频: {video_url} (请求的格式/策略: {audio_format})")
+        log.info(f"开始下载音频: {video_url} (格式: {audio_format})")
         self.download_folder.mkdir(parents=True, exist_ok=True)
-
-        # 开始音频下载进度更新
         self._update_progress("正在下载中", 0)
 
         try:
-            try:
-                self._update_progress("获取视频信息", 5)
-                video_info_gen = self.stream_playlist_info(video_url)
-                video_info = await video_info_gen.__anext__()
-                video_title = video_info.get("title", "audio")
-                self._update_progress("解析音频格式", 10)
-            except (StopAsyncIteration, DownloaderException) as e:
-                log.warning(f"无法获取视频标题: {e}。将使用备用前缀。")
-                video_title = fallback_prefix or "audio"
-                self._update_progress("使用备用信息", 10)
-
-            sanitized_title = self._sanitize_filename(video_title)
-            # 音频文件不使用格式后缀作为前缀，只使用标题
-            file_prefix = sanitized_title
-            log.info(f"使用文件前缀: {file_prefix}")
-            self._update_progress("准备音频下载", 15)
-
+            file_prefix = await self._prepare_audio_download(video_url, fallback_prefix)
             known_conversion_formats = ["mp3", "m4a", "wav", "opus", "aac", "flac"]
 
             if audio_format in known_conversion_formats:
-                # --- 策略1: 转换格式 (路径可预测) ---
-                exact_output_path = self.download_folder / f"{sanitized_title}.{audio_format}"
-                log.info(f"音频转换请求。确切的输出路径为: {exact_output_path}")
-                self._update_progress("开始音频下载", 20)
-
-                cmd_args = {
-                    "url": video_url,
-                    "output_template": str(exact_output_path),
-                    "audio_format": audio_format,
-                }
-                cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
-
-                async with _progress_semaphore:
-                    with Progress(
-                        SpinnerColumn(spinner_name="dots"),
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        "[progress.percentage]{task.percentage:>3.0f}%",
-                        "•",
-                        TransferSpeedColumn(),
-                        console=console,
-                    ) as progress:
-                        audio_task = progress.add_task("Audio Download", total=100)
-
-                        # Rich进度监控会自动更新Celery进度
-                        await self._execute_cmd_with_auth_retry(
-                            initial_cmd=cmd,
-                            cmd_builder_func=self.command_builder.build_audio_download_cmd,
-                            url=video_url,
-                            cmd_builder_args=cmd_args,
-                            progress=progress,
-                            task_id=audio_task,
-                        )
-
-                if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
-                    self._update_progress("下载完成", 100)
-                    return exact_output_path
-                else:
-                    raise DownloaderException(f"音频转换失败，预期的输出文件 '{exact_output_path}' 未找到或为空。")
+                return await self._download_and_convert_audio(video_url, file_prefix, audio_format)
             else:
-                # --- 策略2: 直接下载原始流 (主动验证) ---
-                log.info("直接音频流下载请求。将采用主动验证策略。")
-                self._update_progress("准备直接下载", 20)
-
-                # 使用模板让yt-dlp能自动添加正确的扩展名
-                output_template = self.download_folder / f"{sanitized_title}.%(ext)s"
-                cmd_args = {
-                    "url": video_url,
-                    "output_template": str(output_template),
-                    "audio_format": audio_format,
-                }
-                cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
-
-                async with _progress_semaphore:
-                    with Progress(
-                        SpinnerColumn(spinner_name="dots"),
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        "[progress.percentage]{task.percentage:>3.0f}%",
-                        "•",
-                        TransferSpeedColumn(),
-                        console=console,
-                    ) as progress:
-                        audio_task = progress.add_task("Audio Stream", total=100)
-
-                        # Rich进度监控会自动更新Celery进度
-                        await self._execute_cmd_with_auth_retry(
-                            initial_cmd=cmd,
-                            cmd_builder_func=self.command_builder.build_audio_download_cmd,
-                            url=video_url,
-                            cmd_builder_args=cmd_args,
-                            progress=progress,
-                            task_id=audio_task,
-                        )
-
-                # 主动验证并查找输出文件
-                preferred_extensions = (
-                    ".m4a",
-                    ".mp4",
-                    ".webm",
-                    ".opus",
-                    ".ogg",
-                    ".mp3",
-                )
-                output_file = await self._find_and_verify_output_file(sanitized_title, preferred_extensions)
-
-                if output_file:
-                    self._update_progress("下载完成", 100)
-                    log.info(f"✅ 音频下载成功: {output_file.name}")
-                    return output_file
-                else:
-                    raise DownloaderException("音频下载后未找到文件，所有策略均失败。")
+                return await self._download_direct_audio_stream(video_url, file_prefix, audio_format)
 
         except asyncio.CancelledError:
             log.warning("音频下载任务被取消")
@@ -985,6 +772,64 @@ class Downloader:
         except Exception as e:
             log.error(f"音频下载失败: {e}", exc_info=True)
             raise DownloaderException(f"音频下载失败: {e}") from e
+
+    async def _prepare_audio_download(self, video_url: str, fallback_prefix: Optional[str]) -> str:
+        """获取视频信息并准备音频文件名前缀。"""
+        try:
+            self._update_progress("获取视频信息", 5)
+            video_info_gen = self.stream_playlist_info(video_url)
+            video_info = await video_info_gen.__anext__()
+            video_title = video_info.get("title", "audio")
+            self._update_progress("解析音频格式", 10)
+        except (StopAsyncIteration, DownloaderException) as e:
+            log.warning(f"无法获取视频标题: {e}。将使用备用前缀。")
+            video_title = fallback_prefix or "audio"
+            self._update_progress("使用备用信息", 10)
+
+        sanitized_title = self._sanitize_filename(video_title)
+        log.info(f"使用文件前缀: {sanitized_title}")
+        self._update_progress("准备音频下载", 15)
+        return sanitized_title
+
+    async def _download_and_convert_audio(self, video_url: str, file_prefix: str, audio_format: str) -> Path:
+        """策略1: 下载并转换为已知格式，输出路径是可预测的。"""
+        exact_output_path = self.download_folder / f"{file_prefix}.{audio_format}"
+        log.info(f"音频转换请求。确切的输出路径为: {exact_output_path}")
+        self._update_progress("开始音频下载", 20)
+
+        cmd_args = {"url": video_url, "output_template": str(exact_output_path), "audio_format": audio_format}
+        cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
+
+        await self._download_with_progress(
+            "Audio Download", cmd, self.command_builder.build_audio_download_cmd, video_url, cmd_args
+        )
+
+        if exact_output_path.exists() and exact_output_path.stat().st_size > 0:
+            self._update_progress("下载完成", 100)
+            return exact_output_path
+        raise DownloaderException(f"音频转换失败，预期的输出文件 '{exact_output_path}' 未找到或为空。")
+
+    async def _download_direct_audio_stream(self, video_url: str, file_prefix: str, audio_format: str) -> Path:
+        """策略2: 直接下载原始音频流，输出路径需要主动搜索。"""
+        log.info("直接音频流下载请求。将采用主动验证策略。")
+        self._update_progress("准备直接下载", 20)
+
+        output_template = self.download_folder / f"{file_prefix}.%(ext)s"
+        cmd_args = {"url": video_url, "output_template": str(output_template), "audio_format": audio_format}
+        cmd = self.command_builder.build_audio_download_cmd(**cmd_args)
+
+        await self._download_with_progress(
+            "Audio Stream", cmd, self.command_builder.build_audio_download_cmd, video_url, cmd_args
+        )
+
+        preferred_extensions = (".m4a", ".mp4", ".webm", ".opus", ".ogg", ".mp3")
+        output_file = await self._find_and_verify_output_file(file_prefix, preferred_extensions)
+
+        if output_file:
+            self._update_progress("下载完成", 100)
+            log.info(f"✅ 音频下载成功: {output_file.name}")
+            return output_file
+        raise DownloaderException("音频下载后未找到文件，所有策略均失败。")
 
     async def cleanup(self):
         """

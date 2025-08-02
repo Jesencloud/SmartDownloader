@@ -290,6 +290,11 @@ console = Console()
 log = logging.getLogger(__name__)
 
 
+# ==================== 样式常量 ====================
+STYLE_SUCCESS = "bold green"
+STYLE_WARNING = "bold yellow"
+
+
 class ConfigManager:
     """简化的配置管理器。
 
@@ -321,7 +326,7 @@ class ConfigManager:
         if not self.config_file.exists():
             console.print(
                 f"⚠️ 配置文件 {self.config_file} 不存在，将创建默认配置",
-                style="bold yellow",
+                style=STYLE_WARNING,
             )
             default_config = AppConfig()
             self.save_config(default_config)
@@ -332,7 +337,7 @@ class ConfigManager:
                 raw_config = yaml.safe_load(f) or {}
 
             app_config = AppConfig.model_validate(raw_config)
-            console.print(f"✅ 配置文件加载并验证成功: {self.config_file}", style="bold green")
+            console.print(f"✅ 配置文件加载并验证成功: {self.config_file}", style=STYLE_SUCCESS)
             return app_config
 
         except yaml.YAMLError as e:
@@ -347,7 +352,7 @@ class ConfigManager:
         except Exception as e:
             log.error(f"❌ 加载配置文件时发生未知错误: {e}", exc_info=True)
 
-        console.print("使用默认配置作为回退", style="bold yellow")
+        console.print("使用默认配置作为回退", style=STYLE_WARNING)
         return AppConfig()
 
     def save_config(self, config_data: AppConfig) -> None:
@@ -369,7 +374,7 @@ class ConfigManager:
                     sort_keys=False,
                 )  # 保持原有顺序
 
-            console.print(f"✅ 配置已保存到: {self.config_file}", style="bold green")
+            console.print(f"✅ 配置已保存到: {self.config_file}", style=STYLE_SUCCESS)
         except (OSError, IOError, PermissionError) as e:
             log.error(f"❌ 无法写入配置文件 {self.config_file}: {e}")
         except yaml.YAMLError as e:
@@ -386,56 +391,53 @@ class ConfigManager:
         Returns:
             Path: 创建好的下载文件夹路径。
         """
-        folders_config = self.config.folders
-
         if script_path is None:
             script_path = Path(__file__).parent
 
-        # 确定基础文件夹
-        if folders_config.custom_download_path:
-            base_folder = Path(folders_config.custom_download_path)
-            if not base_folder.is_absolute() and folders_config.relative_to_script:
-                base_folder = script_path / folders_config.custom_download_path
-        else:
-            base_folder_name = folders_config.base_download_folder
-            if folders_config.relative_to_script:
-                base_folder = script_path / base_folder_name
-            else:
-                base_folder = Path.cwd() / base_folder_name
+        base_folder = self._get_base_folder_path(script_path)
 
         # 添加时间戳文件夹
         final_folder = base_folder
-        if folders_config.use_timestamp_folder:
-            timestamp = datetime.now().strftime(folders_config.timestamp_format)
+        if self.config.folders.use_timestamp_folder:
+            timestamp = datetime.now().strftime(self.config.folders.timestamp_format)
             final_folder = base_folder / timestamp
 
-        # 创建文件夹
+        return self._create_folder_with_fallback(final_folder)
+
+    def _get_base_folder_path(self, script_path: Path) -> Path:
+        """根据配置确定基础下载文件夹的路径。"""
+        folders_config = self.config.folders
+        if folders_config.custom_download_path:
+            base_folder = Path(folders_config.custom_download_path)
+            if not base_folder.is_absolute() and folders_config.relative_to_script:
+                return script_path / folders_config.custom_download_path
+            return base_folder
+
+        base_folder_name = folders_config.base_download_folder
+        if folders_config.relative_to_script:
+            return script_path / base_folder_name
+
+        return Path.cwd() / base_folder_name
+
+    def _create_folder_with_fallback(self, folder_path: Path) -> Path:
+        """尝试创建指定文件夹，如果失败则回退到备用文件夹。"""
         try:
-            final_folder.mkdir(parents=True, exist_ok=True)
+            folder_path.mkdir(parents=True, exist_ok=True)
+            return folder_path
         except (OSError, PermissionError) as e:
             log.error(f"❌ 创建下载文件夹失败，权限不足: {e}")
-            # 回退到当前目录
-            fallback_folder = Path.cwd() / datetime.now().strftime("%Y%m%d-%H%M%S")
-            try:
-                fallback_folder.mkdir(parents=True, exist_ok=True)
-                console.print(f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow")
-                return fallback_folder
-            except Exception as fallback_error:
-                log.critical(f"致命错误：无法创建任何文件夹: {fallback_error}")
-                raise
         except Exception as e:
             log.error(f"❌ 创建下载文件夹时发生未知错误: {e}", exc_info=True)
-            # 回退到当前目录
-            fallback_folder = Path.cwd() / datetime.now().strftime("%Y%m%d-%H%M%S")
-            try:
-                fallback_folder.mkdir(parents=True, exist_ok=True)
-                console.print(f"📁 使用备用文件夹: {fallback_folder}", style="bold yellow")
-                return fallback_folder
-            except Exception as fallback_error:
-                log.critical(f"致命错误：无法创建任何文件夹: {fallback_error}")
-                raise
 
-        return final_folder
+        # 回退逻辑
+        fallback_folder = Path.cwd() / datetime.now().strftime("%Y%m%d-%H%M%S")
+        try:
+            fallback_folder.mkdir(parents=True, exist_ok=True)
+            console.print(f"📁 使用备用文件夹: {fallback_folder}", style=STYLE_WARNING)
+            return fallback_folder
+        except Exception as fallback_error:
+            log.critical(f"致命错误：无法创建任何文件夹: {fallback_error}")
+            raise
 
     def reload_config(self) -> bool:
         """重新加载配置。
@@ -445,7 +447,7 @@ class ConfigManager:
         """
         try:
             self.config = self._load_config()
-            console.print("✅ 配置重新加载成功", style="bold green")
+            console.print("✅ 配置重新加载成功", style=STYLE_SUCCESS)
             return True
         except Exception as e:
             log.error(f"❌ 重新加载配置时发生未知错误: {e}", exc_info=True)

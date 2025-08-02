@@ -8,17 +8,17 @@
 
 ### 修复
 
-- **代码缺陷修复**：
-- 修复web提示下载失败，但是服务器下载成功异常
-- 增强下载路径，防止非法入侵，task.py下载注册到redis；移除script.js中测试代码
-- 修复前端点击'清除'按钮后历史记录无法显示
-- 恢复视频HLS下载
-Redis过期后，删除按钮和重新保存按钮修复
+- **安全修复**：
+  - 修复了 `web/main.py` 中 `get_downloaded_file` 和 `delete_downloaded_file` 端点存在的路径遍历漏洞，防止访问下载目录之外的文件。
+  - 修复了 `web/main.py` 中 `get_downloaded_file` 端点存在的 CRLF 注入漏洞，防止恶意构造响应头。
+  - 修复了 `web/main.py` 中 `get_downloaded_file` 端点存在的 TOCTOU (检查时与使用时不同) 漏洞，确保使用经过验证的文件路径。
+- **功能修复**：
+  - 修复了 `auto_cookies.py` 中 `_get_safari_cookies` 方法无法正确提取 Safari cookies 的问题，现已引入 `browser-cookie3` 库实现该功能。
 
-### 新功能
-- **新特性**：
-- 白名单制度安全性加强
-- 音频增加质量评分
-- 不支持解析播放列表，修改前端显示和增加后端判断
-- 引入pylint代码优化
-- 临时文件和元数据组合使直流模式下载速度变快 
+### 重构
+
+- **降低认知复杂度**：
+  - 对 `downloader.py`、`auto_cookies.py` 和 `config_manager.py` 中的多个高复杂度函数进行了重构，将其认知复杂度降低到 SonarQube 推荐的阈值以下，显著提升了代码的可读性和可维护性。
+- **代码质量**：
+  - 在 `config_manager.py` 中，将硬编码的控制台输出样式字符串（如 "bold yellow"）替换为具名常量，提高了代码的一致性和可维护性。
+

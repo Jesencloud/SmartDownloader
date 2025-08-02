@@ -1885,8 +1885,23 @@ async def get_downloaded_file(request: Request, file_name: str):
                 log.error(f"Download directory does not exist: {download_folder}")
                 raise HTTPException(status_code=404, detail="Download directory not found.")
 
+        # --- Security Check: Path Traversal ---
+        # Resolve both paths to their absolute form to prevent traversal attacks.
+        download_dir_resolved = Path(config_manager.config.downloader.save_path).resolve()
+        file_path_resolved = file_path.resolve()
+
+        # Check if the resolved file path is within the download directory.
+        # This is a robust way to prevent directory traversal.
+        if not str(file_path_resolved).startswith(str(download_dir_resolved)):
+            log.error(
+                f"Path traversal attempt blocked. Requested file: '{file_name}', Resolved path: '{file_path_resolved}'"
+            )
+            raise HTTPException(status_code=403, detail="Access to the requested file is forbidden.")
+
         # Generate proper filename for download
         clean_filename = file_path.name
+        # Security: Sanitize filename to prevent CRLF injection in headers.
+        clean_filename = clean_filename.replace("\r", "").replace("\n", "")
 
         # Final file validation
         final_size = file_path.stat().st_size
@@ -1923,7 +1938,7 @@ async def get_downloaded_file(request: Request, file_name: str):
         # Use a more explicit FileResponse config_manager.configuration
         try:
             response = FileResponse(
-                path=str(file_path),
+                path=file_path_resolved,
                 media_type=media_type,
                 filename=clean_filename,
                 headers={
@@ -1955,12 +1970,31 @@ async def delete_downloaded_file(file_name: str):
     Deletes a specific downloaded file.
     """
     try:
-        file_path = Path(config_manager.config.downloader.save_path) / file_name
-        if file_path.exists() and file_path.is_file():
-            file_path.unlink()
-            return {"message": f"File '{file_name}' deleted successfully."}
+        from urllib.parse import unquote
+
+        decoded_file_name = unquote(file_name)
+
+        download_folder = Path(config_manager.config.downloader.save_path)
+        file_path = download_folder / decoded_file_name
+
+        # --- Security Check: Path Traversal ---
+        download_dir_resolved = download_folder.resolve()
+        file_path_resolved = file_path.resolve()
+
+        if not str(file_path_resolved).startswith(str(download_dir_resolved)):
+            log.error(
+                f"Path traversal attempt blocked during delete. "
+                f"Requested file: '{decoded_file_name}', Resolved path: '{file_path_resolved}'"
+            )
+            raise HTTPException(status_code=403, detail="Access to the requested file is forbidden.")
+
+        if file_path_resolved.is_file():
+            file_path_resolved.unlink()
+            return {"message": f"File '{decoded_file_name}' deleted successfully."}
         else:
             raise HTTPException(status_code=404, detail="File not found.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
 

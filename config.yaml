@@ -216,10 +216,10 @@ file_management:
   redis_expiry_seconds: 120       # 2分钟
   
   # 孤立文件清理时间（秒）
-  orphan_cleanup_seconds: 7200     # 2小时
+  orphan_cleanup_seconds: 3600    # 1小时
   
   # 定时清理频率（秒）
-  cleanup_interval_seconds: 3600  # 1小时    # 3分钟
+  cleanup_interval_seconds: 7200  # 2小时 
 
 # 安全设置
 security:
