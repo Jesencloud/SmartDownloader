@@ -63,6 +63,7 @@ def start_celery_worker():
         "--loglevel=info",
         "--concurrency=4",
         "--pool=prefork",
+        "--queues=celery,download_queue,maintenance_queue",  # 监听多个队列
     ]
 
     try:

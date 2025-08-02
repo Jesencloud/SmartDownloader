@@ -210,6 +210,17 @@ advanced:
   proxy_test_url: "http://httpbin.org/ip"  # 代理测试URL
   proxy_test_timeout: 10               # 代理测试超时
 
+# 文件管理设置 # 重启Celery服务后，每3分钟会自动清理超过5分钟的孤立文件。
+file_management: 
+  # Redis记录过期时间（秒） 3600 5400 1800 
+  redis_expiry_seconds: 120       # 2分钟
+  
+  # 孤立文件清理时间（秒）
+  orphan_cleanup_seconds: 7200     # 2小时
+  
+  # 定时清理频率（秒）
+  cleanup_interval_seconds: 3600  # 1小时    # 3分钟
+
 # 安全设置
 security:
   # 允许下载的网站域名白名单。如果列表为空，则允许所有网站。

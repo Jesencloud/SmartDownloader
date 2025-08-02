@@ -5,7 +5,7 @@ import os
 from celery import Celery
 from celery.signals import worker_process_init, worker_ready, worker_shutdown
 
-from config_manager import config_manager
+from config_manager import config, config_manager
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -136,9 +136,9 @@ else:
         task_default_routing_key="default",
         # === 定时任务配置 ===
         beat_schedule={
-            "cleanup-expired-files-every-30min": {
+            "cleanup-expired-files-periodic": {
                 "task": "cleanup_expired_files",
-                "schedule": 30.0 * 60,  # 每30分钟运行一次
+                "schedule": config.file_management.cleanup_interval_seconds,  # 使用配置的清理间隔
                 "options": {"queue": "maintenance_queue"},
             },
         },

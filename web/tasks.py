@@ -11,7 +11,7 @@ import redis
 from celery import Task
 from celery.signals import task_failure, task_postrun, task_prerun, task_revoked
 
-from config_manager import config_manager
+from config_manager import config, config_manager
 from downloader import Downloader
 
 from .celery_app import celery_app
@@ -324,7 +324,7 @@ def download_video_task(
             # 使用 pipeline 保证原子性
             pipe = redis_client.pipeline()
             pipe.hset(download_key, mapping=file_info)
-            pipe.expire(download_key, 3600)  # 设置1小时的暂存期
+            pipe.expire(download_key, config.file_management.redis_expiry_seconds)  # 使用配置的Redis过期时间
             pipe.execute()
 
             log.info(f"文件下载完成并注册到 Redis: {output_file.name} (凭证: {task_id})")
@@ -433,7 +433,7 @@ def cleanup_expired_files(self):
                 try:
                     # 检查文件是否超过1.5小时（90分钟），给一些缓冲时间
                     file_age = time.time() - file_path.stat().st_mtime
-                    if file_age > 5400:  # 90分钟 = 5400秒
+                    if file_age > config.file_management.orphan_cleanup_seconds:  # 使用配置的孤立文件清理时间
                         file_size = file_path.stat().st_size
                         file_path.unlink()
                         cleanup_stats["orphaned_files_deleted"].append(file_path.name)

@@ -238,6 +238,20 @@ class AdvancedConfig(BaseConfig):
     proxy_test_timeout: int = Field(default=10, gt=0, le=60, description="代理测试超时(秒)")
 
 
+class FileManagementConfig(BaseConfig):
+    """文件管理配置"""
+
+    redis_expiry_seconds: int = Field(default=3600, gt=0, le=86400, description="Redis记录过期时间（秒）")
+    orphan_cleanup_seconds: int = Field(default=5400, gt=0, le=86400, description="孤立文件清理时间（秒）")
+    cleanup_interval_seconds: int = Field(default=1800, gt=0, le=86400, description="定时清理频率（秒）")
+
+    @field_validator("orphan_cleanup_seconds")
+    def validate_orphan_cleanup_time(cls, v: int, info: ValidationInfo) -> int:
+        if "redis_expiry_seconds" in info.data and v < info.data["redis_expiry_seconds"]:
+            raise ValueError("孤立文件清理时间不能小于Redis记录过期时间")
+        return v
+
+
 class SecurityConfig(BaseConfig):
     """安全相关配置"""
 
@@ -265,6 +279,7 @@ class AppConfig(BaseConfig):
     ui: UIConfig = Field(default_factory=UIConfig)
     cookies: CookiesConfig = Field(default_factory=CookiesConfig)
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
+    file_management: FileManagementConfig = Field(default_factory=FileManagementConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
 
